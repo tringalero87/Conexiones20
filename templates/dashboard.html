@@ -1,0 +1,544 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza el dashboard principal de la aplicación.
+    Es una página dinámica que muestra diferentes "widgets" o paneles
+    según los roles del usuario que ha iniciado sesión.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="text-secondary">Bienvenido de nuevo, {{ g.user.nombre_completo|e }}. Aquí tienes un resumen de tu actividad.</p>
+    </div>
+</div>
+
+{# NUEVO: Botón para Personalizar Dashboard #}
+<div class="d-flex justify-content-end mb-4 no-print">
+    <button class="btn btn-outline-secondary" id="customize-dashboard-btn">
+        <i class="bi bi-sliders me-2"></i> Personalizar Dashboard
+    </button>
+</div>
+
+{# NUEVO: Modal de Personalización #}
+<div class="modal fade" id="customizeDashboardModal" tabindex="-1" aria-labelledby="customizeDashboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="customizeDashboardModalLabel">Personalizar Dashboard</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6>Widgets Visibles</h6>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleMySummary" data-widget-id="my-summary-panel">
+                    <label class="form-check-label" for="toggleMySummary">Mi Resumen de Actividad</label>
+                </div>
+                {% if 'REALIZADOR' in user_roles or 'APROBADOR' in user_roles %}
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleMyPerformance" data-widget-id="my-performance-panel">
+                    <label class="form-check-label" for="toggleMyPerformance">Mi Rendimiento</label>
+                </div>
+                {% endif %}
+                {% if dashboard_data.my_projects_summary %}
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleMyProjectsSummary" data-widget-id="my-projects-summary-panel">
+                    <label class="form-check-label" for="toggleMyProjectsSummary">Resumen de Mis Proyectos</label>
+                </div>
+                {% endif %}
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleQuickActions" data-widget-id="quick-actions-panel">
+                    <label class="form-check-label" for="toggleQuickActions">Acciones Rápidas</label>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleTaskPanels" data-widget-id="tasks-panel">
+                    <label class="form-check-label" for="toggleTaskPanels">Mis Tareas y Solicitudes</label>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleRecentActivity" data-widget-id="recent-activity-panel">
+                    <label class="form-check-label" for="toggleRecentActivity">Actividad Reciente</label>
+                </div>
+                {% if 'ADMINISTRADOR' in user_roles %}
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="toggleAdminPanel" data-widget-id="admin-panel">
+                    <label class="form-check-label" for="toggleAdminPanel">Panel de Administrador</label>
+                </div>
+                {% endif %}
+                {# Opciones para reordenar widgets si se implementa drag-and-drop más adelante #}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="saveDashboardPreferences">Guardar Preferencias</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{# =================================================================== #}
+{# ===================== SECCIÓN: MI RESUMEN ======================= #}
+{# =================================================================== #}
+<div class="my-summary-panel mb-4" id="my-summary-panel">
+    <h3 class="mb-3">Mi Resumen de Actividad</h3>
+    <div class="row">
+        {% if 'SOLICITANTE' in user_roles %}
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-file-earmark-plus fs-2 text-primary me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Solicitudes Creadas</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.total_conexiones_creadas }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-hourglass-split fs-2 text-info me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Mis Solicitudes en Proceso</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.conexiones_en_proceso_solicitadas }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-check-circle fs-2 text-success me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Mis Solicitudes Aprobadas</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.conexiones_aprobadas_solicitadas }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if 'REALIZADOR' in user_roles %}
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-person-workspace fs-2 text-primary me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Mis Tareas en Proceso</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.mis_tareas_en_proceso }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-calendar-check fs-2 text-success me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Tareas Realizadas (Últ. 30 Días)</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.mis_tareas_realizadas_ult_30d }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if 'APROBADOR' in user_roles %}
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-clipboard-check fs-2 text-warning me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Pendientes de mi Aprobación</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.pendientes_mi_aprobacion }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-file-earmark-ruled fs-2 text-info me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Aprobadas por mí (Últ. 30 Días)</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.aprobadas_por_mi_ult_30d }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-bell fs-2 {% if dashboard_data.my_summary.notificaciones_no_leidas > 0 %}text-danger{% else %}text-muted{% endif %} me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Notificaciones No Leídas</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_summary.notificaciones_no_leidas }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <hr class="my-4">
+</div>
+
+{# NUEVO: SECCIÓN: MI RENDIMIENTO #}
+{% if 'REALIZADOR' in user_roles or 'APROBADOR' in user_roles %}
+<div class="my-performance-panel mb-4" id="my-performance-panel">
+    <h3 class="mb-3">Mi Rendimiento</h3>
+    <div class="row">
+        <div class="col-md-6 col-xl-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-graph-up-arrow fs-2 text-primary me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Tiempo Prom. Realización/Aprobación</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_performance.avg_completion_time }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-calendar-check fs-2 text-success me-3"></i>
+                    <div>
+                        <h6 class="text-muted mb-1">Tareas Completadas este Mes</h6>
+                        <h4 class="mb-0">{{ dashboard_data.my_performance.tasks_completed_this_month }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {# Puedes añadir más KPIs o micro-gráficos aquí #}
+    </div>
+    {# NUEVO: Gráfico de rendimiento #}
+    <div class="card mt-3">
+        <div class="card-body">
+            <h5 class="card-title">Actividad de los Últimos 30 Días</h5>
+            <div style="height: 250px;">
+                <canvas id="myPerformanceChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <hr class="my-4">
+</div>
+{% endif %}
+
+{# NUEVO: SECCIÓN: RESUMEN DE MIS PROYECTOS #}
+{% if dashboard_data.my_projects_summary %}
+<div class="my-projects-summary-panel mb-4" id="my-projects-summary-panel">
+    <h3 class="mb-3">Resumen de Mis Proyectos</h3>
+    <div class="table-responsive">
+        <table class="data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Proyecto</th>
+                    <th class="text-center">Total</th>
+                    <th class="text-center">Solicitadas</th>
+                    <th class="text-center">En Proceso</th>
+                    <th class="text-center">Aprobadas</th>
+                    <th class="text-center">Rechazadas</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for project in dashboard_data.my_projects_summary %}
+                <tr>
+                    <td><strong>{{ project.nombre|e }}</strong></td>
+                    <td class="text-center">{{ project.total_conexiones }}</td>
+                    <td class="text-center">{{ project.solicitadas }}</td>
+                    <td class="text-center">{{ project.en_proceso }}</td>
+                    <td class="text-center">{{ project.aprobadas }}</td>
+                    <td class="text-center">{{ project.rechazadas }}</td>
+                    <td class="text-end">
+                        <a href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=project.id) }}" class="btn btn-sm btn-secondary">Ver Proyecto</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# NUEVO: Gráfico para el resumen de proyectos #}
+    <div class="card mt-4">
+        <div class="card-body">
+            <h5 class="card-title">Visualización de Proyectos</h5>
+            <div style="height: 300px;">
+                <canvas id="myProjectsChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <hr class="my-4">
+</div>
+{% endif %}
+
+{# =================================================================== #}
+{# ==================== SECCIÓN: ACCIONES RÁPIDAS ==================== #}
+{# =================================================================== #}
+<div class="quick-actions-panel mb-4" id="quick-actions-panel">
+    <h3 class="mb-3">Acciones Rápidas</h3>
+    <div class="row">
+        {% if 'SOLICITANTE' in user_roles %}
+        <div class="col-md-4 mb-3">
+            <a href="{{ url_for('main.catalogo') }}" class="btn btn-lg btn-primary w-100">
+                <i class="bi bi-plus-circle-fill me-2"></i> Crear Nueva Conexión
+            </a>
+        </div>
+        {% endif %}
+
+        {% if 'REALIZADOR' in user_roles %}
+        <div class="col-md-4 mb-3">
+            <a href="{{ url_for('main.dashboard') }}#disponibles-tab" class="btn btn-lg btn-info text-white w-100">
+                <i class="bi bi-list-task me-2"></i> Ver Tareas Disponibles
+            </a>
+        </div>
+        {% endif %}
+
+        {% if 'APROBADOR' in user_roles %}
+        <div class="col-md-4 mb-3">
+            <a href="{{ url_for('main.dashboard') }}#pendientes-tab" class="btn btn-lg btn-success w-100">
+                <i class="bi bi-clipboard-check-fill me-2"></i> Revisar Conexiones Pendientes
+            </a>
+        </div>
+        {% endif %}
+
+        {% if 'ADMINISTRADOR' in user_roles %}
+        <div class="col-md-4 mb-3">
+            <a href="{{ url_for('admin.listar_usuarios') }}" class="btn btn-lg btn-secondary w-100">
+                <i class="bi bi-people-fill me-2"></i> Administrar Usuarios
+            </a>
+        </div>
+        <div class="col-md-4 mb-3">
+            <a href="{{ url_for('admin.ver_auditoria') }}" class="btn btn-lg btn-secondary w-100">
+                <i class="bi bi-journal-check me-2"></i> Ver Auditoría
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    <hr class="my-4">
+</div>
+
+
+{# =================================================================== #}
+{# =========== SECCIÓN DE ADMINISTRADOR (KPIs y Gráficos) ============ #}
+{# =================================================================== #}
+{% if 'ADMINISTRADOR' in session.get('user_roles', []) %}
+<div class="admin-panel mb-4" id="admin-panel">
+    <h3 class="mb-3">Panel de Administrador</h3>
+
+    <div class="row mb-4">
+        {# CORRECCIÓN: Acceso correcto a los KPIs poblados desde el backend #}
+        <div class="col-md-6 col-xl-3 mb-3"><div class="card h-100"><div class="card-body d-flex align-items-center"><i class="bi bi-broadcast fs-2 text-primary me-3"></i><div><h6 class="text-muted mb-1">Conexiones Activas</h6><h4 class="mb-0">{{ dashboard_data.kpis.total_activas }}</h4></div></div></div></div>
+        <div class="col-md-6 col-xl-3 mb-3"><div class="card h-100"><div class="card-body d-flex align-items-center"><i class="bi bi-timer fs-2 text-info me-3"></i><div><h6 class="text-muted mb-1">Tiempo Prom. Aprobación</h6><h4 class="mb-0">{{ dashboard_data.kpis.tiempo_aprobacion }}</h4></div></div></div></div>
+        <div class="col-md-6 col-xl-3 mb-3"><div class="card h-100"><div class="card-body d-flex align-items-center"><i class="bi bi-calendar-plus-fill fs-2 text-success me-3"></i><div><h6 class="text-muted mb-1">Creadas Hoy</h6><h4 class="mb-0">{{ dashboard_data.kpis.creadas_hoy }}</h4></div></div></div></div>
+        {# CORRECCIÓN: Etiqueta de KPI para "Tasa de Rechazo" #}
+        <div class="col-md-6 col-xl-3 mb-3"><div class="card h-100"><div class="card-body d-flex align-items-center"><i class="bi bi-x-octagon-fill fs-2 text-danger me-3"></i><div><h6 class="text-muted mb-1">Tasa de Rechazo (en rango)</h6><h4 class="mb-0">{{ dashboard_data.kpis.tasa_rechazo }}</h4></div></div></div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            {# CORRECCIÓN: Se añaden los valores de los filtros para que persistan en el formulario #}
+            <form class="row g-2 align-items-end" method="GET" action="{{ url_for('main.dashboard') }}">
+                <div class="col-md-4"><label for="date_start" class="form-label">Desde</label><input type="date" class="form-control" name="date_start" value="{{ filters.start }}"></div>
+                <div class="col-md-4"><label for="date_end" class="form-label">Hasta</label><input type="date" class="form-control" name="date_end" value="{{ filters.end }}"></div>
+                <div class="col-md-2"><button type="submit" class="btn btn-secondary w-100">Filtrar</button></div>
+            </form>
+        </div>
+        <div class="card-body">
+            <div id="admin-dashboard-charts" class="row">
+                <div class="col-lg-5 mb-4 mb-lg-0"><div class="h-100" style="min-height: 300px;"><canvas id="estadosChart"></canvas></div></div>
+                <div class="col-lg-7"><div class="h-100" style="min-height: 300px;"><canvas id="mesesChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Top 5 Solicitantes</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for user in dashboard_data.charts.top_solicitantes %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ user.nombre_completo }}
+                                <span class="badge bg-primary rounded-pill">{{ user.total }}</span>
+                            </li>
+                        {% else %}
+                            <li class="list-group-item text-muted text-center">No hay datos de solicitantes.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h5>Top 5 Realizadores</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for user in dashboard_data.charts.top_realizadores %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ user.nombre_completo }}
+                                <span class="badge bg-success rounded-pill">{{ user.total }}</span>
+                            </li>
+                        {% else %}
+                            <li class="list-group-item text-muted text-center">No hay datos de realizadores.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <hr class="my-4">
+</div>
+{% endif %}
+
+
+{# ================================================================= #}
+{# ============ SECCIÓN DE TAREAS Y ACTIVIDAD RECENTE ============ #}
+{# ================================================================= #}
+<div class="row" id="tasks-panel">
+    {# Ajusta el tamaño de la columna para ocupar todo el ancho si no hay panel de administrador #}
+    <div class="{% if 'ADMINISTRADOR' in session.get('user_roles', []) %}col-lg-8{% else %}col-12{% endif %}">
+        <h3 class="mb-3">Mis Tareas y Solicitudes</h3>
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="taskTabs" role="tablist">
+                    {% if 'APROBADOR' in user_roles %}<li class="nav-item"><button class="nav-link active" id="pendientes-tab" data-bs-toggle="tab" data-bs-target="#pendientes" type="button" role="tab">Pendientes de Revisión</button></li>{% endif %}
+                    {% if 'REALIZADOR' in user_roles %}<li class="nav-item"><button class="nav-link {{ 'active' if 'APROBADOR' not in user_roles }}" id="asignadas-tab" data-bs-toggle="tab" data-bs-target="#asignadas" type="button" role="tab">Mis Tareas</button></li>{% endif %}
+                    {% if 'REALIZADOR' in user_roles %}<li class="nav-item"><button class="nav-link" id="disponibles-tab" data-bs-toggle="tab" data-bs-target="#disponibles" type="button" role="tab">Disponibles</button></li>{% endif %}
+                    {% if 'SOLICITANTE' in user_roles %}<li class="nav-item"><button class="nav-link {{ 'active' if not ('APROBADOR' in user_roles or 'REALIZADOR' in user_roles) }}" id="solicitudes-tab" data-bs-toggle="tab" data-bs-target="#solicitudes" type="button" role="tab">Mis Solicitudes</button></li>{% endif %}
+                </ul>
+            </div>
+            <div class="card-body p-0">
+                {# NUEVO: Filtros de tareas globales para las pestañas #}
+                <div class="p-3 border-bottom no-print">
+                    <form class="row g-2 align-items-end" id="task-filters-form">
+                        <div class="col-md-4">
+                            <label for="task_filter_project" class="form-label">Proyecto</label>
+                            <select class="form-select" id="task_filter_project" name="project_id">
+                                <option value="">Todos</option>
+                                {% for p in all_projects_for_filter %}
+                                <option value="{{ p.id }}">{{ p.nombre|e }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="task_filter_type" class="form-label">Tipo Conexión</label>
+                            <select class="form-select" id="task_filter_type" name="type">
+                                <option value="">Todos</option>
+                                <option value="MOMENTO">Momento</option>
+                                <option value="CORTANTE">Cortante</option>
+                                <option value="RIOSTRAS">Riostras</option>
+                                <option value="OTRAS">Otras</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="task_search_input" class="form-label">Buscar (código)</label>
+                            <input type="text" class="form-control" id="task_search_input" placeholder="Ej: CONEX-2025-001">
+                        </div>
+                    </form>
+                </div>
+                <div class="tab-content" id="taskTabsContent">
+                    {% if 'APROBADOR' in user_roles %}
+                    <div class="tab-pane fade show active" id="pendientes" role="tabpanel" aria-labelledby="pendientes-tab">
+                        {# CORRECCIÓN: Acceso correcto a las tareas anidadas bajo 'tareas' #}
+                        {% set tasks = dashboard_data.tareas.pendientes_aprobacion %}
+                        {% set empty_message = 'No tienes conexiones pendientes de revisión.' %}
+                        {% include 'partials/task_list.html' %}
+                    </div>
+                    {% endif %}
+                    {% if 'REALIZADOR' in user_roles %}
+                    <div class="tab-pane fade {{ 'show active' if 'APROBADOR' not in user_roles }}" id="asignadas" role="tabpanel" aria-labelledby="asignadas-tab">
+                        {# CORRECCIÓN: Acceso correcto a las tareas anidadas bajo 'tareas' #}
+                        {% set tasks = dashboard_data.tareas.mis_asignadas %}
+                        {% set empty_message = 'No tienes tareas asignadas en este momento.' %}
+                        {% include 'partials/task_list.html' %}
+                    </div>
+                    <div class="tab-pane fade" id="disponibles" role="tabpanel" aria-labelledby="disponibles-tab">
+                         {# CORRECCIÓN: Acceso correcto a las tareas anidadas bajo 'tareas' #}
+                         {% set tasks = dashboard_data.tareas.disponibles %}
+                         {% set empty_message = 'No hay nuevas tareas disponibles.' %}
+                         {% include 'partials/task_list.html' %}
+                    </div>
+                    {% endif %}
+                    {% if 'SOLICITANTE' in user_roles %}
+                    <div class="tab-pane fade {{ 'show active' if not ('APROBADOR' in user_roles or 'REALIZADOR' in user_roles) }}" id="solicitudes" role="tabpanel" aria-labelledby="solicitudes-tab">
+                        {# CORRECCIÓN: Acceso correcto a las tareas anidadas bajo 'tareas' #}
+                        {% set tasks = dashboard_data.tareas.mis_solicitudes %}
+                        {% set empty_message = 'No tienes solicitudes activas.' %}
+                        {% include 'partials/task_list.html' %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {# Ajusta el tamaño de la columna para ocupar todo el ancho si no hay panel de administrador #}
+    <div class="{% if 'ADMINISTRADOR' in session.get('user_roles', []) %}col-lg-4{% else %}col-12 mt-4 mt-lg-0{% endif %}" id="recent-activity-panel">
+        <h3 class="mb-3">Actividad Reciente</h3>
+        <div class="card">
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {# CORRECCIÓN: Acceso correcto al feed de actividad #}
+                    {% for evento in dashboard_data.feed_actividad %}
+                    <li class="list-group-item d-flex">
+                        {# Ícono dinámico según la acción #}
+                        {% if 'APROBAR' in evento.accion %}
+                            <i class="bi bi-check-circle-fill text-success me-3"></i>
+                        {% elif 'RECHAZAR' in evento.accion %}
+                            <i class="bi bi-x-circle-fill text-danger me-3"></i>
+                        {% elif 'CREAR' in evento.accion %}
+                            <i class="bi bi-plus-circle-fill text-primary me-3"></i>
+                        {% elif 'TOMAR' in evento.accion %}
+                            <i class="bi bi-person-workspace text-info me-3"></i>
+                        {% elif 'REALIZADO' in evento.accion %}
+                            <i class="bi bi-hourglass-split text-warning me-3"></i>
+                        {% elif 'SUBIR_ARCHIVO' in evento.accion %}
+                            <i class="bi bi-file-earmark-arrow-up-fill text-secondary me-3"></i>
+                        {% elif 'AGREGAR_COMENTARIO' in evento.accion %}
+                            <i class="bi bi-chat-dots-fill text-muted me-3"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill text-dark me-3"></i>
+                        {% endif %}
+                        <div>
+                            <small class="text-muted">{{ evento.fecha | format_datetime }}</small>
+                            <p class="mb-0">
+                                <strong>{{ evento.usuario_nombre }}</strong>
+                                {% if 'APROBAR' in evento.accion %}
+                                    aprobó la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a>.
+                                {% elif 'RECHAZAR' in evento.accion %}
+                                    rechazó la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a>.
+                                {% elif 'CREAR' in evento.accion %}
+                                    creó la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a>.
+                                {% elif 'TOMAR' in evento.accion %}
+                                    tomó la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a>.
+                                {% elif 'REALIZADO' in evento.accion %}
+                                    marcó la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a> como realizada.
+                                {% elif 'SUBIR_ARCHIVO' in evento.accion %}
+                                    subió un archivo a la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a>.
+                                {% elif 'AGREGAR_COMENTARIO' in evento.accion %}
+                                    comentó en la conexión <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=evento.conexion_id) }}">{{ evento.codigo_conexion }}</a>.
+                                {% else %}
+                                    realizó una acción: {{ evento.accion.replace('_',' ')|lower }} en {{ evento.codigo_conexion if evento.codigo_conexion else 'un objeto' }}.
+                                {% endif %}
+                            </p>
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted">No hay actividad reciente.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Modal para rechazar conexión, necesario para las acciones rápidas #}
+{% include 'partials/rechazar_conexion_modal.html' %}
+
+{% endblock %} {# Cierra el bloque 'content' #}
+
+{% block extra_js %}
+<script>
+    {# Acceso a los datos para los gráficos y preferencias del usuario #}
+    const estadosData = {{ dashboard_data.charts.estados|tojson|safe }};
+    const mesesData = {{ dashboard_data.charts.conexiones_mes|tojson|safe }};
+    const userPreferences = {{ dashboard_data.user_prefs|tojson|safe }}; // Pasar preferencias del usuario
+    const myProjectsSummary = {{ dashboard_data.my_projects_summary|tojson|safe }}; // NUEVO: Datos para el gráfico de proyectos
+    const myPerformanceChartData = {{ dashboard_data.my_performance_chart|tojson|safe }}; // NUEVO: Datos para el gráfico de rendimiento
+</script>
+{% endblock %} {# Cierra el bloque 'extra_js' #}

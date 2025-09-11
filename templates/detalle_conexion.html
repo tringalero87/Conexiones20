@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la vista de detalle para una conexión específica.
+    Es una de las páginas más importantes de la aplicación, ya que centraliza
+    la información, la gestión de archivos, las acciones y la comunicación.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Proyecto: <strong><a href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=conexion.proyecto_id) }}">{{ conexion.proyecto_nombre|e }}</a></strong></p>
+    </div>
+    <div class="page-header-actions btn-group">
+        {# Botón para acceder a la página de cómputos métricos #}
+        <a href="{{ url_for('conexiones.computos_metricos', conexion_id=conexion.id) }}" class="btn btn-success text-white" title="Calcular Cómputos Métricos">
+            <i class="bi bi-calculator-fill me-2"></i> Cómputos
+        </a>
+        
+        {# Botón para generar el reporte de la conexión en una nueva pestaña #}
+        <a href="{{ url_for('conexiones.reporte_conexion', conexion_id=conexion.id) }}" target="_blank" class="btn btn-secondary" title="Generar Reporte de Conexión">
+            <i class="bi bi-printer-fill me-2"></i> Reporte
+        </a>
+
+        {# Lógica para mostrar los botones de Editar y Eliminar según el estado y rol #}
+        {% if conexion.estado in ['SOLICITADO', 'EN_PROCESO'] and ('ADMINISTRADOR' in session.get('user_roles', []) or g.user.id == conexion.solicitante_id or g.user.id == conexion.realizador_id) %}
+        <a href="{{ url_for('conexiones.editar_conexion', conexion_id=conexion.id) }}" class="btn btn-info text-white" title="Editar Conexión">
+            <i class="bi bi-pencil-fill me-2"></i> Editar
+        </a>
+        {% endif %}
+        {% if 'ADMINISTRADOR' in session.get('user_roles', []) %}
+        <button type="button" class="btn btn-danger"
+                data-bs-toggle="modal"
+                data-bs-target="#confirmDeleteModal"
+                data-form-action="{{ url_for('conexiones.eliminar_conexion', conexion_id=conexion.id) }}"
+                data-item-name="{{ conexion.codigo_conexion|e }}"
+                title="Eliminar Conexión">
+            <i class="bi bi-trash-fill me-2"></i> Eliminar
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header"><h4 class="mb-0"><i class="bi bi-info-circle-fill me-2"></i>Información General</h4></div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-4 col-md-3">Código:</dt>
+                    <dd class="col-sm-8 col-md-9"><strong>{{ conexion.codigo_conexion }}</strong></dd>
+                    <dt class="col-sm-4 col-md-3">Tipología:</dt>
+                    <dd class="col-sm-8 col-md-9">{{ conexion.tipo }} / {{ conexion.subtipo }} / {{ conexion.tipologia }}</dd>
+                    <dt class="col-sm-4 col-md-3">Estado:</dt>
+                    <dd class="col-sm-8 col-md-9"><span class="estado estado-{{ conexion.estado|lower }}">{{ conexion.estado.replace('_',' ') }}</span></dd>
+                    <dt class="col-sm-4 col-md-3">Descripción:</dt>
+                    <dd class="col-sm-8 col-md-9">{{ conexion.descripcion or 'No se proporcionó descripción.' }}</dd>
+                    
+                    {% if detalles %}{% for key, value in detalles.items() %}
+                    <dt class="col-sm-4 col-md-3 border-top pt-2 mt-2">{{ key|e }}:</dt>
+                    <dd class="col-sm-8 col-md-9 border-top pt-2 mt-2">{{ value|e }}</dd>
+                    {% endfor %}{% endif %}
+
+                    <dt class="col-sm-4 col-md-3 border-top pt-3 mt-3">Solicitante:</dt>
+                    <dd class="col-sm-8 col-md-9 border-top pt-3 mt-3">{{ conexion.solicitante_nombre or 'N/A' }}</dd>
+                    <dt class="col-sm-4 col-md-3">Realizador:</dt>
+                    <dd class="col-sm-8 col-md-9">{{ conexion.realizador_nombre or 'Sin asignar' }}</dd>
+                    <dt class="col-sm-4 col-md-3">Aprobador:</dt>
+                    <dd class="col-sm-8 col-md-9">{{ conexion.aprobador_nombre or 'Pendiente' }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h4 class="mb-0"><i class="bi bi-paperclip me-2"></i>Gestión de Archivos</h4></div>
+            <div class="card-body">
+                {% if plantilla_archivos %}{% for tipo_requerido in plantilla_archivos %}
+                <div class="archivo-item mb-3 p-3 border rounded">
+                    <div class="row align-items-center">
+                        <div class="col-md-4">
+                            <strong class="d-block">{{ tipo_requerido }}</strong>
+                            {% if tipo_requerido in archivos_agrupados %}<span class="badge bg-success">Cargado</span>{% else %}<span class="badge bg-warning text-dark">Pendiente</span>{% endif %}
+                        </div>
+                        <div class="col-md-8">
+                            {% if tipo_requerido in archivos_agrupados %}{% for archivo in archivos_agrupados[tipo_requerido] %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="bi bi-file-earmark-check-fill text-success"></i>
+                                        <a href="{{ url_for('conexiones.descargar_archivo', conexion_id=conexion.id, filename=archivo.nombre_archivo) }}">{{ archivo.nombre_archivo }}</a>
+                                        <small class="text-muted d-block">Subido por: {{ archivo.subido_por }} el {{ archivo.fecha_subida|format_datetime }}</small>
+                                    </div>
+                                    {% if 'ADMINISTRADOR' in session.get('user_roles', []) or (conexion.estado == 'EN_PROCESO' and conexion.realizador_id == g.user.id) %}
+                                    <form action="{{ url_for('conexiones.eliminar_archivo', conexion_id=conexion.id, archivo_id=archivo.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de que quieres eliminar este archivo?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-x-lg"></i></button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}{% else %}
+                                {% if 'ADMINISTRADOR' in session.get('user_roles', []) or (conexion.estado == 'EN_PROCESO' and conexion.realizador_id == g.user.id) %}
+                                <form action="{{ url_for('conexiones.subir_archivo', conexion_id=conexion.id) }}" method="POST" enctype="multipart/form-data">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="tipo_archivo" value="{{ tipo_requerido }}">
+                                    <div class="input-group"><input type="file" class="form-control" name="archivo" required><button class="btn btn-primary" type="submit">Subir</button></div>
+                                </form>
+                                {% else %}<span class="text-muted">La carga de archivos está deshabilitada.</span>{% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}{% else %}
+                <p class="text-muted text-center p-3">No hay una plantilla de archivos definida para esta tipología.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="comentarios">
+            <div class="card-header"><h4 class="mb-0"><i class="bi bi-chat-dots-fill me-2"></i>Comentarios</h4></div>
+            <div class="card-body">
+                <form action="{{ url_for('conexiones.agregar_comentario', conexion_id=conexion.id) }}" method="POST" class="mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <textarea name="contenido" class="form-control mb-2" rows="3" placeholder="Escribe tu comentario..." required></textarea>
+                    <div class="text-end"><button type="submit" class="btn btn-primary">Comentar</button></div>
+                </form>
+                <hr>
+                <ul class="list-unstyled">
+                    {% for comentario in comentarios %}
+                    <li class="d-flex mb-3">
+                        <div class="avatar-placeholder-sm me-3">{{ comentario.nombre_completo[0]|upper }}</div>
+                        <div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-1">{{ comentario.nombre_completo }}</h6><small class="text-muted">{{ comentario.fecha_creacion|format_datetime }}</small></div><div class="comentario-contenido">{{ comentario.contenido|safe }}</div></div>
+                    </li>
+                    {% else %}
+                    <li class="text-center text-muted p-3">No hay comentarios.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-4">
+             <div class="card-header"><h4 class="mb-0"><i class="bi bi-play-circle-fill me-2"></i>Acciones</h4></div>
+            <div class="card-body">
+                {% set user_roles = session.get('user_roles', []) %}
+                {% if conexion.estado == 'SOLICITADO' and ('REALIZADOR' in user_roles or 'ADMINISTRADOR' in user_roles) %}
+                <form action="{{ url_for('conexiones.cambiar_estado', conexion_id=conexion.id) }}" method="POST" class="d-grid">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="estado" value="EN_PROCESO">
+                    <button type="submit" class="btn btn-primary">Tomar Tarea</button>
+                </form>
+                {% elif conexion.estado == 'EN_PROCESO' and (conexion.realizador_id == g.user.id or 'ADMINISTRADOR' in user_roles) %}
+                <form action="{{ url_for('conexiones.cambiar_estado', conexion_id=conexion.id) }}" method="POST" class="d-grid">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="estado" value="REALIZADO">
+                    <button type="submit" class="btn btn-warning text-dark">Marcar como Realizado</button>
+                </form>
+                {% elif conexion.estado == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles) %}
+                <div class="d-grid gap-2">
+                    <form action="{{ url_for('conexiones.cambiar_estado', conexion_id=conexion.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="estado" value="APROBADO">
+                        <button type="submit" class="btn btn-success w-100">Aprobar</button>
+                    </form>
+                    <button type="button" class="btn btn-danger w-100" data-bs-toggle="modal" data-bs-target="#rejectModal">Rechazar</button>
+                </div>
+                {% else %}
+                <p class="text-muted text-center">No hay acciones disponibles.</p>
+                {% endif %}
+
+                {# Nuevo: Botón para Asignar Tarea, visible para roles que pueden reasignar #}
+                {% if 'ADMINISTRADOR' in user_roles or
+                      'APROBADOR' in user_roles or
+                      'REALIZADOR' in user_roles or
+                      'SOLICITANTE' in user_roles %}
+                    {# Restricción adicional: si no es admin, solo puede reasignar si es el solicitante/realizador/aprobador original #}
+                    {% if 'ADMINISTRADOR' in user_roles or
+                          (g.user.id == conexion.solicitante_id) or
+                          (g.user.id == conexion.realizador_id) or
+                          (g.user.id == conexion.aprobador_id) %}
+                        <button type="button" class="btn btn-outline-primary w-100 mt-2" data-bs-toggle="modal" data-bs-target="#assignTaskModal">
+                            <i class="bi bi-person-plus-fill me-2"></i> Asignar Tarea
+                        </button>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>Historial</h4></div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for evento in historial %}
+                    <li class="list-group-item">
+                        <span class="estado estado-sm estado-{{ evento.estado|lower }}">{{ evento.estado.replace('_',' ') }}</span>
+                        <small class="d-block text-muted">Por: {{ evento.nombre_completo }} <br>Fecha: {{ evento.fecha|format_datetime }}</small>
+                        {% if evento.detalles %}<small class="d-block text-danger mt-1"><strong>Motivo:</strong> {{ evento.detalles }}</small>{% endif %}
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">No hay historial.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'partials/confirmar_eliminacion_modal.html' %}
+{% include 'partials/rechazar_conexion_modal.html' %}
+{% include 'partials/asignar_tarea_modal.html' %} {# NUEVO: Incluir el modal de asignación #}
+{% endblock %}

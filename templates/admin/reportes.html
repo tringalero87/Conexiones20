@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de "Gestión de Reportes" para el administrador.
+    Permite ver una lista de los reportes guardados, crear nuevos, y gestionar
+    los existentes (ejecutar, editar, eliminar, programar).
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Gestión de Reportes</h1>
+        <p class="text-secondary">Crea, programa y descarga reportes personalizados del sistema.</p>
+    </div>
+    <div class="page-header-actions">
+        <a href="{{ url_for('admin.nuevo_reporte') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-2"></i> Nuevo Reporte
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-funnel-fill me-2"></i>Filtrar Reportes</h5>
+    </div>
+    <div class="card-body">
+        <form class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label for="search-report-name" class="form-label">Buscar por Nombre</label>
+                <input type="text" class="form-control" id="search-report-name" placeholder="Ej: Reporte Mensual...">
+            </div>
+            <div class="col-md-5">
+                <label for="filter-frequency" class="form-label">Filtrar por Frecuencia</label>
+                <select id="filter-frequency" class="form-select">
+                    <option selected>Todas las Frecuencias</option>
+                    <option>Bajo Demanda</option>
+                    <option>Diaria</option>
+                    <option>Semanal</option>
+                    <option>Mensual</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-table me-2"></i>Reportes Guardados</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="data-table table-hover">
+                <thead>
+                    <tr>
+                        <th>Nombre del Reporte</th>
+                        <th>Creado Por</th>
+                        <th class="text-center">Frecuencia</th>
+                        <th>Última Ejecución</th>
+                        <th class="text-center">Programado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#
+                        Se itera sobre la lista de 'reportes' pasada desde la ruta de Flask.
+                        Cada 'reporte' es un objeto que contiene los datos de una fila.
+                    #}
+                    {% for reporte in reportes %}
+                    <tr>
+                        <td><strong>{{ reporte.nombre }}</strong></td>
+                        <td>{{ reporte.creador_nombre }}</td>
+                        <td class="text-center"><span class="badge bg-info">{{ reporte.frecuencia|title }}</span></td>
+                        <td>{{ reporte.ultima_ejecucion|format_datetime if reporte.ultima_ejecucion else 'Nunca' }}</td>
+                        <td class="text-center">
+                            <div class="form-check form-switch d-inline-block">
+                                <input class="form-check-input" type="checkbox" role="switch" id="scheduleSwitch{{loop.index}}" {% if reporte.programado %}checked{% endif %}>
+                                <label class="form-check-label" for="scheduleSwitch{{loop.index}}"></label>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group">
+                                <a href="{{ url_for('admin.ejecutar_reporte', reporte_id=reporte.id) }}" class="btn btn-sm btn-secondary" title="Ejecutar y Descargar">
+                                    <i class="bi bi-play-fill"></i> Ejecutar
+                                </a>
+                                {# ADDED: Link to edit report #}
+                                <a href="{{ url_for('admin.editar_reporte', reporte_id=reporte.id) }}" class="btn btn-sm btn-info text-white" title="Editar"><i class="bi bi-pencil-fill"></i></a>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#confirmDeleteModal" 
+                                        data-item-name="{{ reporte.nombre|e }}"
+                                        data-form-action="{{ url_for('admin.eliminar_reporte', reporte_id=reporte.id) }}">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {# Bloque 'else' del bucle for. Se muestra si la lista de reportes está vacía. #}
+                    {% else %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty-state text-center p-5">
+                                <i class="bi bi-file-earmark-bar-graph" style="font-size: 3rem;"></i>
+                                <h4 class="mt-3">No hay reportes guardados</h4>
+                                <p class="text-secondary">
+                                    Haz clic en "Nuevo Reporte" para crear tu primer reporte personalizado.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer d-flex justify-content-center">
+        <nav aria-label="Paginación de reportes">
+            <ul class="pagination mb-0">
+                <li class="page-item disabled"><a class="page-link" href="#">Anterior</a></li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                <li class="page-item"><a class="page-link" href="#">2</a></li>
+                <li class="page-item"><a class="page-link" href="#">Siguiente</a></li>
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmDeleteModalLabel">Confirmar Eliminación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que quieres eliminar el reporte <strong id="itemName"></strong>?</p>
+        <p class="text-danger"><small>Esta acción no se puede deshacer.</small></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        {# Este formulario apuntará a la ruta de eliminación correcta. #}
+        <form id="deleteForm" action="" method="POST" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    /**
+     * Este script se encarga de configurar el modal de confirmación dinámicamente
+     * para la eliminación de reportes.
+     */
+    document.addEventListener('DOMContentLoaded', function () {
+        const confirmDeleteModal = document.getElementById('confirmDeleteModal');
+        if (confirmDeleteModal) {
+            // El evento 'show.bs.modal' se dispara justo antes de que el modal se muestre.
+            confirmDeleteModal.addEventListener('show.bs.modal', function (event) {
+                // Se obtiene el botón que activó el modal.
+                const button = event.relatedTarget;
+                
+                // Se extrae la información de los atributos 'data-*' del botón.
+                const itemName = button.getAttribute('data-item-name');
+                const formAction = button.getAttribute('data-form-action');
+                
+                // Se actualiza el contenido del modal con los datos del reporte a eliminar.
+                const modalBody = confirmDeleteModal.querySelector('#itemName');
+                const deleteForm = confirmDeleteModal.querySelector('#deleteForm');
+                
+                if(modalBody) modalBody.textContent = itemName;
+                if(deleteForm) deleteForm.action = formAction || '#'; // Asigna la acción al formulario del modal.
+            });
+        }
+    });
+</script>
+{% endblock %}

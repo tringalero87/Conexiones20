@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Mis Proyectos</h1>
+        <p class="text-secondary">Aquí puedes ver y gestionar todos los proyectos a los que tienes acceso.</p>
+    </div>
+    {# CORRECCIÓN: Se añade el botón para crear un nuevo proyecto, visible solo para administradores. #}
+    {% if 'ADMINISTRADOR' in session.get('user_roles', []) %}
+    <div class="page-header-actions">
+        <a href="{{ url_for('proyectos.nuevo_proyecto') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-2"></i> Nuevo Proyecto
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if proyectos %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Nombre del Proyecto</th>
+                        <th>Descripción</th>
+                        <th class="text-center">Conexiones</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for proyecto in proyectos %}
+                    <tr>
+                        <td><strong>{{ proyecto.nombre|e }}</strong></td>
+                        <td>{{ (proyecto.descripcion or 'Sin descripción')|truncate(100)|e }}</td>
+                        <td class="text-center">{{ proyecto.num_conexiones }}</td>
+                        <td class="text-end">
+                            <div class="btn-group" role="group" aria-label="Acciones de proyecto">
+                                <a href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=proyecto.id) }}" class="btn btn-sm btn-secondary" title="Ver Detalles">
+                                    <i class="bi bi-eye-fill"></i>
+                                </a>
+                                {% if 'ADMINISTRADOR' in session.get('user_roles', []) %}
+                                <a href="{{ url_for('proyectos.editar_proyecto', proyecto_id=proyecto.id) }}" class="btn btn-sm btn-info text-white" title="Editar">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                <a href="{{ url_for('admin.gestionar_permisos_proyecto', proyecto_id=proyecto.id) }}" class="btn btn-sm btn-success" title="Gestionar Permisos">
+                                    <i class="bi bi-people-fill"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#confirmDeleteModal"
+                                        data-form-action="{{ url_for('proyectos.eliminar_proyecto', proyecto_id=proyecto.id) }}"
+                                        data-item-name="{{ proyecto.nombre|e }}"
+                                        title="Eliminar">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state text-center p-5">
+            <i class="bi bi-folder-x" style="font-size: 3rem;"></i>
+            <h4 class="mt-3">No hay proyectos para mostrar</h4>
+            <p class="text-secondary">
+                {% if 'ADMINISTRADOR' in session.get('user_roles', []) %}
+                Haz clic en "Nuevo Proyecto" para empezar a crear uno.
+                {% else %}
+                Contacta a un administrador para que te asigne a un proyecto.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# Modal de confirmación de eliminación #}
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmDeleteModalLabel">Confirmar Eliminación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que quieres eliminar el proyecto <strong id="itemName"></strong>?</p>
+        <p class="text-danger"><strong>Advertencia:</strong> Esta acción es irreversible y eliminará todas las conexiones asociadas a este proyecto.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="deleteForm" action="" method="POST" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

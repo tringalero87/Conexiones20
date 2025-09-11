@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Gestión de Alias de Perfiles</h1>
+        <p class="text-secondary">Define nombres cortos (alias) para los perfiles de acero y estandariza la codificación.</p>
+    </div>
+    <div class="page-header-actions">
+        {# NUEVO: Botón para importar alias en masa #}
+        <a href="{{ url_for('admin.importar_alias') }}" class="btn btn-info text-white me-2">
+            <i class="bi bi-cloud-arrow-up-fill me-2"></i> Importar Alias
+        </a>
+        {# El botón de "Nuevo Alias" ya existe en el formulario de la derecha, por lo que no es necesario aquí #}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header"><h5 class="card-title mb-0">Alias Existentes</h5></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="data-table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Nombre Completo del Perfil</th>
+                                <th>Alias</th>
+                                <th>Norma</th> {# NUEVO: Columna Norma #}
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in aliases %}
+                            <tr>
+                                <td><strong>{{ a.nombre_perfil }}</strong></td>
+                                <td><code>{{ a.alias }}</code></td>
+                                <td>{{ a.norma or 'N/A' }}</td> {# NUEVO: Mostrar valor de Norma #}
+                                <td class="text-end">
+                                    <div class="btn-group">
+                                        {# Botón para Editar, que activa el modal de edición #}
+                                        <button type="button" class="btn btn-sm btn-info text-white" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editAliasModal"
+                                                data-alias-id="{{ a.id }}"
+                                                data-nombre-perfil="{{ a.nombre_perfil }}"
+                                                data-alias-valor="{{ a.alias }}"
+                                                data-norma="{{ a.norma or '' }}" {# NUEVO: Pasar valor de Norma #}
+                                                title="Editar Alias">
+                                            <i class="bi bi-pencil-fill"></i>
+                                        </button>
+                                        {# Formulario para Eliminar, con confirmación JS #}
+                                        <form action="{{ url_for('admin.eliminar_alias', alias_id=a.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de que quieres eliminar este alias?');" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Eliminar"><i class="bi bi-trash-fill"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center p-4">No hay alias definidos. Empieza añadiendo uno.</td></tr> {# colspan ajustado #}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><h5 class="card-title mb-0">Añadir Nuevo Alias</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.gestionar_alias') }}" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.nombre_perfil.label(class="form-label") }}
+                        {{ form.nombre_perfil(class="form-control" + (" is-invalid" if form.nombre_perfil.errors else "")) }}
+                        {% if form.nombre_perfil.errors %}<div class="invalid-feedback">{{ form.nombre_perfil.errors[0] }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.alias.label(class="form-label") }}
+                        {{ form.alias(class="form-control" + (" is-invalid" if form.alias.errors else "")) }}
+                        {% if form.alias.errors %}<div class="invalid-feedback">{{ form.alias.errors[0] }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3"> {# NUEVO: Campo Norma en el formulario de añadir #}
+                        {{ form.norma.label(class="form-label") }}
+                        {{ form.norma(class="form-control" + (" is-invalid" if form.norma.errors else "")) }}
+                        {% if form.norma.errors %}<div class="invalid-feedback">{{ form.norma.errors[0] }}</div>{% endif %}
+                    </div>
+                    <div class="d-grid">
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editAliasModal" tabindex="-1" aria-labelledby="editAliasModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editAliasModalLabel">Editar Alias</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="editAliasForm" method="POST" action="" novalidate>
+        <div class="modal-body">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label for="edit_nombre_perfil" class="form-label">Nombre Completo del Perfil</label>
+                <input type="text" id="edit_nombre_perfil" name="nombre_perfil" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="edit_alias" class="form-label">Alias</label>
+                <input type="text" id="edit_alias" name="alias" class="form-control" required>
+            </div>
+            <div class="mb-3"> {# NUEVO: Campo Norma en el modal de edición #}
+                <label for="edit_norma" class="form-label">Norma</label>
+                <input type="text" id="edit_norma" name="norma" class="form-control">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Este script configura el modal de edición dinámicamente con los datos del alias seleccionado.
+document.addEventListener('DOMContentLoaded', function () {
+    const editAliasModal = document.getElementById('editAliasModal');
+    if (editAliasModal) {
+        editAliasModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const aliasId = button.getAttribute('data-alias-id');
+            const nombrePerfil = button.getAttribute('data-nombre-perfil');
+            const aliasValor = button.getAttribute('data-alias-valor');
+            const norma = button.getAttribute('data-norma'); // NUEVO: Obtener valor de Norma
+            
+            const form = editAliasModal.querySelector('#editAliasForm');
+            form.action = `/admin/alias/${aliasId}/editar`; // Construye la URL de acción
+            
+            form.querySelector('#edit_nombre_perfil').value = nombrePerfil;
+            form.querySelector('#edit_alias').value = aliasValor;
+            form.querySelector('#edit_norma').value = norma; // NUEVO: Asignar valor de Norma
+        });
+    }
+});
+</script>
+{% endblock %}

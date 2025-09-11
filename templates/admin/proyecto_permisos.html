@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{#
+    Este template gestiona la asignación de usuarios a un proyecto específico.
+    Permite a los administradores seleccionar qué usuarios tienen acceso a un proyecto.
+    - 'proyecto': Objeto del proyecto actual.
+    - 'todos_usuarios': Lista de todos los usuarios activos disponibles para asignar.
+    - 'usuarios_con_acceso': Un conjunto de IDs de usuarios que ya tienen acceso al proyecto.
+    - 'titulo': Título de la página.
+    - 'form': Objeto del formulario Flask-WTF, usado aquí principalmente para el CSRF token.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Asigna usuarios al proyecto "{{ proyecto.nombre }}".</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-4">
+        <form method="POST" action="" novalidate>
+            {# Incluye el token CSRF para protección. #}
+            {{ form.csrf_token }} 
+            
+            <div class="mb-4">
+                <label for="usuarios_asignados" class="form-label fw-bold">Usuarios con Acceso</label>
+                <select class="form-select" id="usuarios_asignados" name="usuarios_asignados" multiple style="height: 300px;">
+                    {% for user in todos_usuarios %}
+                        <option value="{{ user.id }}" {% if user.id in usuarios_con_acceso %}selected{% endif %}>
+                            {{ user.nombre_completo }} ({{ user.username }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <small class="form-text text-muted">Mantén presionada la tecla Ctrl (o Cmd en Mac) para seleccionar varios usuarios.</small>
+            </div>
+            
+            <div class="d-flex justify-content-end border-top pt-3 mt-4">
+                <a href="{{ url_for('proyectos.listar_proyectos') }}" class="btn btn-secondary me-3">Cancelar</a> {# LÍNEA CORREGIDA #}
+                <button type="submit" class="btn btn-primary btn-lg">Guardar Permisos</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

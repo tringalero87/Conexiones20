@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página para la importación masiva de conexiones
+    desde un archivo de Excel. Está diseñado para ser claro y guiar al usuario
+    en el proceso de preparación del archivo.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Sube un archivo Excel (.xlsx) para crear múltiples conexiones a la vez en el proyecto <strong>{{ proyecto.nombre|e }}</strong>.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-file-earmark-arrow-up-fill me-2"></i>Subir Archivo de Importación</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label for="archivo_importacion" class="form-label fw-bold">Archivo Excel (.xlsx)</label>
+                        <input type="file" class="form-control" name="archivo_importacion" id="archivo_importacion" required accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                    </div>
+                    
+                    <div class="alert alert-info small">
+                        <strong>Nota:</strong> El proceso de importación puede tardar unos segundos dependiendo del tamaño del archivo. Por favor, no cierres la ventana después de hacer clic en "Iniciar Importación".
+                    </div>
+
+                    <div class="d-flex justify-content-end border-top pt-3 mt-4">
+                        {# CORRECCIÓN: Se asegura el uso correcto de proyecto.id para construir la URL. #}
+                        <a href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=proyecto.id) }}" class="btn btn-secondary me-2">Cancelar</a>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-rocket-launch-fill me-2"></i> Iniciar Importación
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+             <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-question-circle-fill me-2"></i>Instrucciones</h5>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Para asegurar una importación exitosa, tu archivo de Excel debe seguir el siguiente formato:</p>
+                
+                <h6>Columnas Requeridas:</h6>
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item"><strong>TIPO:</strong> El tipo principal de conexión (Ej: MOMENTO, CORTANTE).</li>
+                    <li class="list-group-item"><strong>SUBTIPO:</strong> El subtipo de la conexión (Ej: VIGA-COLUMNA (ALA)).</li>
+                    <li class="list-group-item"><strong>TIPOLOGIA:</strong> El nombre de la tipología (Ej: T1, T2).</li>
+                    <li class="list-group-item"><strong>PERFIL1:</strong> El valor para el primer perfil.</li>
+                    <li class="list-group-item"><strong>PERFIL2:</strong> El valor para el segundo perfil (opcional, dejar en blanco si no aplica).</li>
+                    <li class="list-group-item"><strong>DESCRIPCION:</strong> Una descripción opcional para la conexión.</li>
+                </ul>
+
+                <hr>
+                
+                <p class="small text-muted">¿No estás seguro del formato? Descarga nuestra plantilla de ejemplo.</p>
+                <div class="d-grid">
+                    {# Se asume que plantilla_importacion.xlsx existe y es el archivo correcto para este propósito #}
+                    <a href="{{ url_for('static', filename='images/plantilla_importacion.xlsx') }}" class="btn btn-success" download="plantilla_importacion.xlsx">
+                        <i class="bi bi-file-earmark-excel-fill me-2"></i> Descargar Plantilla (XLSX)
+                    </a>
+                    <p class="text-muted small mt-2">
+                        Nota: La importación espera un archivo `XLSX`. Asegúrate de que tu archivo cumple el formato indicado.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

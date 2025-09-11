@@ -1,0 +1,147 @@
+2025-08-27 14:09:15,017 INFO: Hepta-Conexiones startup [in H:\Hepta_Conexiones\app.py:252]
+2025-08-27 14:09:17,452 INFO: Hepta-Conexiones startup [in H:\Hepta_Conexiones\app.py:252]
+2025-08-27 14:09:17,469 INFO: Scheduler de APScheduler iniciado en el proceso principal. [in H:\Hepta_Conexiones\app.py:265]
+2025-08-27 14:09:43,063 INFO: Usuario 'Admin' ha cerrado sesión. [in H:\Hepta_Conexiones\routes\auth.py:79]
+2025-08-27 14:09:45,317 INFO: Usuario 'Admin' ha iniciado sesión exitosamente. [in H:\Hepta_Conexiones\routes\auth.py:54]
+2025-08-27 14:28:35,420 ERROR: Error al enviar correo electrónico a ['j.bedoya@heptapro.com']: Connection unexpectedly closed [in H:\Hepta_Conexiones\routes\conexiones.py:168]
+Traceback (most recent call last):
+  File "H:\Hepta_Conexiones\routes\conexiones.py", line 165, in send_async_email
+    mail.send(msg_obj)
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 539, in send
+    with self.connect() as connection:
+         ^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 127, in __enter__
+    self.host = self.configure_host()
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 144, in configure_host
+    host = smtplib.SMTP(self.mail.server, self.mail.port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 343, in connect
+    (code, msg) = self.getreply()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 405, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed")
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed
+2025-08-27 14:28:35,526 ERROR: Error al enviar correo electrónico a ['s.orozco@heptapro.com']: Connection unexpectedly closed [in H:\Hepta_Conexiones\routes\conexiones.py:168]
+Traceback (most recent call last):
+  File "H:\Hepta_Conexiones\routes\conexiones.py", line 165, in send_async_email
+    mail.send(msg_obj)
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 539, in send
+    with self.connect() as connection:
+         ^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 127, in __enter__
+    self.host = self.configure_host()
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 144, in configure_host
+    host = smtplib.SMTP(self.mail.server, self.mail.port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 343, in connect
+    (code, msg) = self.getreply()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 405, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed")
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed
+2025-08-27 14:28:36,853 ERROR: Error al enviar correo electrónico a ['m.henao@heptapro.com']: Connection unexpectedly closed [in H:\Hepta_Conexiones\routes\conexiones.py:168]
+Traceback (most recent call last):
+  File "H:\Hepta_Conexiones\routes\conexiones.py", line 165, in send_async_email
+    mail.send(msg_obj)
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 539, in send
+    with self.connect() as connection:
+         ^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 127, in __enter__
+    self.host = self.configure_host()
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 144, in configure_host
+    host = smtplib.SMTP(self.mail.server, self.mail.port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 343, in connect
+    (code, msg) = self.getreply()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 405, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed")
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed
+2025-08-27 14:28:39,046 ERROR: Error al enviar correo electrónico a ['l.salazar@heptapro.com']: Connection unexpectedly closed [in H:\Hepta_Conexiones\routes\conexiones.py:168]
+Traceback (most recent call last):
+  File "H:\Hepta_Conexiones\routes\conexiones.py", line 165, in send_async_email
+    mail.send(msg_obj)
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 539, in send
+    with self.connect() as connection:
+         ^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 127, in __enter__
+    self.host = self.configure_host()
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 144, in configure_host
+    host = smtplib.SMTP(self.mail.server, self.mail.port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 343, in connect
+    (code, msg) = self.getreply()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 405, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed")
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed
+2025-08-27 14:28:42,298 ERROR: Error al enviar correo electrónico a ['a.fernande@heptapro.com']: Connection unexpectedly closed [in H:\Hepta_Conexiones\routes\conexiones.py:168]
+Traceback (most recent call last):
+  File "H:\Hepta_Conexiones\routes\conexiones.py", line 165, in send_async_email
+    mail.send(msg_obj)
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 539, in send
+    with self.connect() as connection:
+         ^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 127, in __enter__
+    self.host = self.configure_host()
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 144, in configure_host
+    host = smtplib.SMTP(self.mail.server, self.mail.port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 343, in connect
+    (code, msg) = self.getreply()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 405, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed")
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed
+2025-08-27 14:28:43,472 ERROR: Error al enviar correo electrónico a ['d.palomino@heptapro.com']: Connection unexpectedly closed [in H:\Hepta_Conexiones\routes\conexiones.py:168]
+Traceback (most recent call last):
+  File "H:\Hepta_Conexiones\routes\conexiones.py", line 165, in send_async_email
+    mail.send(msg_obj)
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 539, in send
+    with self.connect() as connection:
+         ^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 127, in __enter__
+    self.host = self.configure_host()
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "H:\Hepta_Conexiones\venv\Lib\site-packages\flask_mail\__init__.py", line 144, in configure_host
+    host = smtplib.SMTP(self.mail.server, self.mail.port)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 343, in connect
+    (code, msg) = self.getreply()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\smtplib.py", line 405, in getreply
+    raise SMTPServerDisconnected("Connection unexpectedly closed")
+smtplib.SMTPServerDisconnected: Connection unexpectedly closed
+2025-08-27 16:34:42,850 INFO: Usuario 'm.casallas' editó la conexión 587. [in H:\Hepta_Conexiones\routes\conexiones.py:457]
+2025-08-28 07:29:02,179 INFO: Usuario 'm.casallas' ha iniciado sesión exitosamente. [in H:\Hepta_Conexiones\routes\auth.py:54]
+2025-08-28 07:30:59,776 INFO: Admin 'm.casallas' ha desactivado al usuario 's.orozco'. [in H:\Hepta_Conexiones\routes\admin.py:316]
+2025-08-28 07:47:12,071 WARNING: Admin 'm.casallas' eliminó la conexión MVW8X21VW8X21T4-2 (ID: 589). [in H:\Hepta_Conexiones\routes\conexiones.py:482]
+2025-08-28 07:47:21,820 INFO: Usuario 'm.casallas' editó la conexión 588. [in H:\Hepta_Conexiones\routes\conexiones.py:457]
+2025-08-29 14:55:17,308 INFO: Usuario 'r.quekano' ha iniciado sesión exitosamente. [in H:\Hepta_Conexiones\routes\auth.py:54]
+2025-09-03 07:20:15,774 INFO: Usuario 'm.casallas' ha iniciado sesión exitosamente. [in H:\Hepta_Conexiones\routes\auth.py:54]
+2025-09-03 15:40:58,536 INFO: Usuario 'k.poveda' ha iniciado sesión exitosamente. [in H:\Hepta_Conexiones\routes\auth.py:54]
+2025-09-03 15:58:09,133 INFO: Usuario 'k.poveda' editó la conexión 599. [in H:\Hepta_Conexiones\routes\conexiones.py:457]
+2025-09-03 17:08:01,270 INFO: Usuario 'k.poveda' ha cerrado sesión. [in H:\Hepta_Conexiones\routes\auth.py:79]

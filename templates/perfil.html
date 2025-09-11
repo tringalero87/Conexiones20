@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo|e }}</h1>
+        <p class="text-secondary">Aquí puedes actualizar tu información personal y cambiar tu contraseña.</p>
+    </div>
+</div>
+
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <form method="POST" action="{{ url_for('auth.perfil') }}" novalidate>
+        {# Campo oculto para la protección CSRF, esencial para la seguridad de los formularios. #}
+        {{ form.csrf_token }} 
+        <div class="card-header">
+            <h4><i class="bi bi-person-badge"></i> Datos de la Cuenta</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label class="form-label">Nombre de Usuario</label>
+                        <p class="form-control-plaintext ps-2">{{ g.user.username|e }}</p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label class="form-label">Roles Asignados</label>
+                        <p class="form-control-plaintext ps-2">
+                            {# Asumiendo que g.user.roles es una lista o iterable #}
+                            {% for role in session.get('user_roles', []) %}
+                                <span class="badge bg-secondary">{{ role|e }}</span>
+                            {% endfor %}
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group mb-3"> {# Añadido mb-3 para espaciado #}
+                        {{ form.nombre_completo.label(class="form-label") }}
+                        {{ form.nombre_completo(class="form-control" + (" is-invalid" if form.nombre_completo.errors else ""), autocomplete="name") }}
+                         {% if form.nombre_completo.errors %}
+                            <div class="invalid-feedback d-block">{% for error in form.nombre_completo.errors %}<span>{{ error }}</span>{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group mb-3"> {# Añadido mb-3 para espaciado #}
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), autocomplete="email") }}
+                        {% if form.email.errors %}
+                            <div class="invalid-feedback d-block">{% for error in form.email.errors %}<span>{{ error }}</span>{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body border-top">
+            <h4 class="mb-3"><i class="bi bi-key-fill"></i> Cambiar Contraseña</h4>
+            <p class="text-secondary small mb-3">
+                Si no deseas cambiar tu contraseña, deja estos campos en blanco.
+            </p>
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="form-group mb-3">
+                        {{ form.current_password.label(class="form-label") }}
+                        {{ form.current_password(class="form-control" + (" is-invalid" if form.current_password.errors else ""), autocomplete="current-password") }}
+                        {% if form.current_password.errors %}
+                            <div class="invalid-feedback d-block">{% for error in form.current_password.errors %}<span>{{ error }}</span>{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        {{ form.new_password.label(class="form-label") }}
+                        {{ form.new_password(class="form-control" + (" is-invalid" if form.new_password.errors else ""), autocomplete="new-password") }}
+                        {% if form.new_password.errors %}
+                            <div class="invalid-feedback d-block">{% for error in form.new_password.errors %}<span>{{ error }}</span>{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        {{ form.confirm_password.label(class="form-label") }}
+                        {{ form.confirm_password(class="form-control" + (" is-invalid" if form.confirm_password.errors else ""), autocomplete="new-password") }}
+                        {% if form.confirm_password.errors %}
+                            <div class="invalid-feedback d-block">{% for error in form.confirm_password.errors %}<span>{{ error }}</span>{% endfor %}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body border-top">
+            <h5><i class="bi bi-bell-fill me-2"></i>Preferencias de Notificación</h5>
+            <div class="form-group mb-3">
+                <div class="form-check form-switch">
+                    {{ form.email_notif_estado(class="form-check-input", role="switch") }}
+                    {{ form.email_notif_estado.label(class="form-check-label fw-bold") }}
+                </div>
+                <p class="text-secondary small mt-1">Recibe correos electrónicos cuando el estado de una conexión a la que estás relacionado cambie (Ej: solicitada, en proceso, aprobada, rechazada).</p>
+            </div>
+        </div>
+
+        <div class="card-footer text-end">
+            <button type="submit" name="submit" class="btn btn-primary">Guardar Cambios</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

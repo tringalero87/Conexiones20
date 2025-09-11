@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Conexión: <strong>{{ conexion.codigo_conexion|e }}</strong></p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-rulers me-2"></i>Ingresar Longitudes (en mm)</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% for key, value in perfiles %}
+                    <div class="mb-3">
+                        <label for="longitud_{{ loop.index }}" class="form-label">{{ key }}: <strong>{{ value }}</strong></label>
+                        {# Populate with existing length if available in details_json #}
+                        <input type="number" step="any" class="form-control" name="longitud_{{ loop.index }}" id="longitud_{{ loop.index }}" placeholder="Ej: 5000" required value="{{ detalles.get('Longitud ' + value + ' (mm)', '') }}">
+                    </div>
+                    {% endfor %}
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Calcular Pesos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                 <h5 class="card-title mb-0"><i class="bi bi-table me-2"></i>Resultados de Cómputos</h5>
+                 {% if resultados %}
+                 <a href="{{ url_for('conexiones.reporte_computos', conexion_id=conexion.id) }}" target="_blank" class="btn btn-sm btn-secondary">
+                    <i class="bi bi-printer-fill me-1"></i> Generar Reporte
+                 </a>
+                 {% endif %}
+            </div>
+            <div class="card-body">
+                {% if resultados %}
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Perfil</th>
+                                <th class="text-end">Longitud (mm)</th>
+                                <th class="text-end">Peso (kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for res in resultados %}
+                            <tr>
+                                <td>{{ res.perfil }}</td>
+                                <td class="text-end">{{ res.longitud }}</td>
+                                <td class="text-end"><strong>{{ res.peso }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-4 text-muted">
+                    <p>Introduce las longitudes y haz clic en "Calcular Pesos" para ver los resultados.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

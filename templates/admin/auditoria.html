@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de "Historial de Auditoría" para el administrador.
+    Muestra un registro de todas las acciones importantes realizadas en el sistema.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Registro de todas las acciones significativas realizadas en la aplicación.</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-funnel-fill me-2"></i>Filtrar Auditoría</h5>
+    </div>
+    <div class="card-body">
+        <form class="row g-3 align-items-end" method="GET">
+            <div class="col-md-5">
+                <label for="usuario-select" class="form-label">Filtrar por Usuario</label>
+                <select class="form-select" id="usuario-select" name="usuario_id">
+                    <option value="">Todos los Usuarios</option>
+                    {% for user in usuarios_para_filtro %}
+                        <option value="{{ user.id }}" {% if filtro_usuario_id == user.id %}selected{% endif %}>{{ user.nombre_completo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label for="accion-select" class="form-label">Filtrar por Acción</label>
+                <select class="form-select" id="accion-select" name="accion">
+                    <option value="">Todas las Acciones</option>
+                    {% for accion in acciones_para_filtro %}
+                        <option value="{{ accion.accion }}" {% if filtro_accion == accion.accion %}selected{% endif %}>{{ accion.accion.replace('_', ' ')|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Aplicar Filtros</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-journal-check me-2"></i>Registros de Auditoría</h5>
+    </div>
+    <div class="card-body">
+        {% if acciones %}
+        <div class="table-responsive">
+            <table class="data-table table-hover">
+                <thead>
+                    <tr>
+                        <th>Fecha y Hora</th>
+                        <th>Usuario</th>
+                        <th>Acción</th>
+                        <th>Tipo Objeto</th>
+                        <th>ID Objeto</th>
+                        <th>Detalles</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for accion in acciones %}
+                    <tr>
+                        <td>{{ accion.fecha|format_datetime }}</td>
+                        <td><strong>{{ accion.usuario_nombre|e }}</strong></td>
+                        <td><span class="badge bg-secondary">{{ accion.accion.replace('_', ' ')|title }}</span></td>
+                        <td>{{ accion.tipo_objeto|e }}</td>
+                        <td>{% if accion.objeto_id %}<span class="badge bg-info">{{ accion.objeto_id }}</span>{% else %}N/A{% endif %}</td>
+                        <td>
+                            {% if accion.detalles %}
+                                <pre class="small text-muted mb-0" style="white-space: pre-wrap;">{{ accion.detalles|e }}</pre>
+                            {% else %}
+                                <span class="text-muted">Sin detalles.</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state text-center p-5">
+            <i class="bi bi-journal-x" style="font-size: 3rem;"></i>
+            <h4 class="mt-3">No hay registros de auditoría</h4>
+            <p class="text-secondary">
+                No se encontraron acciones que coincidan con los filtros aplicados.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    
+    {# Sección de Paginación #}
+    {% if total > per_page %}
+    <div class="card-footer d-flex justify-content-center">
+        <nav aria-label="Navegación de páginas">
+            <ul class="pagination mb-0">
+                <li class="page-item {{ 'disabled' if page == 1 }}">
+                    <a class="page-link" href="{{ url_for('admin.ver_auditoria', page=page-1, usuario_id=filtro_usuario_id, accion=filtro_accion) }}">Anterior</a>
+                </li>
+
+                {% set total_pages = (total / per_page)|round(0, 'ceil')|int %}
+                {% for page_num in range(1, total_pages + 1) %}
+                <li class="page-item {{ 'active' if page_num == page }}">
+                    <a class="page-link" href="{{ url_for('admin.ver_auditoria', page=page_num, usuario_id=filtro_usuario_id, accion=filtro_accion) }}">{{ page_num }}</a>
+                </li>
+                {% endfor %}
+
+                <li class="page-item {{ 'disabled' if page == total_pages }}">
+                    <a class="page-link" href="{{ url_for('admin.ver_auditoria', page=page+1, usuario_id=filtro_usuario_id, accion=filtro_accion) }}">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

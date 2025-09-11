@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza el formulario para crear o editar un reporte personalizado.
+    Utiliza un objeto 'form' de Flask-WTF (ReportForm) que gestiona los campos, la validación
+    y la seguridad (CSRF), y se puebla dinámicamente desde la ruta de Flask.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Define los parámetros para tu nuevo reporte personalizado.</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-4">
+        {# El atributo 'novalidate' previene la validación nativa del navegador. #}
+        <form method="POST" action="" novalidate>
+            {# Esencial para la seguridad: incluye el token CSRF. #}
+            {{ form.hidden_tag() }}
+
+            <h5 class="mb-3"><i class="bi bi-file-text-fill me-2"></i>Información General</h5>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    {{ form.nombre.label(class="form-label fw-bold") }}
+                    {{ form.nombre(class="form-control" + (" is-invalid" if form.nombre.errors else "")) }}
+                    {% if form.nombre.errors %}<div class="invalid-feedback">{% for error in form.nombre.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-3">
+                    {{ form.descripcion.label(class="form-label fw-bold") }}
+                    {{ form.descripcion(class="form-control" + (" is-invalid" if form.descripcion.errors else "")) }}
+                    {% if form.descripcion.errors %}<div class="invalid-feedback">{% for error in form.descripcion.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+            </div>
+            <hr>
+
+            <h5 class="mb-3"><i class="bi bi-funnel-fill me-2"></i>Filtros de Datos</h5>
+            <p class="text-muted small">Selecciona los criterios para filtrar las conexiones que se incluirán en el reporte. Puedes dejar campos en 'Todos' para no aplicar ese filtro.</p>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    {{ form.proyecto_id.label(class="form-label") }}
+                    {{ form.proyecto_id(class="form-select") }}
+                </div>
+                <div class="col-md-4 mb-3">
+                    {{ form.estado.label(class="form-label") }}
+                    {{ form.estado(class="form-select") }}
+                </div>
+                <div class="col-md-4 mb-3">
+                    {{ form.realizador_id.label(class="form-label") }}
+                    {{ form.realizador_id(class="form-select") }}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    {{ form.fecha_inicio.label(class="form-label fw-bold") }}
+                    {{ form.fecha_inicio(class="form-control" + (" is-invalid" if form.fecha_inicio.errors else "")) }}
+                    {% if form.fecha_inicio.errors %}<div class="invalid-feedback">{% for error in form.fecha_inicio.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-3">
+                    {{ form.fecha_fin.label(class="form-label fw-bold") }}
+                    {{ form.fecha_fin(class="form-control" + (" is-invalid" if form.fecha_fin.errors else "")) }}
+                    {% if form.fecha_fin.errors %}<div class="invalid-feedback">{% for error in form.fecha_fin.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+            </div>
+            <hr>
+            
+            <h5 class="mb-3"><i class="bi bi-layout-text-sidebar-reverse me-2"></i>Columnas del Reporte</h5>
+            <div class="mb-3">
+                {{ form.columnas.label(class="form-label fw-bold") }}
+                <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                {% for subfield in form.columnas %}
+                    <div class="form-check">
+                        {{ subfield(class="form-check-input" + (" is-invalid" if form.columnas.errors else "")) }}
+                        {{ subfield.label(class="form-check-label") }}
+                    </div>
+                {% endfor %}
+                </div>
+                {% if form.columnas.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.columnas.errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            <hr>
+
+            <h5 class="mb-3"><i class="bi bi-file-earmark-arrow-down-fill me-2"></i>Formato de Salida</h5>
+            <div class="mb-3">
+                <label class="form-label">Elige el formato para exportar el reporte:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="{{ form.output_format.name }}" id="formatPDF" value="pdf" {% if form.output_format.data == 'pdf' %}checked{% endif %}>
+                    <label class="form-check-label" for="formatPDF">PDF (.pdf)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="{{ form.output_format.name }}" id="formatExcel" value="xlsx" {% if form.output_format.data == 'xlsx' %}checked{% endif %}>
+                    <label class="form-check-label" for="formatExcel">Excel (.xlsx)</label>
+                </div>
+                 <div class="form-check">
+                    <input class="form-check-input" type="radio" name="{{ form.output_format.name }}" id="formatCSV" value="csv" {% if form.output_format.data == 'csv' %}checked{% endif %}>
+                    <label class="form-check-label" for="formatCSV">CSV (.csv)</label>
+                </div>
+            </div>
+            <hr>
+
+            <h5 class="mb-3"><i class="bi bi-clock-history me-2"></i>Programación y Entrega</h5>
+            <div class="form-check form-switch mb-3">
+                {{ form.programado(class="form-check-input", role="switch", id="scheduleSwitch") }}
+                {{ form.programado.label(class="form-check-label", for="scheduleSwitch") }}
+            </div>
+            
+            {# Esta sección solo es visible si el interruptor de programación está activado. #}
+            <div class="row" id="scheduleOptions" style="display: none;">
+                <div class="col-md-6 mb-3">
+                    {{ form.frecuencia.label(class="form-label") }}
+                    {{ form.frecuencia(class="form-select") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    {{ form.destinatarios.label(class="form-label") }}
+                    {{ form.destinatarios(class="form-control" + (" is-invalid" if form.destinatarios.errors else ""), rows=3) }}
+                    {% if form.destinatarios.errors %}
+                        <div class="invalid-feedback">
+                            {% for error in form.destinatarios.errors %}<span>{{ error }}</span>{% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Introduce los correos electrónicos separados por comas.</small>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end border-top pt-3 mt-4">
+                <a href="{{ url_for('admin.listar_reportes') }}" class="btn btn-secondary me-2">Cancelar</a>
+                {{ form.submit(class="btn btn-primary btn-lg") }}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    /**
+     * Este script se encarga de mostrar u ocultar las opciones de programación
+     * basándose en el estado del interruptor 'Programar envío por email'.
+     */
+    document.addEventListener('DOMContentLoaded', function () {
+        const scheduleSwitch = document.getElementById('scheduleSwitch');
+        const scheduleOptions = document.getElementById('scheduleOptions');
+
+        function toggleScheduleOptions() {
+            // Si el interruptor existe y está marcado, muestra las opciones.
+            if (scheduleSwitch && scheduleSwitch.checked) {
+                scheduleOptions.style.display = 'flex'; // 'flex' para que se alinee en fila.
+            } else if (scheduleOptions) {
+                // Si no, las oculta.
+                scheduleOptions.style.display = 'none';
+            }
+        }
+
+        // Se asegura de que el estado inicial sea el correcto al cargar la página.
+        if(scheduleSwitch) {
+            toggleScheduleOptions();
+            // Añade un listener para reaccionar a los cambios futuros del interruptor.
+            scheduleSwitch.addEventListener('change', toggleScheduleOptions);
+        }
+    });
+</script>
+{% endblock %}

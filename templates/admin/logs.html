@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de "Logs del Sistema" para el administrador.
+    Su propósito es mostrar los registros (logs) generados por la aplicación,
+    lo que es crucial para la depuración de errores, la auditoría de seguridad
+    y el seguimiento de eventos importantes.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Logs del Sistema</h1>
+        <p class="text-secondary">Visor de los registros de auditoría y eventos importantes de la aplicación.</p>
+    </div>
+    <div class="page-header-actions">
+        {# Botón para activar el modal de confirmación de limpieza de logs. #}
+        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#confirmClearLogsModal">
+            <i class="bi bi-trash-fill me-2"></i> Limpiar Logs Antiguos
+        </button>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-funnel-fill me-2"></i>Filtrar Registros</h5>
+    </div>
+    <div class="card-body">
+        {# Este formulario permitiría al administrador filtrar los logs por diferentes criterios. #}
+        <form class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="search-log-message" class="form-label">Buscar por Mensaje</label>
+                <input type="text" class="form-control" id="search-log-message" placeholder="Ej: Usuario 'admin' editó...">
+            </div>
+            <div class="col-md-3">
+                <label for="filter-log-level" class="form-label">Nivel de Log</label>
+                <select id="filter-log-level" class="form-select">
+                    <option selected>Todos los Niveles</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filter-date" class="form-label">Fecha</label>
+                <input type="date" class="form-control" id="filter-date">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-journal-richtext me-2"></i>Registros Recientes</h5>
+    </div>
+    <div class="card-body">
+        {#
+            Se itera sobre la lista de 'logs' pasada desde la ruta de Flask.
+            Cada 'log' es un diccionario que contiene 'timestamp', 'level' y 'message'.
+        #}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 120px;">Nivel</th>
+                        <th style="width: 180px;">Fecha y Hora</th>
+                        <th>Mensaje</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    {# La clase de la fila cambia según el nivel del log para una mejor visualización. #}
+                    <tr class="{{ 'table-danger' if log.level == 'ERROR' or log.level == 'CRITICAL' else 'table-warning' if log.level == 'WARNING' }}">
+                        <td>
+                            {% if log.level == 'ERROR' or log.level == 'CRITICAL' %}
+                                <span class="badge bg-danger">{{ log.level }}</span>
+                            {% elif log.level == 'WARNING' %}
+                                <span class="badge bg-warning text-dark">{{ log.level }}</span>
+                            {% else %}
+                                <span class="badge bg-success">{{ log.level }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.timestamp }}</td>
+                        <td><code>{{ log.message }}</code></td>
+                    </tr>
+                    {# Bloque 'else' del bucle for, se mostrará si la lista de logs está vacía. #}
+                    {% else %}
+                    <tr>
+                        <td colspan="3">
+                            <div class="empty-state text-center p-5">
+                                <i class="bi bi-file-earmark-check" style="font-size: 3rem;"></i>
+                                <h4 class="mt-3">No hay registros de log</h4>
+                                <p class="text-secondary">
+                                    El archivo de log está vacío o no se pudo leer.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    </div>
+
+<div class="modal fade" id="confirmClearLogsModal" tabindex="-1" aria-labelledby="confirmClearLogsModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmClearLogsModalLabel">Confirmar Limpieza de Logs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que quieres eliminar todos los registros de log?</p>
+        <p class="text-danger"><small>Esta acción no se puede deshacer y podría dificultar la depuración de problemas pasados.</small></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        {# Este formulario apunta a la ruta que ejecuta la limpieza. #}
+        <form action="{{ url_for('admin.clear_logs') }}" method="POST" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Sí, limpiar logs</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

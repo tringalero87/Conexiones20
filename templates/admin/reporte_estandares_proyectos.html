@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de "Reporte de Estandarización" para el administrador.
+    Muestra información estandarizada de conexiones en un formato de tabla.
+#}
+
+{% block extra_css %}
+{# Se mantienen los estilos específicos del reporte aquí, ahora dentro del bloque extra_css #}
+<style>
+    body {
+        /* Se eliminan los colores fijos del body, ya que los heredará de base.html y style.css */
+        font-family: 'Inter', sans-serif;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .container-report {
+        max-width: 1200px; /* Wider container for more content */
+        margin: 40px auto;
+        padding: 30px;
+        background-color: var(--bg-color-light); /* Usa la variable de tema para el fondo claro */
+        border: 1px solid var(--border-color); /* Usa la variable de tema para el borde */
+        border-radius: 8px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.05);
+    }
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--text-color); /* Usa la variable de tema para el color del texto principal */
+    }
+    .section-divider {
+        border-top: 2px solid var(--accent-color); /* Usa la variable de tema para el color de acento */
+        padding-top: 20px;
+        margin-top: 30px;
+        margin-bottom: 30px;
+    }
+    .sub-section-divider {
+        border-top: 1px dashed var(--border-color); /* Usa la variable de tema para el borde */
+        padding-top: 15px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+    .table th, .table td {
+        vertical-align: middle;
+        padding: 0.75rem; /* Adjust padding */
+        font-size: 0.85rem; /* Slightly smaller font for tables */
+    }
+    .table thead th {
+        background-color: var(--bg-color); /* Usa la variable de tema para el fondo de la cabecera de tabla */
+        color: var(--text-color-muted); /* Usa la variable de tema para el color del texto mutado */
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem; /* Slightly smaller font for table headers */
+    }
+    .table-striped tbody tr:nth-of-type(odd) {
+        background-color: rgba(var(--text-color-rgb, 0,0,0), 0.05); /* Usa una versión RGBA para rayas, adaptable al tema */
+    }
+    .badge {
+        font-size: 0.75em;
+        padding: 0.35em 0.65em;
+        vertical-align: middle;
+    }
+    .filter-form .form-label {
+        font-weight: 600;
+    }
+    
+    /* === Print-specific styles === */
+    @media print {
+        @page {
+            size: A4 landscape; /* Set page size to A4 and landscape orientation */
+            margin: 1.5cm; /* Set margins for printing */
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-size: 10pt; /* Adjust base font size for print */
+        }
+        .container-report {
+            max-width: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            box-shadow: none;
+            border: none;
+            display: block; /* Ensure it behaves as a block for print flow */
+        }
+        .no-print {
+            display: none !important;
+        }
+        .table {
+            width: 100%;
+            table-layout: fixed; /* Ensures columns take defined width */
+            border-collapse: collapse;
+            page-break-inside: auto; /* Allow tables to break across pages if needed */
+        }
+        .table th, .table td {
+            border: 1px solid #dee2e6; /* Add borders for print tables (colores fijos para impresión) */
+            padding: 0.5rem; /* Adjust padding for print */
+            word-wrap: break-word; /* Break long words */
+            white-space: normal; /* Allow text to wrap naturally */
+        }
+        .table thead {
+            display: table-header-group; /* Repeat table header on each page */
+        }
+        .table tr {
+            page-break-inside: avoid !important; /* Keep table rows from breaking across pages */
+            page-break-after: auto;
+        }
+        .table tbody tr:nth-of-type(odd) {
+            background-color: #f8f9fa; /* Ensure background color is visible in print */
+        }
+
+        /* Adjust column widths for optimal A4 landscape fit */
+        .table th:nth-child(1), .table td:nth-child(1) { width: 10%; } /* Código Conexión */
+        .table th:nth-child(2), .table td:nth-child(2) { width: 10%; } /* Proyecto */
+        .table th:nth-child(3), .table td:nth-child(3) { width: 8%; }  /* Estado */
+        .table th:nth-child(4), .table td:nth-child(4) { width: 8%; }  /* Tipo */
+        .table th:nth-child(5), .table td:nth-child(5) { width: 12%; } /* Subtipo */
+        .table th:nth-child(6), .table td:nth-child(6) { width: 8%; }  /* Tipología */
+        .table th:nth-child(7), .table td:nth-child(7) { width: 15%; } /* Descripción Estándar */
+        .table th:nth-child(8), .table td:nth-child(8) { width: 12%; } /* Perfiles Utilizados */
+        .table th:nth-child(9), .table td:nth-child(9) { width: 10%; } /* Archivos Requeridos */
+        .table th:nth-child(10), .table td:nth-child(10) { width: 7%; } /* Solicitante */
+        .table th:nth-child(11), .table td:nth-child(11) { width: 7%; } /* Realizador */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-report">
+    <div class="text-center mb-5">
+        <h1 class="mb-2">{{ titulo }}</h1>
+        <p class="text-muted">Generado el: {{ datetime.now().strftime('%d/%m/%Y %H:%M') }}</p>
+        <p class="lead no-print">Este reporte muestra conexiones estandarizadas con opciones de filtrado y paginación.</p>
+        <button class="btn btn-primary no-print" onclick="window.print()"><i class="bi bi-printer-fill me-2"></i>Imprimir Reporte</button>
+    </div>
+
+    {# Filter Form #}
+    <div class="card mb-4 no-print">
+        <div class="card-header">
+            <h5 class="card-title mb-0"><i class="bi bi-funnel-fill me-2"></i>Filtrar Reporte</h5>
+        </div>
+        <div class="card-body">
+            <form class="row g-3 align-items-end filter-form" method="GET" action="{{ url_for('admin.reporte_estandares_proyectos') }}">
+                <div class="col-md-3">
+                    <label for="project-select" class="form-label">Proyecto</label>
+                    <select class="form-select" id="project-select" name="project_id">
+                        <option value="">Todos</option>
+                        {% for project in all_projects %}
+                        <option value="{{ project.id }}" {% if project.id == project_filter_id %}selected{% endif %}>{{ project.nombre|e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="estado-select" class="form-label">Estado</label>
+                    <select class="form-select" id="estado-select" name="estado">
+                        <option value="">Todos</option>
+                        <option value="SOLICITADO" {% if estado_filter == 'SOLICITADO' %}selected{% endif %}>Solicitado</option>
+                        <option value="EN_PROCESO" {% if estado_filter == 'EN_PROCESO' %}selected{% endif %}>En Proceso</option>
+                        <option value="REALIZADO" {% if estado_filter == 'REALIZADO' %}selected{% endif %}>Realizado</option>
+                        <option value="APROBADO" {% if estado_filter == 'APROBADO' %}selected{% endif %}>Aprobado</option>
+                        <option value="RECHAZADO" {% if estado_filter == 'RECHAZADO' %}selected{% endif %}>Rechazado</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="solicitante-select" class="form-label">Solicitante</label>
+                    <select class="form-select" id="solicitante-select" name="solicitante_id">
+                        <option value="">Todos</option>
+                        {% for solicitante in all_solicitantes %}
+                        <option value="{{ solicitante.id }}" {% if solicitante.id == solicitante_filter_id %}selected{% endif %}>{{ solicitante.nombre_completo|e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="realizador-select" class="form-label">Realizador</label>
+                    <select class="form-select" id="realizador-select" name="realizador_id">
+                        <option value="">Todos</option>
+                        {% for realizador in all_realizadores %}
+                        <option value="{{ realizador.id }}" {% if realizador.id == realizador_filter_id %}selected{% endif %}>{{ realizador.nombre_completo|e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-8">
+                    <label for="search-input" class="form-label">Buscar por Código / Tipología</label>
+                    <input type="text" class="form-control" id="search-input" name="q" value="{{ search_query|e }}" placeholder="Ej: CVHN200, T1">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">Aplicar Filtros</button>
+                </div>
+                 <div class="col-12 mt-3">
+                    {# Export Button - Use a separate form for export to avoid conflicts with pagination/filter form #}
+                    <a href="{{ url_for('admin.exportar_reporte_estandares', project_id=project_filter_id, estado=estado_filter, solicitante_id=solicitante_filter_id, realizador_id=realizador_filter_id, q=search_query) }}" class="btn btn-success w-100">
+                        <i class="bi bi-file-earmark-excel me-2"></i> Exportar a Excel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if conexiones_data %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped mt-4">
+                <thead>
+                    <tr>
+                        <th>Código Conexión</th>
+                        <th>Proyecto</th>
+                        <th>Estado</th>
+                        <th>Tipo</th>
+                        <th>Subtipo</th>
+                        <th>Tipología</th>
+                        <th>Descripción Estándar</th>
+                        <th>Perfiles Utilizados</th>
+                        <th>Archivos Requeridos</th>
+                        <th>Solicitante</th>
+                        <th>Realizador</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for conexion in conexiones_data %}
+                    <tr>
+                        <td><strong>{{ conexion.codigo_conexion|e }}</strong></td>
+                        <td>{{ conexion.proyecto_nombre|e }}</td>
+                        <td><span class="badge bg-secondary">{{ conexion.estado.replace('_',' ')|e }}</span></td>
+                        <td>{{ conexion.tipo|e }}</td>
+                        <td>{{ conexion.subtipo|e }}</td>
+                        <td>{{ conexion.tipologia_nombre|e }}</td>
+                        <td>{{ conexion.tipologia_descripcion_estandar or 'N/A' }}</td>
+                        <td>
+                            {% if conexion.perfiles_utilizados %}
+                            <ul class="list-unstyled mb-0 small">
+                                {% for perfil in conexion.perfiles_utilizados %}
+                                <li><strong>{{ perfil.nombre_completo|e }}</strong></li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if conexion.archivos_requeridos_estandar %}
+                            <ul class="list-unstyled mb-0 small">
+                                {% for archivo in conexion.archivos_requeridos_estandar %}
+                                <li><i class="bi bi-file-earmark-check me-1 text-success"></i>{{ archivo|e }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ conexion.solicitante_nombre|e or 'N/A' }}</td>
+                        <td>{{ conexion.realizador_nombre|e or 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination Controls #}
+        {% if total_pages > 1 %}
+        <nav aria-label="Page navigation" class="no-print mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('admin.reporte_estandares_proyectos', page=page-1, project_id=project_filter_id, estado=estado_filter, solicitante_id=solicitante_filter_id, realizador_id=realizador_filter_id, q=search_query) }}">Anterior</a>
+                </li>
+                {% for p_num in range(1, total_pages + 1) %}
+                <li class="page-item {% if p_num == page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('admin.reporte_estandares_proyectos', page=p_num, project_id=project_filter_id, estado=estado_filter, solicitante_id=solicitante_filter_id, realizador_id=realizador_filter_id, q=search_query) }}">{{ p_num }}</a>
+                </li>
+                {% endfor %}
+                <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('admin.reporte_estandares_proyectos', page=page+1, project_id=project_filter_id, estado=estado_filter, solicitante_id=solicitante_filter_id, realizador_id=realizador_filter_id, q=search_query) }}">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+
+    {% else %}
+    <div class="alert alert-info text-center mt-4" role="alert">
+        No se encontraron conexiones que coincidan con los filtros aplicados.
+    </div>
+    {% endif %}
+
+    <footer class="text-center text-muted small mt-5 no-print">
+        <p>&copy; {{ datetime.now().year }} Hepta Proyectos SAS. Todos los derechos reservados.</p>
+    </footer>
+</div>
+{% endblock %}

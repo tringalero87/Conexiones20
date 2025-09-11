@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Programado: {{ reporte.nombre|e }}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background-color: #f4f4f7;">
+
+    <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 680px; margin: 20px auto; background-color: #ffffff; border-collapse: collapse;">
+        <tr>
+            <td align="center" style="padding: 20px 0; border-bottom: 2px solid #007bff;">
+                <h1 style="margin: 0; color: #333333; font-size: 24px;">Reporte Programado</h1>
+                <p style="margin: 5px 0 0 0; color: #555555; font-size: 16px;">Hepta-Conexiones</p>
+            </td>
+        </tr>
+        
+        <tr>
+            <td style="padding: 40px 30px;">
+                <h2 style="margin: 0 0 10px 0; color: #333333; font-size: 20px;">Reporte: {{ reporte.nombre|e }}</h2>
+                
+                <p style="margin: 0 0 25px 0; color: #555555; font-size: 16px; line-height: 1.6;">
+                    Hola,
+                    <br>
+                    Adjunto encontrarás el reporte "{{ reporte.nombre|e }}" generado automáticamente el {{ now().strftime('%d-%m-%Y') }}.
+                    Este reporte incluye <strong>{{ resultados|length }}</strong> registros que cumplen con los siguientes criterios:
+                </p>
+                
+                <p style="margin: 0 0 30px 0; background-color: #e9ecef; padding: 15px; border-left: 4px solid #6c757d; font-size: 14px; line-height: 1.6; color: #333333;">
+                    {{ reporte.descripcion_filtros|e }}
+                </p>
+
+                <p style="margin: 0 0 20px 0; color: #555555; font-size: 16px;">
+                    A continuación, se muestra una vista previa de los primeros 10 resultados. El archivo adjunto contiene el reporte completo.
+                </p>
+
+                <table border="0" cellpadding="10" cellspacing="0" width="100%" style="border: 1px solid #dee2e6; border-collapse: collapse; font-size: 12px;">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th style="border: 1px solid #dee2e6; text-align: left;">Código</th>
+                            <th style="border: 1px solid #dee2e6; text-align: left;">Proyecto</th>
+                            <th style="border: 1px solid #dee2e6; text-align: left;">Estado</th>
+                            <th style="border: 1px solid #dee2e6; text-align: left;">Fecha Creación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for conexion_row in resultados|slice(10) %} {# Renombrado a conexion_row para mayor claridad #}
+                        <tr style="border-bottom: 1px solid #dee2e6;">
+                            <td style="border: 1px solid #dee2e6;">{{ conexion_row.codigo_conexion|e }}</td>
+                            <td style="border: 1px solid #dee2e6;">{{ conexion_row.proyecto_nombre|e }}</td>
+                            <td style="border: 1px solid #dee2e6;">{{ conexion_row.estado.replace('_', ' ')|e }}</td>
+                            <td style="border: 1px solid #dee2e6;">{{ conexion_row.fecha_creacion.strftime('%d-%m-%Y') }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; padding: 20px; border: 1px solid #dee2e6;">No se encontraron resultados para este reporte.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if resultados|length > 10 %}
+                <p style="text-align: center; margin-top: 10px; font-size: 12px; color: #888;">... y {{ resultados|length - 10 }} más en el archivo adjunto.</p>
+                {% endif %}
+
+            </td>
+        </tr>
+        
+        <tr>
+            <td align="center" style="padding: 20px 30px; background-color: #f4f4f7; border-top: 1px solid #dee2e6;">
+                <p style="margin: 0; color: #888888; font-size: 12px;">
+                    © {{ datetime.now().year }} Hepta Proyectos SAS. Todos los derechos reservados.
+                    <br>
+                    Este es un reporte automático generado por el sistema Hepta-Conexiones.
+                </p>
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>

@@ -1,0 +1,85 @@
+{#
+    Este es un fragmento de plantilla (partial) que renderiza una lista de tareas/conexiones.
+    Se reutiliza en el dashboard para cada una de las pestañas, lo que evita repetir código.
+    Espera que las siguientes variables estén definidas en el contexto:
+    - 'tasks': Una lista de objetos de conexión.
+    - 'empty_message': El mensaje a mostrar si la lista de tareas está vacía.
+#}
+<div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Código Conexión</th>
+                <th>Proyecto / Estado</th>
+                <th class="text-center">Urgencia</th>
+                <th class="text-end">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            {# Añadimos data-attributes para el filtrado en el frontend #}
+            <tr data-project-id="{{ task.proyecto_id }}" data-type="{{ task.tipo | e }}" data-estado="{{ task.estado | lower }}">
+                <td class="task-code"><strong>{{ task.codigo_conexion }}</strong></td>
+                <td>
+                    {# Muestra el nombre del proyecto y el estado de la conexión #}
+                    {% if task.proyecto_nombre %}
+                        {{ task.proyecto_nombre | e }} <br>
+                        <span class="estado estado-{{ task.estado|lower }}">{{ task.estado.replace('_',' ') }}</span>
+                    {% else %}
+                        {# Si no hay nombre de proyecto (ej. en "Mis Solicitudes" directa), solo muestra el estado #}
+                        <span class="estado estado-{{ task.estado|lower }}">{{ task.estado.replace('_',' ') }}</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {# Lógica para la Priorización Visual #}
+                    {% set fecha_creacion = task.fecha_creacion|fromjson if task.fecha_creacion is string else task.fecha_creacion %}
+                    {% set dias_transcurridos = (datetime.now() - fecha_creacion).days %}
+                    
+                    {% if dias_transcurridos > 7 %}
+                        <span class="badge bg-danger" title="Más de 7 días sin actualizar"><i class="bi bi-exclamation-triangle-fill"></i> Crítico</span>
+                    {% elif dias_transcurridos > 3 %}
+                        <span class="badge bg-warning text-dark" title="Más de 3 días sin actualizar"><i class="bi bi-clock-history"></i> Urgente</span>
+                    {% else %}
+                         <span class="badge bg-success">Normal</span>
+                    {% endif %}
+                </td>
+                <td class="text-end">
+                    <div class="btn-group">
+                        <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=task.id) }}" class="btn btn-sm btn-secondary">Ver Detalles</a>
+                        
+                        {# NUEVO: Botones de acción rápida #}
+                        {% if task.estado == 'SOLICITADO' and ('REALIZADOR' in session.get('user_roles', []) or 'ADMINISTRADOR' in session.get('user_roles', [])) %}
+                            <button type="button" class="btn btn-sm btn-primary quick-action-btn" data-id="{{ task.id }}" data-estado="EN_PROCESO" title="Tomar Tarea">Tomar Tarea</button>
+                        {% elif task.estado == 'EN_PROCESO' and (task.realizador_id == g.user.id or 'ADMINISTRADOR' in session.get('user_roles', [])) %}
+                            <button type="button" class="btn btn-sm btn-warning text-dark quick-action-btn" data-id="{{ task.id }}" data-estado="REALIZADO" title="Marcar como Realizado">Marcar Realizado</button>
+                        {% elif task.estado == 'REALIZADO' and ('APROBADOR' in session.get('user_roles', []) or 'ADMINISTRADOR' in session.get('user_roles', [])) %}
+                            <button type="button" class="btn btn-sm btn-success quick-action-btn" data-id="{{ task.id }}" data-estado="APROBADO" title="Aprobar Conexión">Aprobar</button>
+                            {# El botón de rechazar abrirá el modal, y el modal se encargará de la llamada AJAX #}
+                            <button type="button" class="btn btn-sm btn-danger quick-action-btn"
+                                    data-id="{{ task.id }}" data-estado="RECHAZADO"
+                                    data-bs-toggle="modal" data-bs-target="#rejectModal"
+                                    data-conexion-id="{{ task.id }}" title="Rechazar Conexión">Rechazar</button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="text-center p-4">
+                    <div class="empty-state">
+                        <i class="bi bi-emoji-sunglasses" style="font-size: 2rem;"></i>
+                        <p class="text-secondary mt-2 mb-0">{{ empty_message|default('No hay tareas aquí.') }}</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# Nueva sección: Enlace "Ver todas" #}
+{% if tasks %}
+<div class="card-footer text-center">
+    <a href="{{ url_for('proyectos.listar_proyectos') }}" class="btn btn-sm btn-outline-primary mt-2">Ver todas las conexiones</a>
+</div>
+{% endif %}

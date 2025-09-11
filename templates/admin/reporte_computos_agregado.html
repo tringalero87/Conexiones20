@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Resumen de cómputos métricos basado en los filtros seleccionados.</p>
+    </div>
+    <div class="btn-group">
+        <a href="{{ url_for('admin.reporte_computos') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        <a href="{{ url_for('admin.reporte_computos', format='pdf', **filtros) }}" class="btn btn-danger" target="_blank">
+            <i class="bi bi-file-earmark-pdf-fill"></i> PDF
+        </a>
+        <a href="{{ url_for('admin.reporte_computos', format='xlsx', **filtros) }}" class="btn btn-success">
+            <i class="bi bi-file-earmark-excel-fill"></i> Excel
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-funnel-fill"></i> Filtros Aplicados</h5>
+        <ul class="list-inline mb-0">
+            <li class="list-inline-item"><strong>Proyecto:</strong> {{ proyecto_nombre_filtro }}</li>
+            {% if filtros.fecha_inicio %}
+            <li class="list-inline-item">| <strong>Desde:</strong> {{ filtros.fecha_inicio.strftime('%d/%m/%Y') }}</li>
+            {% endif %}
+            {% if filtros.fecha_fin %}
+            <li class="list-inline-item">| <strong>Hasta:</strong> {{ filtros.fecha_fin.strftime('%d/%m/%Y') }}</li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+
+{% if not report_data %}
+<div class="alert alert-info">No se encontraron datos para los filtros seleccionados.</div>
+{% else %}
+    {% for proyecto_nombre, data in report_data.items() %}
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h4 class="mb-0">{{ proyecto_nombre }}</h4>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-striped table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Perfil</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Peso Total (kg)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for perfil, perfil_data in data.perfiles.items() | sort %}
+                    <tr>
+                        <td>{{ perfil }}</td>
+                        <td class="text-end">{{ perfil_data.cantidad }}</td>
+                        <td class="text-end">{{ "%.2f"|format(perfil_data.peso_total) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-group-divider">
+                    <tr class="table-secondary">
+                        <td colspan="2" class="text-end fw-bold">Subtotal del Proyecto:</td>
+                        <td class="text-end fw-bold fs-5">{{ "%.2f"|format(data.peso_total_proyecto) }} kg</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="alert alert-primary text-center mt-4">
+        <h3 class="alert-heading">Gran Total de Todos los Proyectos</h3>
+        <p class="display-4 fw-bold mb-0">{{ "%.2f"|format(gran_total_peso) }} kg</p>
+    </div>
+{% endif %}
+
+{% endblock %}

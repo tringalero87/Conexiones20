@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza el formulario para editar los detalles de una conexión existente.
+    Se adapta dinámicamente al número de perfiles requeridos por la tipología seleccionada.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Conexión: <strong>{{ conexion.codigo_conexion|e }}</strong> - Proyecto: <strong>{{ conexion.proyecto_nombre|e }}</strong></p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('conexiones.editar_conexion', conexion_id=conexion.id) }}" novalidate>
+            {# Esencial para la seguridad: incluye el token CSRF. #}
+            {{ form.hidden_tag() }}
+            
+            <div class="info-section border-bottom pb-3 mb-4">
+                <h5 class="mb-1">Detalles de la Tipología Seleccionada</h5>
+                <p class="text-muted">Tipo: {{ conexion.tipo|e }} / Subtipo: {{ conexion.subtipo|e }} / Tipología: {{ conexion.tipologia|e }}</p>
+                <p class="text-muted">{{ tipologia.get('descripcion', 'Descripción no disponible para esta tipología.') }}</p>
+            </div>
+            
+            <h5 class="mb-3">Perfiles Requeridos</h5>
+            
+            {# Bucle dinámico que crea un campo de texto para cada perfil requerido. #}
+            {# Los campos son `perfil_1`, `perfil_2`, `perfil_3` y se cargan desde el objeto `form` de Flask-WTF #}
+            {% for i in range(1, tipologia.perfiles + 1) %}
+            <div class="mb-3">
+                <label for="perfil_{{i}}" class="form-label fw-bold">Perfil {{i}}</label>
+                {# Renderiza el campo del formulario de Flask-WTF #}
+                {{ form['perfil_' ~ i](class="form-control" + (" is-invalid" if form['perfil_' ~ i].errors else ""), 
+                                    id="perfil_" ~ i, 
+                                    placeholder="Ingresa el nombre completo para el Perfil " ~ i) }}
+                {% if form['perfil_' ~ i].errors %}
+                    <div class="invalid-feedback">
+                        {% for error in form['perfil_' ~ i].errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+                <small class="form-text text-muted">Este valor (o su alias si existe) se usará para actualizar el código de la conexión.</small>
+            </div>
+            {% endfor %}
+
+            <div class="mb-4">
+                {{ form.descripcion.label(class="form-label fw-bold") }}
+                {{ form.descripcion(class="form-control" + (" is-invalid" if form.descripcion.errors else ""), 
+                                    id="descripcion", 
+                                    rows="3", 
+                                    placeholder="Añade o edita los detalles de la conexión...") }}
+                {% if form.descripcion.errors %}
+                    <div class="invalid-feedback">
+                        {% for error in form.descripcion.errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="d-flex justify-content-end border-top pt-3 mt-4">
+                <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=conexion.id) }}" class="btn btn-secondary me-3">Cancelar</a>
+                <button type="submit" class="btn btn-primary btn-lg">Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rejectModalLabel">Rechazar Conexión</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            {# Se elimina la dependencia de 'conexion.id' del atributo action #}
+            {# La acción real se gestiona por el JavaScript de acciones rápidas (main.js) #}
+            <form action="" method="POST"> 
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {# NUEVO: Campo oculto para almacenar la ID de la conexión, que será llenado por JS #}
+                    <input type="hidden" name="conexion_id_submit" id="rejectConexionIdSubmit"> 
+                    <input type="hidden" name="estado" value="RECHAZADO">
+                    <p>Por favor, proporciona un motivo para rechazar la conexión:</p>
+                    <div class="mb-3">
+                        <label for="rejectDetails" class="form-label">Motivo de Rechazo</label>
+                        <textarea class="form-control" id="rejectDetails" name="detalles" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Rechazar Conexión</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

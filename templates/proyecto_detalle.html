@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de detalle para un proyecto específico.
+    Muestra la información del proyecto y una lista paginada de todas las
+    conexiones asociadas a él, proporcionando un centro de operaciones para
+    la gestión del proyecto.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        {# El título se pasa desde la ruta de Flask para dar contexto. #}
+        <h1>Detalle del Proyecto</h1>
+        <p class="text-secondary">Un resumen completo del proyecto y todas sus conexiones asociadas.</p>
+    </div>
+    <div class="page-header-actions">
+        {# Botón para que el usuario pueda ir al catálogo y crear una nueva conexión para este proyecto. #}
+        <a href="{{ url_for('main.catalogo', preselect_project_id=proyecto.id) }}" class="btn btn-secondary">
+            <i class="bi bi-plus-lg me-2"></i> Nueva Conexión
+        </a>
+        {# Botón para importar conexiones masivamente, visible solo para roles autorizados. #}
+        {% if 'ADMINISTRADOR' in session.get('user_roles', []) or 'REALIZADOR' in session.get('user_roles', []) %}
+        <a href="{{ url_for('conexiones.importar_conexiones', proyecto_id=proyecto.id) }}" class="btn btn-primary">
+            <i class="bi bi-file-earmark-arrow-up-fill me-2"></i> Importar Conexiones
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4 class="mb-0">{{ proyecto.nombre|e }}</h4>
+    </div>
+    <div class="card-body">
+        <p class="card-text">{{ proyecto.descripcion or 'Este proyecto no tiene una descripción detallada.' }}</p>
+        <small class="text-muted">Creado el: {{ proyecto.fecha_creacion|format_datetime }}</small>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h4 class="mb-0">Lista de Conexiones</h4>
+    </div>
+    <div class="card-body">
+        {# Se comprueba si la lista de 'conexiones' pasada desde la ruta tiene elementos. #}
+        {% if conexiones %}
+        <div class="table-responsive">
+            <table class="data-table table-hover">
+                <thead>
+                    <tr>
+                        <th>Código Conexión</th>
+                        <th>Tipología</th>
+                        <th>Descripción</th>
+                        <th>Solicitante</th>
+                        <th>Realizador</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# Se itera sobre cada conexión para crear una fila en la tabla. #}
+                    {% for conexion in conexiones %}
+                    <tr>
+                        <td><strong>{{ conexion.codigo_conexion|e }}</strong></td>
+                        <td>{{ conexion.tipologia|e }}</td>
+                        <td>{{ (conexion.descripcion or 'Sin descripción')|truncate(50)|e }}</td>
+                        <td>{{ conexion.solicitante_nombre or 'N/A' }}</td>
+                        <td>{{ conexion.realizador_nombre or 'Sin Asignar' }}</td>
+                        <td class="text-center">
+                            {# Se usa una clase CSS dinámica para colorear el estado. #}
+                            <span class="estado estado-{{ conexion.estado|lower }}">{{ conexion.estado.replace('_',' ') }}</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('conexiones.detalle_conexion', conexion_id=conexion.id) }}" class="btn btn-sm btn-secondary" title="Ver Detalles">
+                                    <i class="bi bi-eye-fill"></i>
+                                </a>
+                                {% if 'ADMINISTRADOR' in session.get('user_roles', []) %}
+                                <a href="{{ url_for('conexiones.editar_conexion', conexion_id=conexion.id) }}" class="btn btn-sm btn-info text-white" title="Editar Conexión">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#confirmDeleteModal"
+                                        data-form-action="{{ url_for('conexiones.eliminar_conexion', conexion_id=conexion.id) }}"
+                                        data-item-name="{{ conexion.codigo_conexion|e }}">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        {# Bloque 'else': Se muestra si no hay conexiones en el proyecto. #}
+        <div class="empty-state text-center p-5">
+            <i class="bi bi-journal-x" style="font-size: 3rem;"></i>
+            <h4 class="mt-3">Este proyecto aún no tiene conexiones</h4>
+            <p class="text-secondary">
+                Haz clic en "Nueva Conexión" para empezar a añadir conexiones a este proyecto.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    
+    {#
+        Sección de Paginación.
+        Solo se muestra si hay más conexiones que el límite por página.
+    #}
+    {% if total > per_page %}
+    <div class="card-footer d-flex justify-content-center">
+        <nav aria-label="Navegación de páginas">
+            <ul class="pagination mb-0">
+                {# Lógica para el botón 'Anterior' #}
+                <li class="page-item {{ 'disabled' if page == 1 }}">
+                    <a class="page-link" href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=proyecto.id, page=page-1) }}">Anterior</a>
+                </li>
+
+                {#
+                    Lógica para mostrar los números de página.
+                    Calcula el número total de páginas y crea un enlace para cada una.
+                #}
+                {% set total_pages = (total / per_page)|round(0, 'ceil')|int %}
+                {% for page_num in range(1, total_pages + 1) %}
+                <li class="page-item {{ 'active' if page_num == page }}">
+                    <a class="page-link" href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=proyecto.id, page=page_num) }}">{{ page_num }}</a>
+                </li>
+                {% endfor %}
+
+                {# Lógica para el botón 'Siguiente' #}
+                <li class="page-item {{ 'disabled' if page == total_pages }}">
+                    <a class="page-link" href="{{ url_for('proyectos.detalle_proyecto', proyecto_id=proyecto.id, page=page+1) }}">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar Eliminación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que quieres eliminar la conexión <strong id="itemName"></strong>?</p>
+        <p class="text-danger">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="deleteForm" action="" method="POST" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

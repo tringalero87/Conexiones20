@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block titulo %}Acceso Prohibido{% endblock %}
+
+{% block content %}
+<div class="container text-center" style="margin-top: 5rem;">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h1 class="display-1 fw-bold text-danger">403</h1>
+            <h2 class="mb-4">Acceso Prohibido</h2>
+            <div class="card">
+                <div class="card-body">
+                    <p class="fs-5 text-secondary">
+                        Lo sentimos, no tienes los permisos necesarios para acceder a esta página.
+                    </p>
+                    <p>
+                        Tu rol de usuario actual no te autoriza a ver este contenido. Si crees que esto es un error, por favor, contacta a un administrador del sistema para que revise tus permisos.
+                    </p>
+                    <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary mt-3">
+                        <i class="bi bi-house-door-fill"></i> Volver al Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza el formulario dinámico para la creación de una nueva conexión.
+    Genera los campos de "Perfil" dinámicamente como campos de texto, basándose en la
+    configuración de la tipología seleccionada en el catálogo.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Proyecto: <strong>{{ proyecto.nombre|e }}</strong></p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('conexiones.procesar_creacion_conexion') }}" novalidate>
+            {# Campos ocultos para pasar información esencial al backend #}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="proyecto_id" value="{{ proyecto.id }}">
+            <input type="hidden" name="tipo" value="{{ tipo }}">
+            <input type="hidden" name="subtipo" value="{{ subtipo }}">
+            <input type="hidden" name="tipologia_nombre" value="{{ tipologia.nombre }}">
+            <input type="hidden" name="plantilla_codigo" value="{{ tipologia.plantilla }}">
+            <input type="hidden" name="num_perfiles" value="{{ tipologia.perfiles }}">
+            
+            <div class="info-section border-bottom pb-3 mb-4">
+                <h5 class="mb-1">Detalles de la Tipología Seleccionada</h5>
+                <p class="text-muted">{{ tipologia.get('descripcion', 'Descripción no disponible.') }}</p>
+            </div>
+            
+            <h5 class="mb-3">Perfiles Requeridos</h5>
+            
+            {# Bucle dinámico que crea un campo de texto para cada perfil requerido. #}
+            {% for i in range(1, tipologia.perfiles + 1) %}
+            <div class="mb-3">
+                <label for="perfil_{{i}}" class="form-label fw-bold">Perfil {{i}}</label>
+                <input type="text" 
+                       class="form-control" 
+                       id="perfil_{{i}}" 
+                       name="perfil_{{i}}"
+                       placeholder="Ingresa el nombre completo para el Perfil {{i}} (ej: IPE-300)" 
+                       required>
+                <small class="form-text text-muted">Este valor (o su alias si existe) se usará para generar el código.</small>
+            </div>
+            {% endfor %}
+
+            <div class="mb-4">
+                <label for="descripcion" class="form-label fw-bold">Descripción (opcional)</label>
+                <textarea class="form-control" id="descripcion" name="descripcion" rows="3" placeholder="Añade cualquier detalle adicional..."></textarea>
+            </div>
+
+            <div class="d-flex justify-content-end border-top pt-3 mt-4">
+                <a href="{{ url_for('main.catalogo', preselect_project_id=proyecto.id) }}" class="btn btn-secondary me-3">Cancelar</a>
+                <button type="submit" class="btn btn-primary btn-lg">Crear Conexión</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

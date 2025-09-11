@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página para la importación masiva de alias de perfiles
+    desde un archivo de Excel o CSV. Proporciona instrucciones claras y un formulario
+    para la carga del archivo.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Sube un archivo Excel (.xlsx) o CSV (.csv) para importar o actualizar alias de perfiles.</p>
+    </div>
+    <div class="page-header-actions">
+        {# NUEVO: Botón para importar alias en masa #}
+        <a href="{{ url_for('admin.importar_alias') }}" class="btn btn-info text-white me-2">
+            <i class="bi bi-cloud-arrow-up-fill me-2"></i> Importar Alias
+        </a>
+        {# El botón de "Nuevo Alias" ya existe en el formulario de la derecha, por lo que no es necesario aquí #}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-file-earmark-arrow-up-fill me-2"></i>Subir Archivo de Alias</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label for="archivo_alias" class="form-label fw-bold">Archivo de Alias (.xlsx o .csv)</label>
+                        <input type="file" class="form-control" name="archivo_alias" id="archivo_alias" required accept=".xlsx, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                    </div>
+                    
+                    <div class="alert alert-info small">
+                        <strong>Nota:</strong> El proceso de importación puede tardar unos segundos. Por favor, no cierres la ventana.
+                    </div>
+
+                    <div class="d-flex justify-content-end border-top pt-3 mt-4">
+                        <a href="{{ url_for('admin.gestionar_alias') }}" class="btn btn-secondary me-2">Cancelar</a>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-rocket-launch-fill me-2"></i> Iniciar Importación
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+             <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-question-circle-fill me-2"></i>Instrucciones</h5>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Tu archivo debe contener las siguientes columnas exactas para una importación exitosa:</p>
+                
+                <h6>Columnas Requeridas:</h6>
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item"><strong>NOMBRE_PERFIL:</strong> Nombre completo del perfil (Ej: IPE 200, HEA 240).</li>
+                    <li class="list-group-item"><strong>ALIAS:</strong> El alias corto deseado para el perfil (Ej: P200, H240).</li>
+                    <li class="list-group-item"><strong>NORMA:</strong> (Opcional) La norma bajo la cual se rige el perfil (Ej: AISC, Eurocode).</li>
+                </ul>
+
+                <hr>
+                
+                <p class="small text-muted">Asegúrate de que los nombres de las columnas en tu archivo coincidan exactamente.</p>
+                <div class="d-grid">
+                    {# CORRECCIÓN: Se habilita el botón y se apunta al nuevo archivo de ejemplo CSV #}
+                    <a href="{{ url_for('static', filename='templates/plantilla_alias_importacion_ejemplo.csv') }}" class="btn btn-outline-info" download="plantilla_alias_importacion_ejemplo.csv">
+                        <i class="bi bi-file-earmark-arrow-down-fill me-2"></i> Descargar Plantilla (ejemplo)
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

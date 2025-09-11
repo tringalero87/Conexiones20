@@ -1,0 +1,30 @@
+{#
+    Este partial renderiza un modal para asignar una conexión a un usuario específico.
+    Es utilizado en la vista de detalle de la conexión.
+    Espera que la variable 'conexion' esté disponible en el contexto.
+#}
+<div class="modal fade" id="assignTaskModal" tabindex="-1" aria-labelledby="assignTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="assignTaskModalLabel">Asignar Conexión</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('conexiones.asignar_realizador', conexion_id=conexion.id) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <p>Asigna esta conexión a un usuario (Realizador):</p>
+                    <div class="mb-3">
+                        <label for="usernameToAssign" class="form-label">Nombre de Usuario (@usuario)</label>
+                        <input type="text" class="form-control" id="usernameToAssign" name="username_a_asignar" placeholder="Ej: @j.perez" required>
+                        <small class="form-text text-muted">Introduce el nombre de usuario (sin el '@' inicial, aunque el sistema lo limpiará) a quien deseas asignar esta conexión.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Asignar Tarea</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

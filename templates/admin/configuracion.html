@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo|e }}</h1>
+        <p class="text-secondary">Ajusta los parámetros globales y la configuración de la aplicación.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <form method="POST" novalidate>
+                {{ form.csrf_token }}
+                <div class="card-header">
+                    <h4><i class="bi bi-toggles2"></i> Ajustes Generales</h4>
+                </div>
+                <div class="card-body">
+                    
+                    <!-- Campo para Elementos por Página -->
+                    <div class="form-group mb-4">
+                        {{ form.per_page.label(class="form-label fw-bold") }}
+                        {{ form.per_page(class="form-control" + (" is-invalid" if form.per_page.errors else ""), type="number") }}
+                        {% if form.per_page.errors %}
+                            <div class="invalid-feedback d-block">{{ form.per_page.errors[0]|e }}</div>
+                        {% endif %}
+                        <p class="text-secondary small mt-2">{{ form.per_page.description }}</p>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- Campo para Modo Mantenimiento -->
+                    <div class="form-group">
+                        <div class="form-check form-switch">
+                            {{ form.maintenance_mode(class="form-check-input", role="switch") }}
+                            {{ form.maintenance_mode.label(class="form-check-label fw-bold") }}
+                        </div>
+                        <p class="text-secondary small mt-2">Al activar, solo los administradores podrán acceder al sitio. El resto de usuarios verá una página de mantenimiento.</p>
+                    </div>
+
+                </div>
+                <div class="card-footer text-end">
+                    {{ form.submit(class="btn btn-primary btn-lg") }}
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-4">
+         <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-question-circle-fill me-2"></i>Ayuda</h5>
+                <p class="card-text small text-muted">
+                    Esta sección te permite modificar el comportamiento global de la aplicación. Los cambios que guardes aquí afectarán a todos los usuarios del sistema.
+                </p>
+                <hr>
+                <p class="card-text small text-muted">
+                    <strong>Elementos por página:</strong> Controla cuántos registros se muestran en las tablas de Proyectos, Conexiones, etc., antes de pasar a la siguiente página.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

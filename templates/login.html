@@ -1,0 +1,62 @@
+{% extends "base_public.html" %}
+
+{#
+    Este template renderiza la página de inicio de sesión.
+    Hereda de 'base_public.html', una plantilla simplificada para páginas públicas.
+    Utiliza el objeto 'form' de Flask-WTF para renderizar los campos y manejar errores.
+#}
+
+{% block content %}
+    <div class="text-center mb-4">
+        {# El logo se muestra aquí. Si no se encuentra, simplemente no aparecerá. #}
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo Hepta-Conexiones" width="100" class="mb-3" onerror="this.style.display='none'">
+        <h1 class="h3 mb-3 fw-normal">Iniciar Sesión</h1>
+        <p class="text-secondary">Accede a tu cuenta para continuar.</p>
+    </div>
+
+    {# Contenedor para los mensajes flash (alertas) que se muestran después de una acción. #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {# El formulario apunta a la ruta de login. 'novalidate' deshabilita la validación del navegador. #}
+    <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}" novalidate>
+        {# Campo oculto para la protección CSRF, esencial para la seguridad de los formularios. #}
+        {{ form.hidden_tag() }}
+
+        <div class="form-floating mb-3">
+            {# Renderiza el campo de texto para el nombre de usuario. #}
+            {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""), id="floatingInput", placeholder="Nombre de usuario") }}
+            {{ form.username.label(for="floatingInput") }}
+            {# Muestra los errores de validación para este campo, si los hay. #}
+            {% if form.username.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.username.errors %}<span>{{ error }}</span>{% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="form-floating">
+            {# Renderiza el campo de texto para la contraseña. #}
+            {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""), id="floatingPassword", placeholder="Contraseña") }}
+            {{ form.password.label(for="floatingPassword") }}
+            {% if form.password.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.password.errors %}<span>{{ error }}</span>{% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="d-grid mt-4">
+            {# Renderiza el botón de envío del formulario. #}
+            {{ form.submit(class="btn btn-primary btn-lg") }}
+        </div>
+    </form>
+{% endblock %}

@@ -1,0 +1,251 @@
+{
+    "MOMENTO": {
+        "imagen": "momento.png",
+        "subtipos": {
+            "VIGA-COLUMNA (ALA)": {
+                "imagen": "viga-columna_ala.png",
+                "tipologias": [
+                    {"nombre": "T0", "perfiles": 1, "plantilla": "MV{p1}CFT0", "imagen": "momento_viga-columna_ala_t0.png", "descripcion": "Conexión soldada directa a ala de columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T1", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT1", "imagen": "momento_viga-columna_ala_ft1.png", "descripcion": "Conexión con placa de extremo atornillada a ala.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T2", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT2", "imagen": "momento_viga-columna_ala_ft2.png", "descripcion": "Conexión a ala con rigidizadores en columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T3", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT3", "imagen": "momento_viga-columna_ala_ft3.png", "descripcion": "Conexión a ala con cartelas superior e inferior.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T4", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT4", "imagen": "momento_viga-columna_ala_ft4.png", "descripcion": "Conexión extendida a ala con placa de extremo.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T5", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT5", "imagen": "momento_viga-columna_ala_ft5.png", "descripcion": "Conexión a momento con ángulos en ala y alma.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T6", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT6", "imagen": "momento_viga-columna_ala_ft6.png", "descripcion": "Conexión a momento con ángulos en ala y alma.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T7", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT7", "imagen": "momento_viga-columna_ala_ft7.png", "descripcion": "Conexión a momento con placas de ala soldadas.","plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]}
+                ]
+            },
+            "VIGA-COLUMNA (ALMA)": {
+                "imagen": "viga-columna_alma.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT0", "imagen": "momento_viga-columna_alma_t0.png", "descripcion": "Conexión directa a alma de columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT1", "imagen": "momento_viga-columna_alma_t1.png", "descripcion": "Conexión a alma con placa de extremo.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT2", "imagen": "momento_viga-columna_alma_t2.png", "descripcion": "Conexión a alma con rigidizadores.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT3", "imagen": "momento_viga-columna_alma_t3.png", "descripcion": "Conexión a alma con cartelas.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT4", "imagen": "momento_viga-columna_alma_t4.png", "descripcion": "Conexión a alma con placas soldadas.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },			
+                    { "nombre": "T5", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT5", "imagen": "momento_viga-columna_alma_t5.png", "descripcion": "Conexión extendida a alma de columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "VIGA-VIGA": {
+                "imagen": "viga-viga.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MV{p1}V{p2}T0", "imagen": "momento_viga-viga_t0.png", "descripcion": "Empalme de viga a momento, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "WT0", "perfiles": 2, "plantilla": "MV{p1}V{p2}WT0", "imagen": "momento_viga-viga_wt0.png", "descripcion": "Empalme de viga a momento, tipo web 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MV{p1}V{p2}T1", "imagen": "momento_viga-viga_t1.png", "descripcion": "Empalme de viga a momento, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "MV{p1}V{p2}T2", "imagen": "momento_viga-viga_t2.png", "descripcion": "Empalme de viga a momento, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "MV{p1}V{p2}T3", "imagen": "momento_viga-viga_t3.png", "descripcion": "Empalme de viga a momento, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "MV{p1}V{p2}T4", "imagen": "momento_viga-viga_t4.png", "descripcion": "Empalme de viga a momento, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 2, "plantilla": "MV{p1}V{p2}T5", "imagen": "momento_viga-viga_t5.png", "descripcion": "Empalme de viga a momento, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }            
+                ]
+            },
+            "COLUMNA-COLUMNA": {
+                "imagen": "columna-columna.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MC{p1}C{p2}T0", "imagen": "momento_columna-columna_t0.png", "descripcion": "Empalme de columna a momento, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MC{p1}C{p2}T1", "imagen": "momento_columna-columna_t1.png", "descripcion": "Empalme de columna a momento, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "MC{p1}C{p2}T3", "imagen": "momento_columna-columna_t3.png", "descripcion": "Empalme de columna a momento, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "MC{p1}C{p2}T4", "imagen": "momento_columna-columna_t4.png", "descripcion": "Empalme de columna a momento, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    },
+    "CORTANTE": {
+        "imagen": "cortante.png",
+        "subtipos": {
+            "VIGA-COLUMNA (ALA)": {
+                "imagen": "viga-columna_ala.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT0", "imagen": "cortante_viga-columna_ala_t0.png", "descripcion": "Conexión a cortante en ala de columna, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT1", "imagen": "cortante_viga-columna_ala_t1.png", "descripcion": "Conexión a cortante en ala de columna, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT3", "imagen": "cortante_viga-columna_ala_t3.png", "descripcion": "Conexión a cortante en ala de columna, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT4", "imagen": "cortante_viga-columna_ala_t4.png", "descripcion": "Conexión a cortante en ala de columna, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "VIGA-COLUMNA (ALMA)": {
+                "imagen": "viga-columna_alma.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT0", "imagen": "cortante_viga-columna_alma_t0.png", "descripcion": "Conexión a cortante en alma de columna, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT1", "imagen": "cortante_viga-columna_alma_t1.png", "descripcion": "Conexión a cortante en alma de columna, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT2", "imagen": "cortante_viga-columna_alma_t2.png", "descripcion": "Conexión a cortante en alma de columna, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT3", "imagen": "cortante_viga-columna_alma_t3.png", "descripcion": "Conexión a cortante en alma de columna, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT4", "imagen": "cortante_viga-columna_alma_t4.png", "descripcion": "Conexión a cortante en alma de columna, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "VIGA-VIGA": {
+                "imagen": "viga-viga.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "CV{p1}V{p2}T0", "imagen": "cortante_viga-viga_t0.png", "descripcion": "Empalme de viga a cortante, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "CV{p1}V{p2}T1", "imagen": "cortante_viga-viga_t1.png", "descripcion": "Empalme de viga a cortante, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "CV{p1}V{p2}T2", "imagen": "cortante_viga-viga_t2.png", "descripcion": "Empalme de viga a cortante, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "CV{p1}V{p2}T3", "imagen": "cortante_viga-viga_t3.png", "descripcion": "Empalme de viga a cortante, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "CV{p1}V{p2}T4", "imagen": "cortante_viga-viga_t4.png", "descripcion": "Empalme de viga a cortante, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 2, "plantilla": "CV{p1}V{p2}T5", "imagen": "cortante_viga-viga_t5.png", "descripcion": "Empalme de viga a cortante, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T6", "perfiles": 2, "plantilla": "CV{p1}V{p2}T6", "imagen": "cortante_viga-viga_t6.png", "descripcion": "Empalme de viga a cortante, tipo 6.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    },
+    "RIOSTRAS": {
+        "imagen": "riostras.png",
+        "subtipos": {
+            "RIOSTRA VERTICAL": {
+                "imagen": "riostra_vertical.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "RV{p1}V{p2}FT0", "imagen": "riostras_riostra_vertical_ft0.png", "descripcion": "Conexión de riostra vertical, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "RV{p1}V{p2}T2", "imagen": "riostras_riostra_vertical_t2.png", "descripcion": "Conexión de riostra vertical, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 1, "plantilla": "RV{p1}CVT3", "imagen": "riostras_riostra_vertical_t3.png", "descripcion": "Conexión de riostra vertical, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 1, "plantilla": "RV{p1}CVT4", "imagen": "riostras_riostra_vertical_t4.png", "descripcion": "Conexión de riostra vertical, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 1, "plantilla": "RV{p1}T5", "imagen": "riostras_riostra_vertical_t5.png", "descripcion": "Conexión de riostra vertical, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T6", "perfiles": 1, "plantilla": "RV{p1}T6", "imagen": "riostras_riostra_vertical_t6.png", "descripcion": "Conexión de riostra vertical, tipo 6.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T7", "perfiles": 1, "plantilla": "RV{p1}T7", "imagen": "riostras_riostra_vertical_t7.png", "descripcion": "Conexión de riostra vertical, tipo 7.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T8", "perfiles": 1, "plantilla": "RV{p1}CVT8", "imagen": "riostras_riostra_vertical_t8.png", "descripcion": "Conexión de riostra vertical, tipo 8.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T9", "perfiles": 1, "plantilla": "RV{p1}CVT9", "imagen": "riostras_riostra_vertical_cvt9.png", "descripcion": "Conexión de riostra vertical, tipo 9.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "RIOSTRA HORIZONTAL": {
+                "imagen": "riostra_horizontal.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 1, "plantilla": "RH{p1}T0", "imagen": "riostras_riostra_horizontal_t0.png", "descripcion": "Conexión de riostra horizontal, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 1, "plantilla": "RH{p1}T1", "imagen": "riostras_riostra_horizontal_t1.png", "descripcion": "Conexión de riostra horizontal, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 1, "plantilla": "RH{p1}T2", "imagen": "riostras_riostra_horizontal_t2.png", "descripcion": "Conexión de riostra horizontal, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 1, "plantilla": "RH{p1}T3", "imagen": "riostras_riostra_horizontal_t3.png", "descripcion": "Conexión de riostra horizontal, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 1, "plantilla": "RH{p1}T4", "imagen": "riostras_riostra_horizontal_t4.png", "descripcion": "Conexión de riostra horizontal, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 1, "plantilla": "RH{p1}T5", "imagen": "riostras_riostra_horizontal_t5.png", "descripcion": "Conexión de riostra horizontal, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T6", "perfiles": 1, "plantilla": "RH{p1}T6", "imagen": "riostras_riostra_horizontal_t6.png", "descripcion": "Conexión de riostra horizontal, tipo 6.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T7", "perfiles": 1, "plantilla": "RH{p1}T7", "imagen": "riostras_riostra_horizontal_t7.png", "descripcion": "Conexión de riostra horizontal, tipo 7.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    },
+    "OTRAS": {
+        "imagen": "otras.png",
+        "subtipos": {
+            "COLUMNA-VIGA": {
+                "imagen": "columna-viga.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MC{p1}V{p2}FPT0", "imagen": "otras_columna-viga_fpt0.png", "descripcion": "Conexión de columna a viga, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MC{p1}V{p2}FPT1", "imagen": "otras_columna-viga_fpt1.png", "descripcion": "Conexión de columna a viga, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "MC{p1}V{p2}FPT2", "imagen": "otras_columna-viga_fpt2.png", "descripcion": "Conexión de columna a viga, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    },
+    "MOMENTO PROVISION SISMICA": {
+        "imagen": "momento.png",
+        "subtipos": {
+            "VIGA-COLUMNA (ALA) PROVISION SISMICA": {
+                "imagen": "viga-columna_ala.png",
+                "tipologias": [
+                    {"nombre": "T0", "perfiles": 1, "plantilla": "MV{p1}CFT0S", "imagen": "momento_viga-columna_ala_t0.png", "descripcion": "Conexión soldada directa a ala de columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T1", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT1S", "imagen": "momento_viga-columna_ala_ft1.png", "descripcion": "Conexión con placa de extremo atornillada a ala.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T2", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT2S", "imagen": "momento_viga-columna_ala_ft2.png", "descripcion": "Conexión a ala con rigidizadores en columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T3", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT3S", "imagen": "momento_viga-columna_ala_ft3.png", "descripcion": "Conexión a ala con cartelas superior e inferior.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T4", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT4S", "imagen": "momento_viga-columna_ala_ft4.png", "descripcion": "Conexión extendida a ala con placa de extremo.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T5", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT5S", "imagen": "momento_viga-columna_ala_ft5.png", "descripcion": "Conexión a momento con ángulos en ala y alma.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T6", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT6S", "imagen": "momento_viga-columna_ala_ft6.png", "descripcion": "Conexión a momento con ángulos en ala y alma.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]},
+                    {"nombre": "T7", "perfiles": 2, "plantilla": "MV{p1}C{p2}FT7S", "imagen": "momento_viga-columna_ala_ft7.png", "descripcion": "Conexión a momento con placas de ala soldadas.","plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"]}
+                ]
+            },
+            "VIGA-COLUMNA (ALMA) PROVISION SISMICA": {
+                "imagen": "viga-columna_alma.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT0S", "imagen": "momento_viga-columna_alma_t0.png", "descripcion": "Conexión directa a alma de columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT1S", "imagen": "momento_viga-columna_alma_t1.png", "descripcion": "Conexión a alma con placa de extremo.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT2S", "imagen": "momento_viga-columna_alma_t2.png", "descripcion": "Conexión a alma con rigidizadores.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT3S", "imagen": "momento_viga-columna_alma_t3.png", "descripcion": "Conexión a alma con cartelas.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT4S", "imagen": "momento_viga-columna_alma_t4.png", "descripcion": "Conexión a alma con placas soldadas.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },			
+                    { "nombre": "T5", "perfiles": 2, "plantilla": "MV{p1}C{p2}WT5S", "imagen": "momento_viga-columna_alma_t5.png", "descripcion": "Conexión extendida a alma de columna.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "VIGA-VIGA PROVISION SISMICA": {
+                "imagen": "viga-viga.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MV{p1}V{p2}T0S", "imagen": "momento_viga-viga_t0.png", "descripcion": "Empalme de viga a momento, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "WT0", "perfiles": 2, "plantilla": "MV{p1}V{p2}WT0S", "imagen": "momento_viga-viga_wt0.png", "descripcion": "Empalme de viga a momento, tipo web 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MV{p1}V{p2}T1S", "imagen": "momento_viga-viga_t1.png", "descripcion": "Empalme de viga a momento, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "MV{p1}V{p2}T2S", "imagen": "momento_viga-viga_t2.png", "descripcion": "Empalme de viga a momento, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "MV{p1}V{p2}T3S", "imagen": "momento_viga-viga_t3.png", "descripcion": "Empalme de viga a momento, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "MV{p1}V{p2}T4S", "imagen": "momento_viga-viga_t4.png", "descripcion": "Empalme de viga a momento, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 2, "plantilla": "MV{p1}V{p2}T5S", "imagen": "momento_viga-viga_t5.png", "descripcion": "Empalme de viga a momento, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }            
+                ]
+            },
+            "COLUMNA-COLUMNA PROVISION SISMICA": {
+                "imagen": "columna-columna.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "MC{p1}C{p2}T0S", "imagen": "momento_columna-columna_t0.png", "descripcion": "Empalme de columna a momento, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "MC{p1}C{p2}T1S", "imagen": "momento_columna-columna_t1.png", "descripcion": "Empalme de columna a momento, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "MC{p1}C{p2}T3S", "imagen": "momento_columna-columna_t3.png", "descripcion": "Empalme de columna a momento, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "MC{p1}C{p2}T4S", "imagen": "momento_columna-columna_t4.png", "descripcion": "Empalme de columna a momento, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    },
+    "CORTANTE PROVISION SISMICA": {
+        "imagen": "cortante.png",
+        "subtipos": {
+            "VIGA-COLUMNA (ALA) PROVISION SISMICA": {
+                "imagen": "viga-columna_ala.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT0S", "imagen": "cortante_viga-columna_ala_t0.png", "descripcion": "Conexión a cortante en ala de columna, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT1S", "imagen": "cortante_viga-columna_ala_t1.png", "descripcion": "Conexión a cortante en ala de columna, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT3S", "imagen": "cortante_viga-columna_ala_t3.png", "descripcion": "Conexión a cortante en ala de columna, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "CV{p1}C{p2}FT4S", "imagen": "cortante_viga-columna_ala_t4.png", "descripcion": "Conexión a cortante en ala de columna, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "VIGA-COLUMNA (ALMA) PROVISION SISMICA": {
+                "imagen": "viga-columna_alma.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT0S", "imagen": "cortante_viga-columna_alma_t0.png", "descripcion": "Conexión a cortante en alma de columna, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT1S", "imagen": "cortante_viga-columna_alma_t1.png", "descripcion": "Conexión a cortante en alma de columna, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT2S", "imagen": "cortante_viga-columna_alma_t2.png", "descripcion": "Conexión a cortante en alma de columna, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT3S", "imagen": "cortante_viga-columna_alma_t3.png", "descripcion": "Conexión a cortante en alma de columna, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "CV{p1}C{p2}WT4S", "imagen": "cortante_viga-columna_alma_t4.png", "descripcion": "Conexión a cortante en alma de columna, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "VIGA-VIGA PROVISION SISMICA": {
+                "imagen": "viga-viga.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "CV{p1}V{p2}T0S", "imagen": "cortante_viga-viga_t0.png", "descripcion": "Empalme de viga a cortante, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "CV{p1}V{p2}T2S", "imagen": "cortante_viga-viga_t1.png", "descripcion": "Empalme de viga a cortante, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "CV{p1}V{p2}T2S", "imagen": "cortante_viga-viga_t2.png", "descripcion": "Empalme de viga a cortante, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 2, "plantilla": "CV{p1}V{p2}T3S", "imagen": "cortante_viga-viga_t3.png", "descripcion": "Empalme de viga a cortante, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 2, "plantilla": "CV{p1}V{p2}T4S", "imagen": "cortante_viga-viga_t4.png", "descripcion": "Empalme de viga a cortante, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 2, "plantilla": "CV{p1}V{p2}T5S", "imagen": "cortante_viga-viga_t5.png", "descripcion": "Empalme de viga a cortante, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T6", "perfiles": 2, "plantilla": "CV{p1}V{p2}T6S", "imagen": "cortante_viga-viga_t6.png", "descripcion": "Empalme de viga a cortante, tipo 6.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    },
+    "RIOSTRAS PROVISION SISMICA": {
+        "imagen": "riostras.png",
+        "subtipos": {
+            "RIOSTRA VERTICAL PROVISION SISMICA": {
+                "imagen": "riostra_vertical.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 2, "plantilla": "RV{p1}V{p2}FT0S", "imagen": "riostras_riostra_vertical_ft0.png", "descripcion": "Conexión de riostra vertical, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 2, "plantilla": "RV{p1}V{p2}T2S", "imagen": "riostras_riostra_vertical_t2.png", "descripcion": "Conexión de riostra vertical, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 1, "plantilla": "RV{p1}CVT3S", "imagen": "riostras_riostra_vertical_t3.png", "descripcion": "Conexión de riostra vertical, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 1, "plantilla": "RV{p1}CVT4S", "imagen": "riostras_riostra_vertical_t4.png", "descripcion": "Conexión de riostra vertical, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 1, "plantilla": "RV{p1}T5S", "imagen": "riostras_riostra_vertical_t5.png", "descripcion": "Conexión de riostra vertical, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T6", "perfiles": 1, "plantilla": "RV{p1}T6S", "imagen": "riostras_riostra_vertical_t6.png", "descripcion": "Conexión de riostra vertical, tipo 6.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T7", "perfiles": 1, "plantilla": "RV{p1}T7S", "imagen": "riostras_riostra_vertical_t7.png", "descripcion": "Conexión de riostra vertical, tipo 7.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T8", "perfiles": 1, "plantilla": "RV{p1}CVT8S", "imagen": "riostras_riostra_vertical_t8.png", "descripcion": "Conexión de riostra vertical, tipo 8.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T9", "perfiles": 1, "plantilla": "RV{p1}CVT9S", "imagen": "riostras_riostra_vertical_cvt9.png", "descripcion": "Conexión de riostra vertical, tipo 9.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            },
+            "RIOSTRA HORIZONTAL PROVISION SISMICA": {
+                "imagen": "riostra_horizontal.png",
+                "tipologias": [
+                    { "nombre": "T0", "perfiles": 1, "plantilla": "RH{p1}T0S", "imagen": "riostras_riostra_horizontal_t0.png", "descripcion": "Conexión de riostra horizontal, tipo 0.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T1", "perfiles": 1, "plantilla": "RH{p1}T1S", "imagen": "riostras_riostra_horizontal_t1.png", "descripcion": "Conexión de riostra horizontal, tipo 1.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T2", "perfiles": 1, "plantilla": "RH{p1}T2S", "imagen": "riostras_riostra_horizontal_t2.png", "descripcion": "Conexión de riostra horizontal, tipo 2.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T3", "perfiles": 1, "plantilla": "RH{p1}T3S", "imagen": "riostras_riostra_horizontal_t3.png", "descripcion": "Conexión de riostra horizontal, tipo 3.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T4", "perfiles": 1, "plantilla": "RH{p1}T4S", "imagen": "riostras_riostra_horizontal_t4.png", "descripcion": "Conexión de riostra horizontal, tipo 4.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T5", "perfiles": 1, "plantilla": "RH{p1}T5S", "imagen": "riostras_riostra_horizontal_t5.png", "descripcion": "Conexión de riostra horizontal, tipo 5.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T6", "perfiles": 1, "plantilla": "RH{p1}T6S", "imagen": "riostras_riostra_horizontal_t6.png", "descripcion": "Conexión de riostra horizontal, tipo 6.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] },
+                    { "nombre": "T7", "perfiles": 1, "plantilla": "RH{p1}T7S", "imagen": "riostras_riostra_horizontal_t7.png", "descripcion": "Conexión de riostra horizontal, tipo 7.", "plantilla_archivos": ["Memoria De Calculo (.PDF)", "Archivo de Calculo Idea (.ideacon)", "Dibujo de Conexion (.PDF)", "Dibujo De Conexion CAD (.dwg)", "Archivo atributo tekla (.*)"] }
+                ]
+            }
+        }
+    }
+}

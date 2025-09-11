@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de "Gestión de Almacenamiento" para el administrador.
+    Muestra estadísticas del uso de disco por archivos subidos.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="text-secondary">Monitoriza y gestiona el espacio de disco utilizado por los archivos subidos.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-hdd-fill me-2"></i>Resumen de Uso de Disco</h5>
+            </div>
+            <div class="card-body text-center">
+                <h2 class="display-4 fw-bold mb-3">{{ total_size }}</h2>
+                <p class="text-muted">Total de archivos subidos: <strong>{{ num_files }}</strong></p>
+                <hr>
+                <h6 class="mt-4">Distribución por Tipo de Archivo</h6>
+                <ul class="list-group list-group-flush mt-3">
+                    {% for ext, count in files_by_ext.items() %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="text-uppercase fw-bold">{{ ext if ext != "sin_extension" else "Sin Extensión" }}</span>
+                            <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-muted text-center">No hay archivos subidos.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-tools me-2"></i>Herramientas de Gestión</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-secondary">Próximamente, aquí podrás encontrar herramientas para: </p>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item">Identificar y eliminar archivos huérfanos (archivos en disco sin registro en la BD).</li>
+                    <li class="list-group-item">Eliminar archivos adjuntos de conexiones antiguas o inactivas.</li>
+                    <li class="list-group-item">Comprimir archivos para liberar espacio.</li>
+                    <li class="list-group-item">Monitorear el espacio en tiempo real.</li>
+                </ul>
+                <div class="alert alert-info mt-4">
+                    <strong>Consejo:</strong> Realiza copias de seguridad de tus archivos antes de cualquier operación de limpieza.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

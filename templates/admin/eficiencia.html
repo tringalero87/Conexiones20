@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página de "Análisis de Eficiencia" para el administrador.
+    Su propósito es mostrar métricas y KPIs (Indicadores Clave de Rendimiento)
+    sobre el ciclo de vida de las conexiones para identificar cuellos de botella y
+    medir el rendimiento del equipo.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Análisis de Eficiencia</h1>
+        <p class="text-secondary">Métricas y KPIs sobre el rendimiento del proceso de codificación.</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="bi bi-funnel-fill me-2"></i>Filtrar Datos</h5>
+    </div>
+    <div class="card-body">
+        {# Este formulario permite al administrador filtrar los datos por un rango de fechas. #}
+        <form class="row g-3 align-items-end" method="GET" action="{{ url_for('admin.eficiencia') }}">
+            <div class="col-md-5">
+                <label for="date_start" class="form-label">Fecha de Inicio</label>
+                <input type="date" class="form-control" id="date_start" name="date_start" value="{{ filters.start }}">
+            </div>
+            <div class="col-md-5">
+                <label for="date_end" class="form-label">Fecha de Fin</label>
+                <input type="date" class="form-control" id="date_end" name="date_end" value="{{ filters.end }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search me-2"></i>Aplicar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6 col-xl-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0"><i class="bi bi-timer fs-2 text-primary"></i></div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1">Tiempo Prom. de Aprobación</h6>
+                        <h4 class="mb-0">{{ kpis.avg_approval_time }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0"><i class="bi bi-check-circle-fill fs-2 text-success"></i></div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1">Aprobadas en Rango</h6>
+                        <h4 class="mb-0">{{ kpis.processed_in_range }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0"><i class="bi bi-x-octagon-fill fs-2 text-danger"></i></div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1">Tasa de Rechazo (Histórica)</h6>
+                        <h4 class="mb-0">{{ kpis.rejection_rate }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0">Tiempo Promedio por Estado (horas)</h5></div>
+            <div class="card-body">
+                <canvas id="tiempoPorEstadoChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0">Conexiones Completadas por Realizador (en rango)</h5></div>
+            <div class="card-body">
+                <canvas id="conexionesPorRealizadorChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Conexiones Atascadas (Mayor Tiempo en Proceso)</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="data-table table-hover">
+                <thead>
+                    <tr>
+                        <th>Código Conexión</th>
+                        <th>Proyecto</th>
+                        <th>Realizador Asignado</th>
+                        <th class="text-center">Días en Proceso</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for conexion in slow_connections %}
+                    <tr>
+                        <td><strong>{{ conexion.codigo_conexion }}</strong></td>
+                        <td>{{ conexion.proyecto_nombre }}</td>
+                        <td>{{ conexion.realizador_nombre or 'N/A' }}</td>
+                        <td class="text-center"><span class="badge bg-danger">{{ "%.1f"|format(conexion.dias_en_proceso) }}</span></td>
+                        <td class="text-end"><a href="{{ url_for('conexiones.detalle_conexion', conexion_id=conexion.id) }}" class="btn btn-sm btn-secondary">Ver Detalles</a></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center p-4">
+                            <div class="empty-state">
+                                <i class="bi bi-patch-check-fill text-success" style="font-size: 2rem;"></i>
+                                <p class="mt-2 text-muted">¡Excelente! No hay conexiones atascadas en "En Proceso".</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Se definen los datos para los gráficos como variables globales de JavaScript.
+    // El filtro |tojson|safe asegura que se genere un objeto JavaScript válido y seguro.
+    const timeByStateData = {{ charts_data.time_by_state|tojson|safe }};
+    const completedByUserData = {{ charts_data.completed_by_user|tojson|safe }};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Gráfico 1: Tiempo Promedio por Estado
+        const ctx1 = document.getElementById('tiempoPorEstadoChart');
+        if (ctx1 && Object.keys(timeByStateData).length > 0) {
+            new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(timeByStateData),
+                    datasets: [{
+                        label: 'Horas Promedio',
+                        data: Object.values(timeByStateData),
+                        backgroundColor: ['rgba(255, 159, 64, 0.5)', 'rgba(54, 162, 235, 0.5)', 'rgba(75, 192, 192, 0.5)'],
+                        borderColor: ['rgba(255, 159, 64, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)'],
+                        borderWidth: 1
+                    }]
+                },
+                options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // Gráfico 2: Conexiones por Realizador
+        const ctx2 = document.getElementById('conexionesPorRealizadorChart');
+        if (ctx2 && completedByUserData.length > 0) {
+            new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: completedByUserData.map(row => row.user),
+                    datasets: [{
+                        label: 'Conexiones Completadas',
+                        data: completedByUserData.map(row => row.total),
+                        backgroundColor: 'rgba(111, 66, 193, 0.5)',
+                        borderColor: 'rgba(111, 66, 193, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+        }
+    });
+</script>
+{% endblock %}

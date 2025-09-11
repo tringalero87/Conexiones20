@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{#
+    Este template renderiza la página principal de Gestión de Usuarios para el administrador.
+    Muestra una tabla con todos los usuarios del sistema y permite realizar acciones
+    como crear, editar y cambiar el estado de las cuentas.
+#}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Gestión de Usuarios</h1>
+        <p class="text-secondary">Crea, edita y administra los usuarios y sus roles en el sistema.</p>
+    </div>
+    <div class="page-header-actions">
+        <a href="{{ url_for('admin.nuevo_usuario') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus-fill me-2"></i> Nuevo Usuario
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="data-table table-hover">
+                <thead>
+                    <tr>
+                        <th>Nombre Completo</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Roles</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#
+                        Se itera sobre la lista de 'usuarios' pasada desde la ruta de Flask.
+                        Cada 'usuario' es un objeto que contiene los datos de una fila.
+                    #}
+                    {% for usuario in usuarios %}
+                    <tr>
+                        <td><strong>{{ usuario.nombre_completo|e }}</strong></td>
+                        <td>{{ usuario.username|e }}</td>
+                        <td>{{ usuario.email|e }}</td>
+                        <td>
+                            {#
+                                Los roles se reciben como una cadena de texto separada por comas (ej. "ADMINISTRADOR, REALIZADOR").
+                                Se usa .split(',') para convertirla en una lista y luego se itera para mostrar cada rol
+                                como un 'badge' (etiqueta visual).
+                            #}
+                            {% if usuario.roles %}
+                                {% for rol in usuario.roles.split(',') %}
+                                    <span class="badge bg-secondary">{{ rol.strip() }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="badge bg-light text-dark">Sin roles</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {# Se muestra un badge de color diferente según el estado (activo o inactivo) del usuario. #}
+                            {% if usuario.activo %}
+                                <span class="badge bg-success">Activo</span>
+                            {% else %}
+                                <span class="badge bg-danger">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group" role="group" aria-label="Acciones de usuario">
+                                <a href="{{ url_for('admin.editar_usuario', usuario_id=usuario.id) }}" class="btn btn-sm btn-info text-white" title="Editar Usuario">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-warning"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#confirmToggleModal"
+                                        data-form-action="{{ url_for('admin.toggle_activo', usuario_id=usuario.id) }}"
+                                        data-user-name="{{ usuario.nombre_completo|e }}"
+                                        data-action-text="{{ 'Desactivar' if usuario.activo else 'Activar' }}"
+                                        title="{{ 'Desactivar' if usuario.activo else 'Activar' }} Usuario">
+                                    <i class="bi bi-power"></i>
+                                </button>
+                                {# Botón para eliminar usuario. Activa el modal de confirmación genérico. #}
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#confirmDeleteModal"
+                                        data-form-action="{{ url_for('admin.eliminar_usuario', usuario_id=usuario.id) }}"
+                                        data-item-name="{{ usuario.nombre_completo|e }}"
+                                        title="Eliminar Usuario">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {# Bloque 'else' del bucle for. Se muestra si la lista de 'usuarios' está vacía. #}
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center p-5">
+                            <div class="empty-state">
+                                <i class="bi bi-people" style="font-size: 3rem;"></i>
+                                <h4 class="mt-3">No hay usuarios registrados</h4>
+                                <p class="text-secondary">Haz clic en "Nuevo Usuario" para empezar.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmToggleModal" tabindex="-1" aria-labelledby="confirmToggleModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmToggleModalLabel">Confirmar Acción</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que quieres <strong id="actionText"></strong> al usuario <strong id="userName"></strong>?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        {# Este formulario apuntará a la ruta de toggle_activo. #}
+        <form id="toggleForm" action="" method="POST" class="d-inline">
+            {# Se usa la función csrf_token() para generar el token de seguridad para el formulario. #}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-warning" id="confirmToggleButton">Sí, Confirmar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Incluye el modal de confirmación genérico para eliminar (usado para usuarios y proyectos) #}
+{% include 'partials/confirmar_eliminacion_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Lógica para el modal de confirmación de activar/desactivar.
+// Este script se ejecuta cuando el DOM está completamente cargado.
+document.addEventListener('DOMContentLoaded', function () {
+    const confirmToggleModal = document.getElementById('confirmToggleModal');
+    
+    // Se asegura de que el modal exista en la página antes de añadir el listener.
+    if (confirmToggleModal) {
+        // El evento 'show.bs.modal' se dispara justo antes de que el modal se muestre.
+        confirmToggleModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            
+            // Se extrae la información de los atributos 'data-*' del botón.
+            const formAction = button.getAttribute('data-form-action');
+            const userName = button.getAttribute('data-user-name');
+            const actionText = button.getAttribute('data-action-text');
+            
+            // Se actualiza el contenido del modal con la información específica de la acción.
+            confirmToggleModal.querySelector('#actionText').textContent = actionText.toLowerCase();
+            confirmToggleModal.querySelector('#userName').textContent = userName;
+            confirmToggleModal.querySelector('#toggleForm').action = formAction;
+            confirmToggleModal.querySelector('#confirmToggleButton').textContent = `Sí, ${actionText}`;
+        });
+    }
+});
+</script>
+{% endblock %}

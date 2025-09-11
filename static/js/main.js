@@ -780,13 +780,25 @@ function initQuickActions() {
     });
 
     function sendQuickAction(conexionId, data, csrfToken) {
-        fetch(`/api/conexiones/${conexionId}/cambiar_estado_rapido`, {
+        // CORRECCIÓN: La URL apuntaba a un endpoint de API inexistente (/api/...).
+        // Se corrige para usar el endpoint de cambio de estado estándar que ya existe
+        // y funciona con datos de formulario (FormData).
+        const formData = new FormData();
+        for (const key in data) {
+            formData.append(key, data[key]);
+        }
+        // Flask-WTF espera el token CSRF como un campo dentro del formulario.
+        formData.append('csrf_token', csrfToken);
+
+        fetch(`/conexiones/${conexionId}/cambiar_estado`, { // URL CORREGIDA
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                // Al usar FormData, no se debe establecer 'Content-Type' manualmente.
+                // El navegador lo configura automáticamente con el 'boundary' correcto.
+                // Mantenemos 'X-CSRFToken' por si algún middleware lo usa, aunque Flask-WTF lo busca en el cuerpo del form.
                 'X-CSRFToken': csrfToken
             },
-            body: JSON.stringify(data)
+            body: formData // CUERPO CORREGIDO
         })
         .then(response => {
             if (!response.ok) {

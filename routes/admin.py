@@ -362,6 +362,16 @@ def eliminar_usuario(usuario_id):
         flash('No puedes eliminar tu propia cuenta.', 'danger')
         return redirect(url_for('admin.listar_usuarios'))
 
+    # NUEVA VERIFICACIÓN: No permitir eliminar si el usuario está en proyectos.
+    proyectos_asignados = db.execute(
+        "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = ?",
+        (usuario_id,)
+    ).fetchone()
+
+    if proyectos_asignados and proyectos_asignados['count'] > 0:
+        flash(f"No se puede eliminar al usuario porque está asignado a {proyectos_asignados['count']} proyecto(s). Por favor, desasígnelo de todos los proyectos antes de eliminarlo.", 'danger')
+        return redirect(url_for('admin.listar_usuarios'))
+
     # Verificar si el usuario tiene conexiones activas asignadas
     conexiones_activas = db.execute(
         "SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = ? AND estado IN ('EN_PROCESO', 'REALIZADO')",

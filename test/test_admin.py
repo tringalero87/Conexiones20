@@ -219,3 +219,57 @@ def test_edit_user_get_request(client, auth, app):
     assert b'solicitante@test.com' in response.data # email
     # Check that no validation error message is present
     assert b'Las contrase\xc3\xb1as deben coincidir.' not in response.data # "Las contraseñas deben coincidir."
+
+def test_admin_cannot_delete_user_assigned_to_project(client, app, auth):
+    """
+    Tests that an admin cannot delete a user who is assigned to a project.
+    This test should fail initially and pass after the fix.
+    """
+    auth.login('admin', 'password')
+
+    with app.app_context():
+        db = get_db()
+        # 1. Create a user to be assigned and deleted
+        user_pass = generate_password_hash('password')
+        cursor = db.execute(
+            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+            ('project_user', user_pass, 'Project User', 'pu@test.com', 1)
+        )
+        user_id = cursor.lastrowid
+
+        # 2. Create a project
+        cursor = db.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Project For Deletion Test', 1))
+        project_id = cursor.lastrowid
+
+        # 3. Assign the user to the project
+        db.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_id, user_id))
+        db.commit()
+
+    # 4. Attempt to delete the user while they are assigned to a project
+    response = client.post(f'/admin/usuarios/{user_id}/eliminar', follow_redirects=True)
+    assert response.status_code == 200
+    # This assertion will fail before the fix. The fix should add this flash message.
+    assert b'No se puede eliminar al usuario porque est' in response.data # está
+    assert b'asignado a' in response.data
+    assert b'proyecto(s)' in response.data
+
+    # 5. Verify the user was NOT deleted
+    with app.app_context():
+        user = get_db().execute("SELECT id FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+        assert user is not None, "User assigned to a project should not be deleted."
+
+    # 6. Unassign the user from the project
+    with app.app_context():
+        db = get_db()
+        db.execute("DELETE FROM proyecto_usuarios WHERE usuario_id = ?", (user_id,))
+        db.commit()
+
+    # 7. Attempt to delete the user again
+    response = client.post(f'/admin/usuarios/{user_id}/eliminar', follow_redirects=True)
+    assert response.status_code == 200
+    assert b'ha sido eliminado' in response.data
+
+    # 8. Verify the user WAS deleted this time
+    with app.app_context():
+        user = get_db().execute("SELECT id FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+        assert user is None, "User should have been deleted after being unassigned from projects."

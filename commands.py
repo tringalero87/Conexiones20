@@ -10,13 +10,18 @@ from db import get_db
 @click.argument('email')
 @click.argument('nombre_completo')
 def crear_admin_command(username, password, email, nombre_completo):
-    """Crea un nuevo usuario administrador."""
+    """Crea un nuevo usuario administrador de forma compatible con SQLite y PostgreSQL."""
     db = get_db()
     cursor = db.cursor()
 
     try:
+        # Determinar el estilo del placeholder y si la BD es PostgreSQL
+        is_postgres = hasattr(db, 'cursor') and db.__class__.__module__.startswith('psycopg2')
+        placeholder = '%s' if is_postgres else '?'
+
         # Verificar si el usuario o email ya existen
-        cursor.execute('SELECT id FROM usuarios WHERE username = %s OR email = %s', (username, email))
+        sql_check_user = f'SELECT id FROM usuarios WHERE username = {placeholder} OR email = {placeholder}'
+        cursor.execute(sql_check_user, (username, email))
         if cursor.fetchone():
             click.echo(f"Error: El usuario '{username}' o el email '{email}' ya existen.")
             return
@@ -34,17 +39,20 @@ def crear_admin_command(username, password, email, nombre_completo):
         password_hash = generate_password_hash(password)
 
         # Insertar el nuevo usuario
-        cursor.execute(
-            'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id',
-            (username, nombre_completo, email, password_hash, 1)
-        )
-        new_user_id = cursor.fetchone()[0]
+        sql_insert_user = f'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})'
+        params_insert_user = (username, nombre_completo, email, password_hash, 1)
+
+        if is_postgres:
+            sql_insert_user += ' RETURNING id'
+            cursor.execute(sql_insert_user, params_insert_user)
+            new_user_id = cursor.fetchone()[0]
+        else:  # SQLite
+            cursor.execute(sql_insert_user, params_insert_user)
+            new_user_id = cursor.lastrowid
 
         # Asignar el rol de administrador
-        cursor.execute(
-            'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)',
-            (new_user_id, admin_rol_id)
-        )
+        sql_insert_role = f'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES ({placeholder}, {placeholder})'
+        cursor.execute(sql_insert_role, (new_user_id, admin_rol_id))
 
         db.commit()
         click.echo(f"Usuario administrador '{username}' creado exitosamente.")
@@ -53,4 +61,5 @@ def crear_admin_command(username, password, email, nombre_completo):
         db.rollback()
         click.echo(f"Ocurrió un error: {e}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()

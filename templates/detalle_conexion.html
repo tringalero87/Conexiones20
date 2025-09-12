@@ -168,20 +168,14 @@
                 <p class="text-muted text-center">No hay acciones disponibles.</p>
                 {% endif %}
 
-                {# Nuevo: Botón para Asignar Tarea, visible para roles que pueden reasignar #}
+                {# Botón para Asignar Tarea, con lógica de visibilidad que refleja el backend #}
                 {% if 'ADMINISTRADOR' in user_roles or
-                      'APROBADOR' in user_roles or
-                      'REALIZADOR' in user_roles or
-                      'SOLICITANTE' in user_roles %}
-                    {# Restricción adicional: si no es admin, solo puede reasignar si es el solicitante/realizador/aprobador original #}
-                    {% if 'ADMINISTRADOR' in user_roles or
-                          (g.user.id == conexion.solicitante_id) or
-                          (g.user.id == conexion.realizador_id) or
-                          (g.user.id == conexion.aprobador_id) %}
-                        <button type="button" class="btn btn-outline-primary w-100 mt-2" data-bs-toggle="modal" data-bs-target="#assignTaskModal">
-                            <i class="bi bi-person-plus-fill me-2"></i> Asignar Tarea
-                        </button>
-                    {% endif %}
+                      ('SOLICITANTE' in user_roles and g.user.id == conexion.solicitante_id) or
+                      ('REALIZADOR' in user_roles and g.user.id == conexion.realizador_id) or
+                      ('APROBADOR' in user_roles and conexion.estado == 'REALIZADO') %}
+                <button type="button" class="btn btn-outline-primary w-100 mt-2" data-bs-toggle="modal" data-bs-target="#assignTaskModal">
+                    <i class="bi bi-person-plus-fill me-2"></i> Asignar Tarea
+                </button>
                 {% endif %}
             </div>
         </div>

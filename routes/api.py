@@ -18,8 +18,8 @@ from datetime import datetime # Importar datetime para posibles usos de CURRENT_
 from db import get_db
 from . import roles_required
 
-# CORRECCIÓN DE MANTENIBILIDAD: Se importa la función centralizada desde conexiones.py.
-from routes.conexiones import _notify_users, _process_connection_state_transition 
+# CORRECCIÓN DE MANTENIBILIDAD: Se importa la función centralizada desde el service correspondiente.
+from services.connection_service import _notify_users, process_connection_state_transition
 
 # Se define el Blueprint para agrupar todas las rutas de la API.
 # El prefijo /api asegura que todas estas rutas comiencen con esa URL.
@@ -193,7 +193,7 @@ def cambiar_estado_rapido(conexion_id):
     nuevo_estado = data.get('estado')
     detalles = data.get('detalles', '') # Para el motivo de rechazo
 
-    success, message, _ = _process_connection_state_transition(
+    success, message, _ = process_connection_state_transition(
         db, conexion_id, nuevo_estado, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles
     )
 

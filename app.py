@@ -25,6 +25,7 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 # Este patrón previene errores de importación circular, un problema común en aplicaciones Flask.
 import db
 from extensions import csrf, mail
+from commands import crear_admin_command
 
 # Cargar variables de entorno desde el archivo .env para una configuración segura.
 # Esto permite mantener las claves secretas y otras configuraciones sensibles fuera del código fuente.
@@ -89,6 +90,7 @@ def create_app(test_config=None):
     csrf.init_app(app)
     mail.init_app(app)
     db.init_app(app)
+    app.cli.add_command(crear_admin_command)
 
     # --- Inicialización del Scheduler ---
     scheduler = BackgroundScheduler(jobstores=app.config['SCHEDULER_JOBSTORES'],

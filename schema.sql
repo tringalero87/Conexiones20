@@ -10,7 +10,7 @@
 -- Tabla: usuarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS usuarios (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
   nombre_completo TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla: roles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS roles (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   nombre TEXT NOT NULL UNIQUE
 );
 
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS usuario_roles (
 -- Tabla: proyectos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS proyectos (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   nombre TEXT NOT NULL UNIQUE,
   descripcion TEXT,
   fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS proyectos (
 -- Tabla: conexiones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS conexiones (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   codigo_conexion TEXT NOT NULL UNIQUE,
   proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS conexiones (
 -- Tabla: archivos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS archivos (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   tipo_archivo TEXT NOT NULL,
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS archivos (
 -- Tabla: comentarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS comentarios (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   contenido TEXT NOT NULL,
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS comentarios (
 -- Tabla: notificaciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS notificaciones (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   mensaje TEXT NOT NULL,
   url TEXT NOT NULL,
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS notificaciones (
 -- Tabla: historial_estados
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS historial_estados (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   estado TEXT NOT NULL,
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS configuracion (
 -- Tabla: reportes
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS reportes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     nombre TEXT NOT NULL,
     descripcion TEXT,
     creador_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS reportes (
 -- Tabla: alias_perfiles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS alias_perfiles (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   nombre_perfil TEXT NOT NULL UNIQUE,
   alias TEXT NOT NULL UNIQUE,
   norma TEXT
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS alias_perfiles (
 -- Tabla: auditoria_acciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS auditoria_acciones (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     accion TEXT NOT NULL,
     tipo_objeto TEXT,
@@ -221,9 +221,9 @@ JOIN conexiones c ON h.conexion_id = c.id;
 -- -----------------------------------------------------
 -- INSERCIÓN DE DATOS INICIALES
 -- -----------------------------------------------------
-INSERT OR IGNORE INTO roles (nombre) VALUES ('ADMINISTRADOR'), ('APROBADOR'), ('REALIZADOR'), ('SOLICITANTE');
-INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('PER_PAGE', '10');
-INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('MAINTENANCE_MODE', '0');
+INSERT INTO roles (nombre) VALUES ('ADMINISTRADOR'), ('APROBADOR'), ('REALIZADOR'), ('SOLICITANTE') ON CONFLICT (nombre) DO NOTHING;
+INSERT INTO configuracion (clave, valor) VALUES ('PER_PAGE', '10') ON CONFLICT (clave) DO NOTHING;
+INSERT INTO configuracion (clave, valor) VALUES ('MAINTENANCE_MODE', '0') ON CONFLICT (clave) DO NOTHING;
 
 -- -----------------------------------------------------
 -- Índices

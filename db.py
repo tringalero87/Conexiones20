@@ -31,34 +31,31 @@ sqlite3.register_converter("timestamp", convert_timestamp)
 
 # --- End of FIX ---
 
+import os
+import psycopg2
+from psycopg2.extras import DictCursor
+
 def get_db():
     """
     Obtiene una conexión a la base de datos para la solicitud actual.
-    
-    Crea una nueva conexión si no existe una en el contexto 'g' de Flask.
-    El contexto 'g' es un objeto especial que se utiliza para almacenar datos
-    durante el ciclo de vida de una única solicitud. Esto asegura que solo se
-    abra una conexión por solicitud, lo que es mucho más eficiente que abrir
-    y cerrar una conexión por cada consulta a la base de datos.
+    Soporta tanto PostgreSQL como SQLite, dependiendo de la configuración.
     """
     if 'db' not in g:
-        # Si no hay conexión para esta solicitud, se crea una nueva.
-        # current_app apunta a la instancia de la aplicación Flask que está manejando la solicitud.
-        g.db = sqlite3.connect(
-            current_app.config['DATABASE'],
-            detect_types=sqlite3.PARSE_DECLTYPES,
-            timeout=10 # Timeout de 10 segundos para evitar bloqueos largos
-        )
-        # Se configura 'row_factory' para que las filas devueltas por la base de datos
-        # se comporten como diccionarios, permitiendo acceder a las columnas por su nombre.
-        # Por ejemplo, en lugar de row[1], se puede usar row['nombre_completo'].
-        g.db.row_factory = sqlite3.Row
-        # Se habilita el soporte para claves foráneas (FOREIGN KEY) para esta conexión.
-        # Esto es crucial para mantener la integridad de los datos entre las tablas.
-        g.db.execute("PRAGMA foreign_keys = ON;")
-        # Habilitar el modo Write-Ahead Logging (WAL) para mejorar la concurrencia.
-        # Esto permite que las operaciones de lectura no bloqueen las de escritura y viceversa.
-        g.db.execute("PRAGMA journal_mode=WAL;")
+        database_url = os.environ.get('DATABASE_URL')
+        if database_url and database_url.startswith('postgres'):
+            # Conexión a PostgreSQL
+            g.db = psycopg2.connect(database_url)
+            # No es necesario configurar cursor_factory aquí, se puede hacer al crear el cursor
+        else:
+            # Conexión a SQLite (comportamiento original)
+            g.db = sqlite3.connect(
+                current_app.config['DATABASE'],
+                detect_types=sqlite3.PARSE_DECLTYPES,
+                timeout=10
+            )
+            g.db.row_factory = sqlite3.Row
+            g.db.execute("PRAGMA foreign_keys = ON;")
+            g.db.execute("PRAGMA journal_mode=WAL;")
     
     return g.db
 
@@ -81,11 +78,21 @@ def init_db():
     Este script crea todas las tablas y la estructura necesaria para la aplicación.
     """
     db = get_db()
-    # Se abre el archivo 'schema.sql' que se encuentra en la raíz del proyecto.
-    # open_resource abre un recurso desde la carpeta raíz de la aplicación.
+
     with current_app.open_resource('schema.sql') as f:
-        # Se ejecuta el script completo para crear las tablas.
-        db.executescript(f.read().decode('utf8'))
+        sql_script = f.read().decode('utf8')
+
+        # PostgreSQL (psycopg2) no tiene 'executescript', se debe ejecutar por separado.
+        if hasattr(db, 'cursor'):
+            with db.cursor() as cursor:
+                # Simple split por ';' puede fallar si hay ';' dentro de strings.
+                # Para este schema.sql específico, es seguro.
+                for statement in sql_script.split(';'):
+                    if statement.strip():
+                        cursor.execute(statement)
+            db.commit()
+        else: # SQLite
+            db.executescript(sql_script)
 
 @click.command('init-db')
 @with_appcontext
@@ -114,19 +121,27 @@ def init_app(app):
 def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
     """
     Registra una acción de auditoría en la base de datos.
-    Args:
-        accion (str): El tipo de acción realizada (ej. 'CREAR_USUARIO', 'APROBAR_CONEXION').
-        usuario_id (int): ID del usuario que realizó la acción. Puede ser None para acciones sin autenticación.
-        tipo_objeto (str): El tipo de entidad afectada (ej. 'usuarios', 'conexiones', 'proyectos', 'sistema').
-        objeto_id (int): ID del objeto afectado. Puede ser None si la acción no se aplica a un objeto específico.
-        detalles (str, optional): Detalles adicionales sobre la acción (ej. cambios, motivos).
+    Soporta tanto PostgreSQL como SQLite.
     """
     db = get_db()
+
+    # Determinar el estilo del placeholder
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    sql = f"""
+        INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
+        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+    """
+    params = (usuario_id, accion, tipo_objeto, objeto_id, detalles)
+
     try:
-        db.execute(
-            'INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles) VALUES (?, ?, ?, ?, ?)',
-            (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-        )
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql, params)
+        else: # SQLite
+            db.execute(sql, params)
         db.commit()
     except Exception as e:
         current_app.logger.error(f"Error al registrar acción de auditoría: {accion} por {usuario_id} - {e}")
+        db.rollback()

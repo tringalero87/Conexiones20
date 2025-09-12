@@ -83,7 +83,8 @@ def init_db():
         sql_script = f.read().decode('utf8')
 
         # PostgreSQL (psycopg2) no tiene 'executescript', se debe ejecutar por separado.
-        if hasattr(db, 'cursor'):
+        # SQLite sí lo tiene. Usamos la presencia de 'executescript' para diferenciar.
+        if not hasattr(db, 'executescript'): # Es PostgreSQL
             with db.cursor() as cursor:
                 # Simple split por ';' puede fallar si hay ';' dentro de strings.
                 # Para este schema.sql específico, es seguro.
@@ -91,7 +92,7 @@ def init_db():
                     if statement.strip():
                         cursor.execute(statement)
             db.commit()
-        else: # SQLite
+        else: # Es SQLite
             db.executescript(sql_script)
 
 @click.command('init-db')

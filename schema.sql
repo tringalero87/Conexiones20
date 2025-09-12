@@ -10,20 +10,20 @@
 -- Tabla: usuarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS usuarios (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   nombre_completo TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  activo BOOLEAN NOT NULL DEFAULT TRUE,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  activo INTEGER NOT NULL DEFAULT 1,
+  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
 -- Tabla: roles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS roles (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE
 );
 
@@ -40,10 +40,10 @@ CREATE TABLE IF NOT EXISTS usuario_roles (
 -- Tabla: proyectos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS proyectos (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE,
   descripcion TEXT,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   creador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
@@ -51,21 +51,21 @@ CREATE TABLE IF NOT EXISTS proyectos (
 -- Tabla: conexiones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS conexiones (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   codigo_conexion TEXT NOT NULL UNIQUE,
   proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,
   subtipo TEXT NOT NULL,
   tipologia TEXT NOT NULL,
   descripcion TEXT,
-  detalles_json JSONB,
+  detalles_json TEXT,
   estado TEXT NOT NULL DEFAULT 'SOLICITADO'
     CHECK(estado IN ('SOLICITADO', 'EN_PROCESO', 'REALIZADO', 'APROBADO', 'RECHAZADO')),
   solicitante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   realizador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   aprobador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  fecha_modificacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_modificacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   detalles_rechazo TEXT
 );
 
@@ -73,48 +73,48 @@ CREATE TABLE IF NOT EXISTS conexiones (
 -- Tabla: archivos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS archivos (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   tipo_archivo TEXT NOT NULL,
   nombre_archivo TEXT NOT NULL,
-  fecha_subida TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_subida TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
 -- Tabla: comentarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS comentarios (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   contenido TEXT NOT NULL,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
 -- Tabla: notificaciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS notificaciones (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   mensaje TEXT NOT NULL,
   url TEXT NOT NULL,
   conexion_id INTEGER REFERENCES conexiones(id) ON DELETE CASCADE,
-  leida BOOLEAN NOT NULL DEFAULT FALSE,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  leida INTEGER NOT NULL DEFAULT 0,
+  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
 -- Tabla: historial_estados
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS historial_estados (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   estado TEXT NOT NULL,
   detalles TEXT,
-  fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -138,23 +138,23 @@ CREATE TABLE IF NOT EXISTS configuracion (
 -- Tabla: reportes
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS reportes (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
     descripcion TEXT,
     creador_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-    filtros JSONB NOT NULL,
-    programado BOOLEAN NOT NULL DEFAULT FALSE,
+    filtros TEXT NOT NULL,
+    programado INTEGER NOT NULL DEFAULT 0,
     frecuencia TEXT,
     destinatarios TEXT,
-    ultima_ejecucion TIMESTAMP,
-    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ultima_ejecucion TEXT,
+    fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
 -- Tabla: alias_perfiles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS alias_perfiles (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre_perfil TEXT NOT NULL UNIQUE,
   alias TEXT NOT NULL UNIQUE,
   norma TEXT
@@ -164,13 +164,13 @@ CREATE TABLE IF NOT EXISTS alias_perfiles (
 -- Tabla: auditoria_acciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS auditoria_acciones (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     accion TEXT NOT NULL,
     tipo_objeto TEXT,
     objeto_id INTEGER,
-    detalles JSONB,
-    fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    detalles TEXT,
+    fecha TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS auditoria_acciones (
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS preferencias_notificaciones (
     usuario_id INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
-    email_notif_estado BOOLEAN NOT NULL DEFAULT TRUE
+    email_notif_estado INTEGER NOT NULL DEFAULT 1
 );
 
 -- -----------------------------------------------------
@@ -186,14 +186,15 @@ CREATE TABLE IF NOT EXISTS preferencias_notificaciones (
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_dashboard_preferences (
   usuario_id INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
-  widgets_config JSONB
+  widgets_config TEXT
 );
 
 -- -----------------------------------------------------
 -- Vistas (VIEWS)
 -- -----------------------------------------------------
 
-CREATE OR REPLACE VIEW conexiones_view AS
+DROP VIEW IF EXISTS conexiones_view;
+CREATE VIEW conexiones_view AS
 SELECT 
     c.id, c.codigo_conexion, c.proyecto_id, p.nombre as proyecto_nombre,
     c.tipo, c.subtipo, c.tipologia, c.descripcion, c.detalles_json, c.estado,
@@ -207,7 +208,8 @@ LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
 LEFT JOIN usuarios real ON c.realizador_id = real.id
 LEFT JOIN usuarios aprob ON c.aprobador_id = aprob.id;
 
-CREATE OR REPLACE VIEW historial_detallado_view AS
+DROP VIEW IF EXISTS historial_detallado_view;
+CREATE VIEW historial_detallado_view AS
 SELECT
     h.id, h.conexion_id, h.estado, h.fecha, h.detalles,
     u.nombre_completo as usuario_nombre,
@@ -219,9 +221,9 @@ JOIN conexiones c ON h.conexion_id = c.id;
 -- -----------------------------------------------------
 -- INSERCIÓN DE DATOS INICIALES
 -- -----------------------------------------------------
-INSERT INTO roles (nombre) VALUES ('ADMINISTRADOR'), ('APROBADOR'), ('REALIZADOR'), ('SOLICITANTE') ON CONFLICT (nombre) DO NOTHING;
-INSERT INTO configuracion (clave, valor) VALUES ('PER_PAGE', '10') ON CONFLICT (clave) DO NOTHING;
-INSERT INTO configuracion (clave, valor) VALUES ('MAINTENANCE_MODE', '0') ON CONFLICT (clave) DO NOTHING;
+INSERT OR IGNORE INTO roles (nombre) VALUES ('ADMINISTRADOR'), ('APROBADOR'), ('REALIZADOR'), ('SOLICITANTE');
+INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('PER_PAGE', '10');
+INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('MAINTENANCE_MODE', '0');
 
 -- -----------------------------------------------------
 -- Índices
@@ -240,29 +242,4 @@ CREATE INDEX IF NOT EXISTS idx_conexiones_fecha_modificacion ON conexiones (fech
 CREATE INDEX IF NOT EXISTS idx_conexiones_estado_realizador ON conexiones (estado, realizador_id);
 
 -- -----------------------------------------------------
--- Búsqueda de Texto Completo (Full-Text Search)
--- -----------------------------------------------------
--- 1. Añadir una columna tsvector a la tabla de conexiones
-ALTER TABLE conexiones ADD COLUMN IF NOT EXISTS fts_document tsvector;
-
--- 2. Crear una función para actualizar la columna tsvector
-CREATE OR REPLACE FUNCTION update_conexiones_fts_document()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.fts_document :=
-        to_tsvector('simple', COALESCE(NEW.codigo_conexion, '')) ||
-        to_tsvector('simple', COALESCE(NEW.tipologia, '')) ||
-        to_tsvector('simple', COALESCE(NEW.descripcion, ''));
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- 3. Crear un trigger para llamar a la función en cada inserción o actualización
-DROP TRIGGER IF EXISTS tsvector_update ON conexiones;
-CREATE TRIGGER tsvector_update
-BEFORE INSERT OR UPDATE ON conexiones
-FOR EACH ROW
-EXECUTE FUNCTION update_conexiones_fts_document();
-
--- 4. Crear un índice GIN en la nueva columna para acelerar las búsquedas
-CREATE INDEX IF NOT EXISTS idx_conexiones_fts ON conexiones USING gin(fts_document);
+-- Búsqueda de Texto Completo (Full-Text Search) no es compatible con SQLite en este schema.

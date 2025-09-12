@@ -80,3 +80,14 @@ def test_calculo_platina_decimal_thickness(app):
         # Peso esperado (kg) = 17 lb * 0.453592 kg/lb = 7.711... kg
         # El valor esperado es 7.71
         assert calcular_peso_perfil("PL0.5X10", 304.8) == 7.71
+
+def test_plate_profile_with_hyphen(app):
+    """
+    Tests that a plate profile with a hyphen in its name is calculated correctly.
+    This should fail before the regex in _calculate_plate_weight is fixed.
+    """
+    with app.app_context():
+        # Profile: PL-1/2X10
+        # Thickness = 0.5 in, Width = 10 in
+        # Expected weight (kg) for a 1 ft (304.8 mm) length is 7.71
+        assert calcular_peso_perfil("PL-1/2X10", 304.8) == 7.71

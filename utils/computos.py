@@ -69,7 +69,7 @@ def _calculate_plate_weight(profile_name, longitud_mm):
     # Regex mejorada para capturar espesor y ancho, permitiendo espacios y fracciones.
     # Grupo 1: Espesor (puede ser número, fracción, o mixto)
     # Grupo 2: Ancho (puede ser número, fracción, o mixto)
-    match_PL = re.match(r'^PL\s*([0-9\s/.]+)\s*[X*]\s*([0-9\s/.]+)', profile_name, re.IGNORECASE)
+    match_PL = re.match(r'^PL[\s-]*([0-9\s/.]+)\s*[X*]\s*([0-9\s/.]+)', profile_name, re.IGNORECASE)
     if not match_PL:
         return None # No es un perfil de platina válido
 

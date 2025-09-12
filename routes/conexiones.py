@@ -135,7 +135,19 @@ def crear_conexion_form():
         return redirect(url_for('main.catalogo'))
 
     db = get_db()
-    proyecto = db.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone()
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,))
+            proyecto = cursor.fetchone()
+            cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
+            lista_de_alias = cursor.fetchall()
+    else:
+        proyecto = db.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,)).fetchone()
+        lista_de_alias = db.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil").fetchall()
+
     if not proyecto:
         abort(404)
 
@@ -143,11 +155,6 @@ def crear_conexion_form():
     if not tipologia_seleccionada:
         flash("Error: No se pudo encontrar la configuración para la tipología seleccionada.", "danger")
         return redirect(url_for('main.catalogo'))
-    
-    # La lista de alias se carga aquí, pero la lógica de uso en la plantilla
-    # para autocompletado o sugerencias debe estar en JS si es necesario.
-    # Por ahora, se mantiene para contexto aunque no usada directamente en la plantilla HTML actual para `input type="text"`.
-    lista_de_alias = db.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil").fetchall()
     
     return render_template('conexion_form.html',
                            proyecto=proyecto,
@@ -179,9 +186,19 @@ def procesar_creacion_conexion():
     num_perfiles = tipologia_config.get('perfiles', 0)
     descripcion = request.form.get('descripcion')
 
-    if not db.execute('SELECT id FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone():
-        flash("Error: El proyecto seleccionado ya no existe.", "danger")
-        return redirect(url_for('main.catalogo'))
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'SELECT id FROM proyectos WHERE id = {placeholder}', (proyecto_id,))
+            if not cursor.fetchone():
+                flash("Error: El proyecto seleccionado ya no existe.", "danger")
+                return redirect(url_for('main.catalogo'))
+    else:
+        if not db.execute(f'SELECT id FROM proyectos WHERE id = {placeholder}', (proyecto_id,)).fetchone():
+            flash("Error: El proyecto seleccionado ya no existe.", "danger")
+            return redirect(url_for('main.catalogo'))
 
     perfiles_para_plantilla = {}
     perfiles_para_detalles = {} # Almacenará los nombres completos de los perfiles
@@ -195,8 +212,14 @@ def procesar_creacion_conexion():
             return redirect(url_for('conexiones.crear_conexion_form', proyecto_id=proyecto_id, tipo=tipo, subtipo=subtipo, tipologia=tipologia_nombre))
         
         # Buscar alias para el nombre_completo_perfil
-        alias_row = db.execute('SELECT alias FROM alias_perfiles WHERE nombre_perfil = ?', (nombre_completo_perfil,)).fetchone()
-        valor_para_codigo = alias_row['alias'] if alias_row else nombre_completo_perfil # Usar alias si existe, sino el nombre completo
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (nombre_completo_perfil,))
+                alias_row = cursor.fetchone()
+        else:
+            alias_row = db.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (nombre_completo_perfil,)).fetchone()
+
+        valor_para_codigo = alias_row['alias'] if alias_row else nombre_completo_perfil
         
         perfiles_para_plantilla[f'p{i}'] = valor_para_codigo
         perfiles_para_detalles[f'Perfil {i}'] = nombre_completo_perfil
@@ -204,10 +227,25 @@ def procesar_creacion_conexion():
     codigo_conexion_base = plantilla_codigo.format(**perfiles_para_plantilla)
 
     # Optimización: chequear existencia y luego iterar si es necesario.
-    if db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ?', (codigo_conexion_base,)).fetchone():
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder}', (codigo_conexion_base,))
+            exists = cursor.fetchone()
+    else:
+        exists = db.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder}', (codigo_conexion_base,)).fetchone()
+
+    if exists:
         contador = 1
         codigo_conexion_final = codigo_conexion_base
-        while db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ?', (codigo_conexion_final,)).fetchone():
+        while True:
+            if is_postgres:
+                with db.cursor() as cursor:
+                    cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder}', (codigo_conexion_final,))
+                    if not cursor.fetchone():
+                        break
+            else:
+                if not db.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder}', (codigo_conexion_final,)).fetchone():
+                    break
             contador += 1
             codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
     else:
@@ -215,13 +253,20 @@ def procesar_creacion_conexion():
         
     detalles_json = json.dumps(perfiles_para_detalles)
     
-    cursor = db.execute(
-        "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion, detalles_json, g.user['id'])
-    )
-    new_conexion_id = cursor.lastrowid
+    sql_insert_conexion = f"INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}) RETURNING id"
+    params_conexion = (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion, detalles_json, g.user['id'])
     
-    db.execute('INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES (?, ?, ?)', (new_conexion_id, g.user['id'], 'SOLICITADO'))
+    sql_insert_historial = f"INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES ({placeholder}, {placeholder}, {placeholder})"
+
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(sql_insert_conexion, params_conexion)
+            new_conexion_id = cursor.fetchone()['id']
+            cursor.execute(sql_insert_historial, (new_conexion_id, g.user['id'], 'SOLICITADO'))
+    else:
+        cursor = db.execute(sql_insert_conexion.replace('%s', '?').replace('RETURNING id', ''), params_conexion)
+        new_conexion_id = cursor.lastrowid
+        db.execute(sql_insert_historial.replace('%s', '?'), (new_conexion_id, g.user['id'], 'SOLICITADO'))
     db.commit()
 
     log_action('CREAR_CONEXION', g.user['id'], 'conexiones', new_conexion_id, 
@@ -240,11 +285,23 @@ def detalle_conexion(conexion_id):
     Muestra la página de detalle completa de una conexión específica.
     """
     db = get_db()
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
     conexion = _get_conexion(conexion_id)
     
-    archivos_raw = db.execute('SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = ? ORDER BY a.fecha_subida DESC', (conexion_id,)).fetchall()
-    comentarios = db.execute("SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = ? ORDER BY c.fecha_creacion DESC", (conexion_id,)).fetchall()
-    historial = db.execute("SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = ? ORDER BY h.fecha DESC", (conexion_id,)).fetchall()
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {placeholder} ORDER BY a.fecha_subida DESC', (conexion_id,))
+            archivos_raw = cursor.fetchall()
+            cursor.execute(f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {placeholder} ORDER BY c.fecha_creacion DESC", (conexion_id,))
+            comentarios = cursor.fetchall()
+            cursor.execute(f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {placeholder} ORDER BY h.fecha DESC", (conexion_id,))
+            historial = cursor.fetchall()
+    else:
+        archivos_raw = db.execute(f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {placeholder} ORDER BY a.fecha_subida DESC', (conexion_id,)).fetchall()
+        comentarios = db.execute(f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {placeholder} ORDER BY c.fecha_creacion DESC", (conexion_id,)).fetchall()
+        historial = db.execute(f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {placeholder} ORDER BY h.fecha DESC", (conexion_id,)).fetchall()
     
     archivos_agrupados = defaultdict(list)
     for archivo in archivos_raw:
@@ -314,11 +371,20 @@ def editar_conexion(conexion_id):
         old_perfiles_in_code = {} # Para almacenar los perfiles como estaban en el código original
 
         # Recuperar los perfiles de la conexión original para comparar
-        old_detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
+        is_postgres = hasattr(db, 'cursor')
+        placeholder = '%s' if is_postgres else '?'
+
+        old_detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] and isinstance(conexion['detalles_json'], str) else conexion['detalles_json'] or {}
         for i in range(1, num_perfiles + 1):
             old_full_profile_name = old_detalles.get(f'Perfil {i}')
             if old_full_profile_name:
-                old_alias_row = db.execute('SELECT alias FROM alias_perfiles WHERE nombre_perfil = ?', (old_full_profile_name,)).fetchone()
+                if is_postgres:
+                    with db.cursor() as cursor:
+                        cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (old_full_profile_name,))
+                        old_alias_row = cursor.fetchone()
+                else:
+                    old_alias_row = db.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (old_full_profile_name,)).fetchone()
+
                 old_value_for_code = old_alias_row['alias'] if old_alias_row else old_full_profile_name
                 old_perfiles_in_code[f'p{i}'] = old_value_for_code
 
@@ -331,32 +397,45 @@ def editar_conexion(conexion_id):
                 flash(f"El campo 'Perfil {i}' es obligatorio.", "danger")
                 return render_template('conexion_form_edit.html', form=form, conexion=conexion, tipologia=tipologia_config, titulo="Editar Conexión")
             
-            # Buscar alias para el nuevo nombre_completo_perfil
-            alias_row_nuevo = db.execute('SELECT alias FROM alias_perfiles WHERE nombre_perfil = ?', (nombre_completo_perfil_nuevo,)).fetchone()
+            if is_postgres:
+                with db.cursor() as cursor:
+                    cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (nombre_completo_perfil_nuevo,))
+                    alias_row_nuevo = cursor.fetchone()
+            else:
+                alias_row_nuevo = db.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (nombre_completo_perfil_nuevo,)).fetchone()
+
             valor_para_codigo_nuevo = alias_row_nuevo['alias'] if alias_row_nuevo else nombre_completo_perfil_nuevo
             
             perfiles_nuevos_dict_alias[f'p{i}'] = valor_para_codigo_nuevo
             perfiles_nuevos_dict_full_name[f'Perfil {i}'] = nombre_completo_perfil_nuevo
 
-            # Comprobar si el valor que iría en el código ha cambiado
             if old_perfiles_in_code.get(f'p{i}') != valor_para_codigo_nuevo:
                 perfiles_cambiaron_para_codigo = True
 
         nuevo_codigo_base = tipologia_config['plantilla'].format(**perfiles_nuevos_dict_alias)
         
-        # Regenerar código de conexión si los perfiles relevantes (o sus alias) han cambiado
-        # o si la plantilla de código ha cambiado.
         current_codigo_parsed = conexion['codigo_conexion'].rsplit('-', 1)[0] if '-' in conexion['codigo_conexion'] else conexion['codigo_conexion']
         
-        # Si el nuevo código base es diferente del código actual (descontando sufijos numéricos)
-        # O si los perfiles usados en el código han cambiado
-        # Entonces, regenerar el código desde cero y buscar unicidad
         if nuevo_codigo_base != current_codigo_parsed or perfiles_cambiaron_para_codigo:
-            # Optimización: chequear existencia y luego iterar si es necesario.
-            if db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ? AND id != ?', (nuevo_codigo_base, conexion_id)).fetchone():
+            if is_postgres:
+                with db.cursor() as cursor:
+                    cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder} AND id != {placeholder}', (nuevo_codigo_base, conexion_id))
+                    exists = cursor.fetchone()
+            else:
+                exists = db.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder} AND id != {placeholder}', (nuevo_codigo_base, conexion_id)).fetchone()
+
+            if exists:
                 contador = 1
                 codigo_conexion_final_generado = nuevo_codigo_base
-                while db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ? AND id != ?', (codigo_conexion_final_generado, conexion_id)).fetchone():
+                while True:
+                    if is_postgres:
+                        with db.cursor() as cursor:
+                            cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder} AND id != {placeholder}', (codigo_conexion_final_generado, conexion_id))
+                            if not cursor.fetchone():
+                                break
+                    else:
+                        if not db.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder} AND id != {placeholder}', (codigo_conexion_final_generado, conexion_id)).fetchone():
+                            break
                     contador += 1
                     codigo_conexion_final_generado = f"{nuevo_codigo_base}-{contador}"
                 codigo_a_guardar = codigo_conexion_final_generado
@@ -366,15 +445,18 @@ def editar_conexion(conexion_id):
             if codigo_a_guardar != conexion['codigo_conexion']:
                  flash(f"El código de la conexión se ha actualizado a '{codigo_a_guardar}' debido a cambios en los perfiles o sus alias.", "info")
         else:
-            # Si no hay cambios en los perfiles relevantes para el código, mantener el código original
             codigo_a_guardar = conexion['codigo_conexion']
 
-        nuevos_detalles_json = json.dumps(perfiles_nuevos_dict_full_name) # Guardar nombres completos de perfiles
+        nuevos_detalles_json = json.dumps(perfiles_nuevos_dict_full_name)
 
-        db.execute(
-            'UPDATE conexiones SET codigo_conexion = ?, descripcion = ?, detalles_json = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?',
-            (codigo_a_guardar, form.descripcion.data, nuevos_detalles_json, conexion_id)
-        )
+        sql_update = f'UPDATE conexiones SET codigo_conexion = {placeholder}, descripcion = {placeholder}, detalles_json = {placeholder}, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = {placeholder}'
+        params_update = (codigo_a_guardar, form.descripcion.data, nuevos_detalles_json, conexion_id)
+
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql_update, params_update)
+        else:
+            db.execute(sql_update, params_update)
         db.commit()
         log_action('EDITAR_CONEXION', g.user['id'], 'conexiones', conexion_id,
                    f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.") # Auditoría
@@ -399,7 +481,14 @@ def eliminar_conexion(conexion_id):
     """Elimina una conexión (solo para administradores)."""
     conexion = _get_conexion(conexion_id)
     db = get_db()
-    db.execute('DELETE FROM conexiones WHERE id = ?', (conexion_id,))
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'DELETE FROM conexiones WHERE id = {placeholder}', (conexion_id,))
+    else:
+        db.execute(f'DELETE FROM conexiones WHERE id = {placeholder}', (conexion_id,))
     db.commit()
     log_action('ELIMINAR_CONEXION', g.user['id'], 'conexiones', conexion_id,
                f"Conexión '{conexion['codigo_conexion']}' eliminada.") # Auditoría
@@ -423,7 +512,16 @@ def importar_conexiones(proyecto_id):
     confirmación inmediata y ser notificado cuando la importación haya finalizado.
     """
     db = get_db()
-    proyecto = db.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone()
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,))
+            proyecto = cursor.fetchone()
+    else:
+        proyecto = db.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,)).fetchone()
+
     if not proyecto:
         abort(404)
         
@@ -505,8 +603,17 @@ def asignar_realizador(conexion_id):
     # Eliminar el '@' si el usuario lo ingresa.
     username_a_asignar_limpio = username_a_asignar.lstrip('@')
 
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
     # Buscar el ID del usuario a asignar
-    usuario_a_asignar = db.execute('SELECT id, nombre_completo FROM usuarios WHERE username = ? AND activo = 1', (username_a_asignar_limpio,)).fetchone()
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(f'SELECT id, nombre_completo FROM usuarios WHERE username = {placeholder} AND activo = TRUE', (username_a_asignar_limpio,))
+            usuario_a_asignar = cursor.fetchone()
+    else:
+        usuario_a_asignar = db.execute(f'SELECT id, nombre_completo FROM usuarios WHERE username = {placeholder} AND activo = 1', (username_a_asignar_limpio,)).fetchone()
+
 
     if not usuario_a_asignar:
         flash(f"Usuario '{username_a_asignar}' no encontrado o inactivo. Por favor, verifica el nombre de usuario.", 'danger')
@@ -517,19 +624,35 @@ def asignar_realizador(conexion_id):
     if conexion['estado'] == 'SOLICITADO':
         nuevo_estado = 'EN_PROCESO'
         mensaje_cambio_estado = f"Conexión '{conexion['codigo_conexion']}' asignada a {usuario_a_asignar['nombre_completo']} y puesta 'En Proceso'."
-        db.execute('UPDATE conexiones SET realizador_id = ?, estado = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?',
-                   (usuario_a_asignar['id'], nuevo_estado, conexion_id))
-        db.execute('INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (?, ?, ?, ?)',
-                   (conexion_id, g.user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}"))
         
+        sql_update = f'UPDATE conexiones SET realizador_id = {placeholder}, estado = {placeholder}, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = {placeholder}'
+        params_update = (usuario_a_asignar['id'], nuevo_estado, conexion_id)
+
+        sql_insert = f'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})'
+        params_insert = (conexion_id, g.user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}")
+
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql_update, params_update)
+                cursor.execute(sql_insert, params_insert)
+        else:
+            db.execute(sql_update, params_update)
+            db.execute(sql_insert, params_insert)
+
         _notify_users(db, conexion_id,
                       f"La conexión {conexion['codigo_conexion']} ha sido asignada a {usuario_a_asignar['nombre_completo']} por {g.user['nombre_completo']}.",
                       "",
                       ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR']) # Notificar a todos los relevantes
     else:
         # Si la conexión ya está en proceso o en otro estado, solo se cambia el realizador.
-        db.execute('UPDATE conexiones SET realizador_id = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?',
-                   (usuario_a_asignar['id'], conexion_id))
+        sql_update = f'UPDATE conexiones SET realizador_id = {placeholder}, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = {placeholder}'
+        params_update = (usuario_a_asignar['id'], conexion_id)
+
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql_update, params_update)
+        else:
+            db.execute(sql_update, params_update)
         mensaje_cambio_estado = f"Realizador de la conexión '{conexion['codigo_conexion']}' cambiado a {usuario_a_asignar['nombre_completo']}."
         # No se inserta un nuevo historial de estado si solo se cambia el asignado sin cambiar el estado principal.
         # Se puede añadir un log de auditoría para esto:
@@ -564,8 +687,15 @@ def subir_archivo(conexion_id):
         os.makedirs(upload_path, exist_ok=True)
         file.save(os.path.join(upload_path, filename))
         
-        db.execute('INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES (?, ?, ?, ?)',
-                   (conexion_id, g.user['id'], tipo_archivo, filename))
+        is_postgres = hasattr(db, 'cursor')
+        placeholder = '%s' if is_postgres else '?'
+        sql = f'INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})'
+        params = (conexion_id, g.user['id'], tipo_archivo, filename)
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql, params)
+        else:
+            db.execute(sql, params)
         db.commit()
         log_action('SUBIR_ARCHIVO', g.user['id'], 'archivos', conexion_id,
                    f"Archivo '{filename}' ({tipo_archivo}) subido para conexión '{conexion['codigo_conexion']}'.") # Auditoría
@@ -582,7 +712,19 @@ def descargar_archivo(conexion_id, filename):
     directory = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
     # Asegúrate de que el archivo exista en la BD antes de intentar servirlo
     db = get_db()
-    archivo_db = db.execute('SELECT id FROM archivos WHERE conexion_id = ? AND nombre_archivo = ?', (conexion_id, filename)).fetchone()
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    sql = f'SELECT id FROM archivos WHERE conexion_id = {placeholder} AND nombre_archivo = {placeholder}'
+    params = (conexion_id, filename)
+
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(sql, params)
+            archivo_db = cursor.fetchone()
+    else:
+        archivo_db = db.execute(sql, params).fetchone()
+
     if not archivo_db:
         abort(404, description="El archivo no existe o no está asociado a esta conexión.")
     
@@ -595,7 +737,18 @@ def descargar_archivo(conexion_id, filename):
 def eliminar_archivo(conexion_id, archivo_id):
     """Procesa la eliminación de un archivo subido."""
     db = get_db()
-    archivo = db.execute('SELECT * FROM archivos WHERE id = ? AND conexion_id = ?', (archivo_id, conexion_id)).fetchone()
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    sql = f'SELECT * FROM archivos WHERE id = {placeholder} AND conexion_id = {placeholder}'
+    params = (archivo_id, conexion_id)
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(sql, params)
+            archivo = cursor.fetchone()
+    else:
+        archivo = db.execute(sql, params).fetchone()
+
     if archivo:
         # CORRECCIÓN DE FLUJO DE TRABAJO: Permitir que el admin, el que subió el archivo,
         # o el realizador actual de la conexión puedan eliminar el archivo.
@@ -608,7 +761,12 @@ def eliminar_archivo(conexion_id, archivo_id):
             conexion = _get_conexion(conexion_id) # Se obtiene para el log y el redirect
             # CORRECCIÓN DE SEGURIDAD/ROBUSTEZ: Eliminar el registro de la DB primero, luego el archivo.
             # Esto previene un archivo huérfano si la eliminación de la DB falla.
-            db.execute('DELETE FROM archivos WHERE id = ?', (archivo_id,))
+            sql_delete = f'DELETE FROM archivos WHERE id = {placeholder}'
+            if is_postgres:
+                with db.cursor() as cursor:
+                    cursor.execute(sql_delete, (archivo_id,))
+            else:
+                db.execute(sql_delete, (archivo_id,))
             db.commit() # Commit inmediato para asegurar la eliminación de la DB
             
             file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), archivo['nombre_archivo'])
@@ -637,8 +795,17 @@ def agregar_comentario(conexion_id):
         sanitized_content = bleach.clean(contenido, tags=bleach.sanitizer.ALLOWED_TAGS + ['p', 'br'], strip=True)
         
         db = get_db()
-        db.execute('INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES (?, ?, ?)',
-                   (conexion_id, g.user['id'], sanitized_content))
+        is_postgres = hasattr(db, 'cursor')
+        placeholder = '%s' if is_postgres else '?'
+
+        sql = f'INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES ({placeholder}, {placeholder}, {placeholder})'
+        params = (conexion_id, g.user['id'], sanitized_content)
+
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql, params)
+        else:
+            db.execute(sql, params)
         db.commit()
         log_action('AGREGAR_COMENTARIO', g.user['id'], 'conexiones', conexion_id,
                    f"Comentario añadido a conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.") # Auditoría
@@ -654,9 +821,25 @@ def agregar_comentario(conexion_id):
 def eliminar_comentario(conexion_id, comentario_id):
     """Elimina un comentario (solo para administradores)."""
     db = get_db()
-    comentario = db.execute('SELECT * FROM comentarios WHERE id = ? AND conexion_id = ?', (comentario_id, conexion_id)).fetchone()
+    is_postgres = hasattr(db, 'cursor')
+    placeholder = '%s' if is_postgres else '?'
+
+    sql_select = f'SELECT * FROM comentarios WHERE id = {placeholder} AND conexion_id = {placeholder}'
+    params = (comentario_id, conexion_id)
+    if is_postgres:
+        with db.cursor() as cursor:
+            cursor.execute(sql_select, params)
+            comentario = cursor.fetchone()
+    else:
+        comentario = db.execute(sql_select, params).fetchone()
+
     if comentario:
-        db.execute('DELETE FROM comentarios WHERE id = ?', (comentario_id,))
+        sql_delete = f'DELETE FROM comentarios WHERE id = {placeholder}'
+        if is_postgres:
+            with db.cursor() as cursor:
+                cursor.execute(sql_delete, (comentario_id,))
+        else:
+            db.execute(sql_delete, (comentario_id,))
         db.commit()
         log_action('ELIMINAR_COMENTARIO', g.user['id'], 'comentarios', comentario_id,
                    f"Comentario (ID: {comentario_id}) eliminado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.") # Auditoría

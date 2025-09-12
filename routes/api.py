@@ -175,6 +175,20 @@ def cambiar_estado_rapido(conexion_id):
     Ideal para acciones desde el dashboard.
     """
     db = get_db()
+
+    # VERIFICACIÓN DE AUTORIZACIÓN: Asegurarse de que el usuario pertenece al proyecto de la conexión.
+    conexion = db.execute('SELECT proyecto_id FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()
+    if not conexion:
+        return jsonify({'success': False, 'message': 'La conexión no existe.'}), 404
+
+    # Comprobar si el usuario es administrador, en cuyo caso tiene acceso a todo.
+    if 'ADMINISTRADOR' not in session.get('user_roles', []):
+        # Si no es admin, comprobar si está asignado al proyecto.
+        acceso = db.execute('SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?',
+                              (conexion['proyecto_id'], g.user['id'])).fetchone()
+        if not acceso:
+            return jsonify({'success': False, 'message': 'No tienes permiso para acceder a esta conexión.'}), 403
+
     data = request.get_json()
     nuevo_estado = data.get('estado')
     detalles = data.get('detalles', '') # Para el motivo de rechazo

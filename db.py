@@ -89,6 +89,8 @@ def init_db():
                 # Simple split por ';' puede fallar si hay ';' dentro de strings.
                 # Para este schema.sql específico, es seguro.
                 for statement in sql_script.split(';'):
+                    # Se añade una comprobación para evitar ejecutar consultas vacías
+                    # que pueden resultar de comentarios o líneas en blanco en el .sql
                     if statement.strip():
                         cursor.execute(statement)
             db.commit()

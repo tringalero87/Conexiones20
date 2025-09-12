@@ -115,176 +115,8 @@ def allowed_file(filename):
     # 2. Permitir solo extensiones de la lista blanca estándar
     return extension in ALLOWED_EXTENSIONS
 
-# CORRECCIÓN DE MANTENIBILIDAD: Función centralizada para el cambio de estado.
-def _process_connection_state_transition(db, conexion_id, new_status_form, user_id, user_full_name, user_roles, details=None):
-    """
-    Procesa un cambio de estado de conexión de forma centralizada.
-    Retorna (success, message, new_db_state_name_for_audit)
-    """
-    conexion = _get_conexion(conexion_id)
-    estado_actual = conexion['estado']
-    new_db_state = None
-    message = ""
-    success = False
-    audit_action = ""
+from services.connection_service import process_connection_state_transition, _get_conexion, _notify_users, get_tipologia_config
 
-    if new_status_form == 'EN_PROCESO' and estado_actual == 'SOLICITADO' and ('REALIZADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-        new_db_state = 'EN_PROCESO'
-        db.execute('UPDATE conexiones SET realizador_id = ? WHERE id = ?', (user_id, conexion_id))
-        audit_action = 'TOMAR_CONEXION'
-        message = f"La conexión {conexion['codigo_conexion']} ha sido tomada por {user_full_name}."
-        _notify_users(db, conexion_id, message, "", ['SOLICITANTE', 'ADMINISTRADOR'])
-        success = True
-
-    elif new_status_form == 'REALIZADO' and estado_actual == 'EN_PROCESO' and (conexion['realizador_id'] == user_id or 'ADMINISTRADOR' in user_roles):
-        new_db_state = 'REALIZADO'
-        audit_action = 'MARCAR_REALIZADO_CONEXION'
-        message = f"La conexión {conexion['codigo_conexion']} está lista para ser aprobada."
-        _notify_users(db, conexion_id, message, "", ['APROBADOR', 'ADMINISTRADOR'])
-        success = True
-
-    elif new_status_form == 'APROBADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-        new_db_state = 'APROBADO'
-        db.execute('UPDATE conexiones SET aprobador_id = ? WHERE id = ?', (user_id, conexion_id))
-        audit_action = 'APROBAR_CONEXION'
-        message = f"La conexión {conexion['codigo_conexion']} ha sido APROBADA."
-        _notify_users(db, conexion_id, message, "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
-        success = True
-    
-    elif new_status_form == 'RECHAZADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-        if not details:
-            return False, 'Debes proporcionar un motivo para el rechazo.', None
-        new_db_state = 'EN_PROCESO' # El estado en DB vuelve a EN_PROCESO para que el realizador la retome
-        db.execute('UPDATE conexiones SET detalles_rechazo = ? WHERE id = ?', (details, conexion_id))
-        audit_action = 'RECHAZAR_CONEXION'
-        message = f"Atención: La conexión {conexion['codigo_conexion']} fue rechazada. Motivo: {details}"
-        _notify_users(db, conexion_id, message, "", ['REALIZADOR', 'ADMINISTRADOR'])
-        success = True
-    
-    if success and new_db_state:
-        db.execute('UPDATE conexiones SET estado = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?', (new_db_state, conexion_id))
-        db.execute('INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (?, ?, ?, ?)',
-                   (conexion_id, user_id, new_status_form, details)) # Registrar el estado que se mostró en el formulario (APROBADO/RECHAZADO)
-        log_action(audit_action, user_id, 'conexiones', conexion_id,
-                   f"Conexión '{conexion['codigo_conexion']}' Estado: {estado_actual} -> {new_db_state}. Detalles: {details if details else 'N/A'}")
-        db.commit()
-        return True, message, new_db_state # Return the new state name for audit consistency
-    else:
-        return False, 'Acción no permitida o estado inválido.', None
-
-
-def _get_conexion(conexion_id):
-    """
-    Función auxiliar para obtener una conexión y sus datos asociados desde la base de datos.
-    Lanza un error 404 si la conexión no se encuentra.
-    """
-    db = get_db()
-    conexion_query = """
-        SELECT c.*, p.nombre as proyecto_nombre,
-               sol.nombre_completo as solicitante_nombre,
-               real.nombre_completo as realizador_nombre,
-               aprob.nombre_completo as aprobador_nombre
-        FROM conexiones c
-        JOIN proyectos p ON c.proyecto_id = p.id
-        LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-        LEFT JOIN usuarios real ON c.realizador_id = real.id
-        LEFT JOIN usuarios aprob ON c.aprobador_id = aprob.id
-        WHERE c.id = ?
-    """
-    conexion = db.execute(conexion_query, (conexion_id,)).fetchone()
-    if conexion is None:
-        abort(404, f"La conexión con id {conexion_id} no existe.")
-    return conexion
-
-def _get_tipologia_config(tipo, subtipo, tipologia_nombre):
-    """Función auxiliar para obtener la configuración de una tipología desde conexiones.json."""
-    json_path = os.path.join(current_app.root_path, 'conexiones.json')
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            estructura = json.load(f)
-        # Asegúrate de que las claves de tipo y subtipo existan
-        if tipo in estructura and subtipo in estructura[tipo]['subtipos']:
-            tipologia_obj_list = estructura[tipo]['subtipos'][subtipo]['tipologias']
-            return next((t for t in tipologia_obj_list if t['nombre'] == tipologia_nombre), None)
-        return None
-    except (KeyError, StopIteration, FileNotFoundError, json.JSONDecodeError) as e:
-        current_app.logger.error(f"Error al cargar configuración de tipología: {e}")
-        return None
-
-def _send_email_notification(recipients, subject, template, **kwargs):
-    """
-    Función auxiliar para enviar notificaciones por correo electrónico de forma asíncrona.
-    """
-    if not recipients:
-        return # No enviar si no hay destinatarios
-
-    if not current_app.config.get('MAIL_USERNAME'):
-        current_app.logger.warning("Configuración de correo electrónico no completa. No se enviará email.")
-        return
-
-    # Se crea el objeto Message de Flask-Mail
-    msg = Message(subject, recipients=recipients)
-    msg.html = render_template(template, **kwargs)
-
-    # Se define una función para enviar el correo en un hilo separado
-    def send_async_email(app, msg_obj):
-        with app.app_context(): # Se asegura de que el hilo tenga el contexto de la aplicación
-            try:
-                mail.send(msg_obj)
-                app.logger.info(f"Correo enviado a {', '.join(msg_obj.recipients)} con asunto: {msg_obj.subject}")
-            except Exception as e:
-                app.logger.error(f"Error al enviar correo electrónico a {msg_obj.recipients}: {e}", exc_info=True)
-
-    # Se inicia el hilo. current_app._get_current_object() es importante para pasar la app en un contexto de hilo.
-    thr = threading.Thread(target=send_async_email, args=[current_app._get_current_object(), msg])
-    thr.start()
-    # La función principal (`_send_email_notification`) retorna inmediatamente sin esperar a que el correo se envíe.
-
-
-def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
-    """
-    Función auxiliar para crear notificaciones para usuarios con roles específicos
-    y también enviar correos electrónicos si tienen un email y sus preferencias lo permiten.
-    """
-    conexion = _get_conexion(conexion_id)
-    proyecto_id = conexion['proyecto_id']
-    placeholders = ', '.join('?' for role in roles_to_notify)
-    
-    # Se obtienen los usuarios, sus emails y sus preferencias de notificación.
-    query = f"""
-        SELECT DISTINCT u.id, u.email, u.nombre_completo, COALESCE(pn.email_notif_estado, 1) as email_notif_estado
-        FROM usuarios u
-        JOIN proyecto_usuarios pu ON u.id = pu.usuario_id
-        JOIN usuario_roles ur ON u.id = ur.usuario_id
-        JOIN roles r ON ur.rol_id = r.id
-        LEFT JOIN preferencias_notificaciones pn ON u.id = pn.usuario_id
-        WHERE pu.proyecto_id = ? AND r.nombre IN ({placeholders}) AND u.activo = 1
-    """
-    users_to_notify = db.execute(query, (proyecto_id, *roles_to_notify)).fetchall()
-    
-    # First, insert all internal notifications to ensure DB persistence
-    for user in users_to_notify:
-        # Notificación interna en la DB (siempre que no sea el mismo usuario que la generó, o es un rechazo)
-        if user['id'] != g.user['id'] or (url_suffix == "" and "RECHAZADO" in message):
-            db.execute(
-                'INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES (?, ?, ?, ?)',
-                (user['id'], message, url_for('conexiones.detalle_conexion', conexion_id=conexion_id) + url_suffix, conexion_id)
-            )
-    db.commit() # Commit internal notifications before sending emails
-
-    # Now, send emails
-    for user in users_to_notify:
-        if user['id'] != g.user['id'] or (url_suffix == "" and "RECHAZADO" in message):
-            # Recopilar destinatarios para el correo electrónico, si las preferencias lo permiten
-            if user['email'] and user['email_notif_estado']:
-                _send_email_notification(
-                    recipients=[user['email']],
-                    subject=f"Hepta-Conexiones: Notificación sobre conexión {conexion['codigo_conexion']}",
-                    template='email/notification.html',
-                    nombre_usuario=user['nombre_completo'],
-                    mensaje_notificacion=message,
-                    url_accion=url_for('conexiones.detalle_conexion', conexion_id=conexion_id) + url_suffix
-                )
 
 
 # --- Rutas para CREAR Conexiones ---
@@ -307,7 +139,7 @@ def crear_conexion_form():
     if not proyecto:
         abort(404)
 
-    tipologia_seleccionada = _get_tipologia_config(tipo, subtipo, tipologia_nombre)
+    tipologia_seleccionada = get_tipologia_config(tipo, subtipo, tipologia_nombre)
     if not tipologia_seleccionada:
         flash("Error: No se pudo encontrar la configuración para la tipología seleccionada.", "danger")
         return redirect(url_for('main.catalogo'))
@@ -338,7 +170,7 @@ def procesar_creacion_conexion():
     subtipo = request.form.get('subtipo')
     tipologia_nombre = request.form.get('tipologia_nombre')
     
-    tipologia_config = _get_tipologia_config(tipo, subtipo, tipologia_nombre)
+    tipologia_config = get_tipologia_config(tipo, subtipo, tipologia_nombre)
     if not tipologia_config:
         flash("Error: No se pudo encontrar la configuración de la tipología al procesar.", "danger")
         return redirect(url_for('main.catalogo'))
@@ -371,11 +203,15 @@ def procesar_creacion_conexion():
 
     codigo_conexion_base = plantilla_codigo.format(**perfiles_para_plantilla)
 
-    contador = 1
-    codigo_conexion_final = codigo_conexion_base
-    while db.execute('SELECT id FROM conexiones WHERE codigo_conexion = ?', (codigo_conexion_final,)).fetchone():
-        contador += 1
-        codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
+    # Optimización: chequear existencia y luego iterar si es necesario.
+    if db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ?', (codigo_conexion_base,)).fetchone():
+        contador = 1
+        codigo_conexion_final = codigo_conexion_base
+        while db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ?', (codigo_conexion_final,)).fetchone():
+            contador += 1
+            codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
+    else:
+        codigo_conexion_final = codigo_conexion_base
         
     detalles_json = json.dumps(perfiles_para_detalles)
     
@@ -415,7 +251,7 @@ def detalle_conexion(conexion_id):
         archivos_agrupados[archivo['tipo_archivo']].append(archivo)
 
     detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    tipologia_config = _get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
+    tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
     plantilla_archivos = tipologia_config.get('plantilla_archivos', []) if tipologia_config else []
 
     return render_template('detalle_conexion.html',
@@ -454,7 +290,7 @@ def editar_conexion(conexion_id):
              abort(403)
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
-    tipologia_config = _get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
+    tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
     if not tipologia_config:
         flash("Error: No se encontró la configuración de la tipología para editar.", "danger")
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
@@ -516,12 +352,16 @@ def editar_conexion(conexion_id):
         # O si los perfiles usados en el código han cambiado
         # Entonces, regenerar el código desde cero y buscar unicidad
         if nuevo_codigo_base != current_codigo_parsed or perfiles_cambiaron_para_codigo:
-            contador = 1
-            codigo_conexion_final_generado = nuevo_codigo_base
-            while db.execute('SELECT id FROM conexiones WHERE codigo_conexion = ? AND id != ?', (codigo_conexion_final_generado, conexion_id)).fetchone():
-                contador += 1
-                codigo_conexion_final_generado = f"{nuevo_codigo_base}-{contador}"
-            codigo_a_guardar = codigo_conexion_final_generado
+            # Optimización: chequear existencia y luego iterar si es necesario.
+            if db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ? AND id != ?', (nuevo_codigo_base, conexion_id)).fetchone():
+                contador = 1
+                codigo_conexion_final_generado = nuevo_codigo_base
+                while db.execute('SELECT 1 FROM conexiones WHERE codigo_conexion = ? AND id != ?', (codigo_conexion_final_generado, conexion_id)).fetchone():
+                    contador += 1
+                    codigo_conexion_final_generado = f"{nuevo_codigo_base}-{contador}"
+                codigo_a_guardar = codigo_conexion_final_generado
+            else:
+                codigo_a_guardar = nuevo_codigo_base
             
             if codigo_a_guardar != conexion['codigo_conexion']:
                  flash(f"El código de la conexión se ha actualizado a '{codigo_a_guardar}' debido a cambios en los perfiles o sus alias.", "info")
@@ -570,10 +410,18 @@ def eliminar_conexion(conexion_id):
 
 # --- Ruta para IMPORTAR Conexiones ---
 
+from services.import_service import importar_conexiones_from_file
+
 @conexiones_bp.route('/<int:proyecto_id>/importar', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def importar_conexiones(proyecto_id):
-    """Gestiona la importación masiva de conexiones desde un archivo Excel."""
+    """
+    Gestiona la importación masiva de conexiones desde un archivo Excel.
+    RECOMENDACIÓN: La importación de archivos grandes puede ser un proceso lento.
+    Para mejorar la experiencia del usuario, esta tarea debería ejecutarse de forma asíncrona
+    utilizando una cola de tareas como Celery. El usuario podría subir el archivo, recibir una
+    confirmación inmediata y ser notificado cuando la importación haya finalizado.
+    """
     db = get_db()
     proyecto = db.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone()
     if not proyecto:
@@ -586,113 +434,17 @@ def importar_conexiones(proyecto_id):
         
         file = request.files['archivo_importacion']
         if file and file.filename.endswith('.xlsx'):
-            try:
-                # Usar openpyxl como motor para mayor compatibilidad si pandas no lo usa por defecto
-                df = pd.read_excel(file, engine='openpyxl')
-                
-                required_cols = ['TIPO', 'SUBTIPO', 'TIPOLOGIA', 'PERFIL1'] # PERFIL2 y DESCRIPCION son opcionales
-                df.columns = [col.upper().strip() for col in df.columns] # Normalize column names
-                if not all(col in df.columns for col in required_cols):
-                    flash('El archivo Excel no contiene todas las columnas requeridas (TIPO, SUBTIPO, TIPOLOGIA, PERFIL1).', 'danger')
-                    return redirect(request.url)
-                
-                imported_count = 0
-                error_rows = []
+            imported_count, error_rows, error_message = importar_conexiones_from_file(file, proyecto_id, g.user['id'])
 
-                # Obtener todos los alias para búsquedas eficientes
-                aliases = db.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil").fetchall()
-                alias_map_by_fullname = {row['nombre_perfil']: row['alias'] for row in aliases}
-                alias_map_by_alias = {row['alias']: row['nombre_perfil'] for row in aliases}
-
-                for index, row in df.iterrows():
-                    try:
-                        # Convertir los nombres de columna a mayúsculas para un manejo consistente
-                        tipo = str(row.get('TIPO')).upper().strip()
-                        subtipo = str(row.get('SUBTIPO')).upper().strip()
-                        tipologia_nombre = str(row.get('TIPOLOGIA')).upper().strip()
-                        perfil1_input = str(row.get('PERFIL1')).strip()
-                        perfil2_input = str(row.get('PERFIL2')).strip() if 'PERFIL2' in df.columns else ''
-                        descripcion_input = str(row.get('DESCRIPCION')).strip() if 'DESCRIPCION' in df.columns else None
-                        if descripcion_input == 'nan': descripcion_input = None
-
-                        if not all([tipo, subtipo, tipologia_nombre, perfil1_input]):
-                            error_rows.append(f"Fila {index+2}: Faltan datos obligatorios (Tipo, Subtipo, Tipología, Perfil1).")
-                            continue
-
-                        tipologia_config = _get_tipologia_config(tipo, subtipo, tipologia_nombre)
-                        if not tipologia_config:
-                            error_rows.append(f"Fila {index+2}: Tipología '{tipologia_nombre}' no encontrada para Tipo '{tipo}' y Subtipo '{subtipo}'.")
-                            continue
-                        
-                        num_perfiles_requeridos = tipologia_config.get('perfiles', 0)
-                        plantilla_codigo = tipologia_config.get('plantilla', '')
-
-                        perfiles_para_plantilla = {}
-                        perfiles_para_detalles = {} # Guarda los nombres completos de los perfiles
-
-                        # Procesar Perfil 1
-                        perfiles_para_detalles['Perfil 1'] = perfil1_input # Guarda el nombre completo
-                        perfiles_para_plantilla['p1'] = alias_map_by_fullname.get(perfil1_input, perfil1_input)
-
-                        # Procesar Perfil 2 si es requerido
-                        if num_perfiles_requeridos >= 2:
-                            if not perfil2_input:
-                                error_rows.append(f"Fila {index+2}: Se requiere Perfil 2 para esta tipología, pero no se proporcionó.")
-                                continue
-                            perfiles_para_detalles['Perfil 2'] = perfil2_input
-                            perfiles_para_plantilla['p2'] = alias_map_by_fullname.get(perfil2_input, perfil2_input)
-
-                        # Procesar Perfil 3 si es requerido (si aplica, basado en tu JSON/plantilla)
-                        if num_perfiles_requeridos >= 3:
-                             # Asume que tendrás un PERFIL3 en el Excel si es necesario
-                            perfil3_input = str(row.get('PERFIL3')).strip() if 'PERFIL3' in df.columns else ''
-                            if not perfil3_input:
-                                error_rows.append(f"Fila {index+2}: Se requiere Perfil 3 para esta tipología, pero no se proporcionó.")
-                                continue
-                            perfiles_para_detalles['Perfil 3'] = perfil3_input
-                            perfiles_para_plantilla['p3'] = alias_map_by_fullname.get(perfil3_input, perfil3_input)
-
-                        codigo_conexion_base = plantilla_codigo.format(**perfiles_para_plantilla)
-
-                        contador = 1
-                        codigo_conexion_final = codigo_conexion_base
-                        while db.execute('SELECT id FROM conexiones WHERE codigo_conexion = ?', (codigo_conexion_final,)).fetchone():
-                            contador += 1
-                            codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
-                        
-                        detalles_json = json.dumps(perfiles_para_detalles)
-
-                        cursor = db.execute(
-                            "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                            (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion_input, detalles_json, g.user['id'])
-                        )
-                        new_conexion_id = cursor.lastrowid
-                        db.execute('INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES (?, ?, ?)', (new_conexion_id, g.user['id'], 'SOLICITADO'))
-                        db.commit() # Commit por cada inserción para ver progreso
-                        log_action('IMPORTAR_CONEXION', g.user['id'], 'conexiones', new_conexion_id,
-                                   f"Conexión '{codigo_conexion_final}' importada en proyecto '{proyecto['nombre']}'.") # Auditoría
-                        imported_count += 1
-                        
-                    except Exception as row_e:
-                        db.rollback() # Si algo falla en una fila, hacer rollback solo de esa fila si la BD lo permite, o del batch completo.
-                        error_rows.append(f"Fila {index+2}: Error al procesar - {row_e}")
-                        current_app.logger.error(f"Error al importar fila {index+2}: {row_e}")
-                
+            if error_message:
+                flash(error_message, 'danger')
+            else:
                 if imported_count > 0:
                     flash(f"Importación completada: Se crearon {imported_count} conexiones.", 'success')
                 if error_rows:
                     flash(f"Se encontraron problemas en {len(error_rows)} fila(s) durante la importación. Detalles: {'; '.join(error_rows)}", "warning")
                 if imported_count == 0 and not error_rows:
                      flash("No se crearon nuevas conexiones. Revisa el formato de tu archivo o los datos.", "info")
-
-
-            except pd.errors.EmptyDataError:
-                flash('El archivo Excel está vacío o no contiene datos válidos.', 'danger')
-            except pd.errors.ParserError as pe:
-                flash(f'Error al analizar el archivo Excel. Asegúrate de que el formato sea correcto. Detalle: {pe}', 'danger')
-            except Exception as e:
-                flash(f"Ocurrió un error inesperado durante la importación: {e}", "danger")
-                current_app.logger.error(f"Ocurrió un error inesperado durante la importación: {e}")
         else:
             flash('Formato de archivo no válido. Por favor, sube un archivo .xlsx.', 'warning')
 
@@ -711,7 +463,7 @@ def cambiar_estado(conexion_id):
     nuevo_estado_form = request.form.get('estado')
     detalles_form = request.form.get('detalles', '')
     
-    success, message, _ = _process_connection_state_transition(
+    success, message, _ = process_connection_state_transition(
         db, conexion_id, nuevo_estado_form, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles_form
     )
 
@@ -913,6 +665,8 @@ def eliminar_comentario(conexion_id, comentario_id):
         flash('El comentario no existe.', 'danger')
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id) + "#comentarios")
 
+from services.computos_service import get_computos_results, calculate_and_save_computos
+
 @conexiones_bp.route('/<int:conexion_id>/computos', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def computos_metricos(conexion_id):
@@ -922,95 +676,21 @@ def computos_metricos(conexion_id):
     db = get_db()
     conexion = _get_conexion(conexion_id)
     
-    detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
-    
-    resultados = []
-    updated_detalles = detalles.copy() # Make a copy to modify
-
     if request.method == 'POST':
-        has_error = False
-        submitted_longitudes = {}
+        resultados, success_message, error_messages, perfiles = calculate_and_save_computos(conexion_id, request.form, g.user['id'])
+        if success_message:
+            flash(success_message, 'success')
+        if error_messages:
+            for error in error_messages:
+                flash(error, 'danger')
 
-        for i, (key, full_profile_name) in enumerate(perfiles):
-            longitud_mm_str = request.form.get(f'longitud_{i+1}')
-            submitted_longitudes[key] = longitud_mm_str # Usar 'key' ('Perfil 1') en lugar de 'full_profile_name' para evitar sobreescritura
-            
-            if not longitud_mm_str:
-                flash(f"La longitud para {full_profile_name} ({key}) no puede estar vacía.", "danger")
-                has_error = True
-                continue
-
-            try:
-                longitud_mm = float(longitud_mm_str)
-                peso = calcular_peso_perfil(full_profile_name, longitud_mm)
-                resultados.append({
-                    'perfil': full_profile_name,
-                    'longitud': longitud_mm,
-                    'peso': peso
-                })
-                # CORRECCIÓN: Usar una clave única para guardar la longitud, basada en la KEY del perfil ('Perfil 1', 'Perfil 2', etc.)
-                updated_detalles[f'Longitud {key} (mm)'] = longitud_mm
-            except ValueError:
-                flash(f"La longitud para {full_profile_name} ({key}) no es un número válido.", "danger")
-                has_error = True
-                resultados.append({
-                    'perfil': full_profile_name,
-                    'longitud': longitud_mm_str, # Keep the invalid string to show it back to user
-                    'peso': 'Error'
-                })
-            except Exception as e:
-                flash(f"Error al calcular peso para {full_profile_name} ({key}): {e}", "danger")
-                current_app.logger.error(f"Error calculando peso para {full_profile_name} ({key}): {e}")
-                has_error = True
-                resultados.append({
-                    'perfil': full_profile_name,
-                    'longitud': longitud_mm_str,
-                    'peso': 'Error'
-                })
-
-        if not has_error:
-            db.execute(
-                'UPDATE conexiones SET detalles_json = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?',
-                (json.dumps(updated_detalles), conexion_id)
-            )
-            db.commit()
-            log_action('CALCULAR_COMPUTOS', g.user['id'], 'conexiones', conexion_id,
-                       f"Cómputos métricos calculados y longitudes guardadas para conexión '{conexion['codigo_conexion']}'.")
-            flash("Cómputos calculados y longitudes guardadas con éxito.", "success")
-        else:
-            # If there was an error, we don't commit, but we need to repopulate the values
-            # in the template. We can do this by modifying `detalles` before rendering.
-            for key, longitud_str in submitted_longitudes.items():
-                detalles[f'Longitud {key} (mm)'] = longitud_str
-            # No need for rollback as we haven't committed anything
+        # We need to get the latest details for rendering
+        conexion = _get_conexion(conexion_id) # Re-fetch to get updated details
+        _, detalles = get_computos_results(conexion)
 
     else: # GET Request
-        # For GET request, retrieve longitudes from details_json if available
-        for i, (key, full_profile_name) in enumerate(perfiles):
-            # CORRECCIÓN: Usar la clave única ('Longitud Perfil 1 (mm)') para obtener la longitud guardada
-            longitud_guardada_mm = detalles.get(f'Longitud {key} (mm)')
-            if longitud_guardada_mm is not None:
-                try:
-                    peso = calcular_peso_perfil(full_profile_name, float(longitud_guardada_mm))
-                    resultados.append({
-                        'perfil': full_profile_name,
-                        'longitud': float(longitud_guardada_mm),
-                        'peso': peso
-                    })
-                except (ValueError, TypeError):
-                    resultados.append({
-                        'perfil': full_profile_name,
-                        'longitud': longitud_guardada_mm,
-                        'peso': 'Error'
-                    })
-            else:
-                resultados.append({
-                    'perfil': full_profile_name,
-                    'longitud': '', # Empty string for placeholder
-                    'peso': 'N/A'
-                })
-
+        resultados, detalles = get_computos_results(conexion)
+        perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
 
     return render_template('computos_metricos.html',
                            titulo="Cómputos Métricos",
@@ -1024,63 +704,29 @@ def computos_metricos(conexion_id):
 def reporte_computos(conexion_id):
     """
     Genera y muestra un reporte imprimible de cómputos métricos.
-    Nota: Para ser preciso, esta ruta debería recalcular o recibir los datos de cómputo.
-    Aquí se asume que los resultados provienen de una sesión o una lógica previa.
-    Para una app real, podrías guardar los cómputos en la DB o pasar los parámetros
-    para recalcularlos.
+    RECOMENDACIÓN: La generación de reportes (especialmente si se convierten a PDF)
+    puede ser una tarea intensiva. Considera usar una cola de tareas como Celery
+    para generar el reporte en segundo plano y notificar al usuario cuando esté listo.
     """
     conexion = _get_conexion(conexion_id)
+    resultados, _ = get_computos_results(conexion)
     
-    # Recalcular los resultados para el reporte, para asegurar que siempre esté actualizado
-    # y no dependa de la sesión (que puede expira.
-    detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    perfiles_raw = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
-    
-    # Aquí necesitaríamos las longitudes. Una opción sería almacenarlas en la DB con la conexión
-    # una vez que se calculan en 'computos_metricos', o que el reporte tenga campos de entrada.
-    # Por simplicidad, para el reporte, vamos a simular que ya hay longitudes o pedir que se introduzcan
-    # en el formulario de la página de cómputos antes de generar el reporte.
-    # Si los datos no están en la sesión o DB, este reporte no tendrá pesos.
-    # Se recomienda que los cómputos se guarden con la conexión una vez calculados.
-
-    resultados_recalculated = []
-    for key, full_profile_name in perfiles_raw:
-        longitud_guardada_mm = detalles.get(f'Longitud {key} (mm)') # CORRECCIÓN: Usar 'key' en lugar de 'full_profile_name'
-        if longitud_guardada_mm is not None:
-            try:
-                peso = calcular_peso_perfil(full_profile_name, float(longitud_guardada_mm))
-                resultados_recalculated.append({
-                    'perfil': full_profile_name,
-                    'longitud': float(longitud_guardada_mm),
-                    'peso': peso
-                })
-            except Exception as e:
-                current_app.logger.error(f"Error calculating weight for report for {full_profile_name}: {e}")
-                resultados_recalculated.append({ # Add if length is not found or error occurred
-                    'perfil': full_profile_name,
-                    'longitud': longitud_guardada_mm,
-                    'peso': 'Error'
-                })
-        else:
-            resultados_recalculated.append({ # Add if length is not found
-                'perfil': full_profile_name,
-                'longitud': 'N/A',
-                'peso': 'N/A'
-            })
-
-
     log_action('GENERAR_REPORTE_COMPUTOS', g.user['id'], 'conexiones', conexion_id,
-               f"Reporte de cómputos generado para conexión '{conexion['codigo_conexion']}'.") # Auditoría
+               f"Reporte de cómputos generado para conexión '{conexion['codigo_conexion']}'.")
+
     return render_template('reporte_computos.html',
                            titulo=f"Reporte de Cómputos para {conexion['codigo_conexion']}",
                            conexion=conexion,
-                           resultados=resultados_recalculated)
+                           resultados=resultados)
 
 @conexiones_bp.route('/<int:conexion_id>/reporte')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def reporte_conexion(conexion_id):
     """
     Genera y muestra un reporte detallado de una conexión para impresión.
+    RECOMENDACIÓN: La generación de reportes (especialmente si se convierten a PDF)
+    puede ser una tarea intensiva. Considera usar una cola de tareas como Celery
+    para generar el reporte en segundo plano y notificar al usuario cuando esté listo.
     """
     db = get_db()
     conexion = _get_conexion(conexion_id)
@@ -1097,7 +743,7 @@ def reporte_conexion(conexion_id):
 
     # Cargar detalles adicionales y configuración de tipología
     detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    tipologia_config = _get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
+    tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
     log_action('GENERAR_REPORTE_CONEXION', g.user['id'], 'conexiones', conexion_id,
                f"Reporte de conexión generado para '{conexion['codigo_conexion']}'.") # Auditoría
     return render_template('reporte_conexion.html',

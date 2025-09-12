@@ -5,25 +5,32 @@ services:
     build: .
     container_name: heptaconexiones_web
     ports:
-      - "5000:5001" # Mapea el puerto 5000 del host al puerto 5001 del contenedor (donde escucha Gunicorn)
+      - "5000:5001"
     volumes:
-      # Monta solo el código de la aplicación para cambios rápidos durante el desarrollo,
-      # o para copiarlo si no quieres usar COPY . . en Dockerfile
-      # En producción, a menudo se usa COPY en Dockerfile y no se monta el código directamente.
-      # Para este caso, mantenemos el COPY en Dockerfile y montamos la carpeta actual para simplicidad.
-      - .:/app 
-      # Volúmenes con nombre para persistir datos importantes
-      - db_data:/app/instance # Persiste la carpeta 'instance' donde está tu SQLite DB
-      - uploads_data:/app/uploads # Persiste los archivos subidos
-      - logs_data:/app/logs # Persiste los logs
+      - .:/app
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
     environment:
-      # Configura el número de workers para Gunicorn. 5 es un buen punto de partida para 10 usuarios.
       - GUNICORN_WORKERS=5
+      - DATABASE_URL=postgresql://user:password@db:5432/heptaconexiones
     env_file:
-      - .env # Carga el resto de variables de entorno desde .env
+      - .env
+    depends_on:
+      - db
 
-# Definición de volúmenes con nombre
+  db:
+    image: postgres:13
+    container_name: heptaconexiones_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: heptaconexiones
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
 volumes:
-  db_data: # Para la base de datos SQLite
-  uploads_data: # Para los archivos subidos por usuarios
-  logs_data: # Para los archivos de log
+  postgres_data:
+  uploads_data:
+  logs_data:

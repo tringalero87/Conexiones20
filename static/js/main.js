@@ -441,11 +441,28 @@ function initMyProjectsChart() {
                         } else {
                             data.forEach(conn => {
                                 const tr = document.createElement('tr');
-                                tr.innerHTML = `
-                                    <td><strong>${conn.codigo_conexion}</strong></td>
-                                    <td>${new Date(conn.fecha_creacion).toLocaleString()}</td>
-                                    <td><a href="/conexiones/${conn.id}" class="btn btn-sm btn-secondary">Ver</a></td>
-                                `;
+
+                                // Celda para el código de conexión (usando textContent para seguridad XSS)
+                                const tdCode = document.createElement('td');
+                                const strong = document.createElement('strong');
+                                strong.textContent = conn.codigo_conexion;
+                                tdCode.appendChild(strong);
+                                tr.appendChild(tdCode);
+
+                                // Celda para la fecha
+                                const tdDate = document.createElement('td');
+                                tdDate.textContent = new Date(conn.fecha_creacion).toLocaleString();
+                                tr.appendChild(tdDate);
+
+                                // Celda para el botón de acción
+                                const tdAction = document.createElement('td');
+                                const actionLink = document.createElement('a');
+                                actionLink.href = `/conexiones/${conn.id}`;
+                                actionLink.className = 'btn btn-sm btn-secondary';
+                                actionLink.textContent = 'Ver';
+                                tdAction.appendChild(actionLink);
+                                tr.appendChild(tdAction);
+
                                 modalBody.appendChild(tr);
                             });
                         }

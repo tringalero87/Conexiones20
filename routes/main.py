@@ -26,19 +26,38 @@ main_bp = Blueprint('main', __name__)
 
 def _get_my_summary_data(db, user_id):
     """Obtiene los datos para el widget 'Mi Resumen de Actividad'."""
-    summary_query = """
-        SELECT
-            SUM(CASE WHEN solicitante_id = ? THEN 1 ELSE 0 END) as total_conexiones_creadas,
-            SUM(CASE WHEN solicitante_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END) as conexiones_en_proceso_solicitadas,
-            SUM(CASE WHEN solicitante_id = ? AND estado = 'APROBADO' THEN 1 ELSE 0 END) as conexiones_aprobadas_solicitadas,
-            SUM(CASE WHEN realizador_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END) as mis_tareas_en_proceso,
-            SUM(CASE WHEN realizador_id = ? AND estado = 'REALIZADO' AND fecha_modificacion >= date('now', '-30 days') THEN 1 ELSE 0 END) as mis_tareas_realizadas_ult_30d,
-            SUM(CASE WHEN aprobador_id = ? AND estado = 'APROBADO' AND fecha_modificacion >= date('now', '-30 days') THEN 1 ELSE 0 END) as aprobadas_por_mi_ult_30d
-        FROM conexiones
-        WHERE solicitante_id = ? OR realizador_id = ? OR aprobador_id = ?
-    """
-    params = [user_id] * 9
-    summary_row = db.execute(summary_query, params).fetchone()
+    is_postgres = hasattr(db, 'cursor')
+
+    if is_postgres:
+        summary_query = """
+            SELECT
+                SUM(CASE WHEN solicitante_id = %s THEN 1 ELSE 0 END) as total_conexiones_creadas,
+                SUM(CASE WHEN solicitante_id = %s AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END) as conexiones_en_proceso_solicitadas,
+                SUM(CASE WHEN solicitante_id = %s AND estado = 'APROBADO' THEN 1 ELSE 0 END) as conexiones_aprobadas_solicitadas,
+                SUM(CASE WHEN realizador_id = %s AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END) as mis_tareas_en_proceso,
+                SUM(CASE WHEN realizador_id = %s AND estado = 'REALIZADO' AND fecha_modificacion >= NOW() - interval '30 days' THEN 1 ELSE 0 END) as mis_tareas_realizadas_ult_30d,
+                SUM(CASE WHEN aprobador_id = %s AND estado = 'APROBADO' AND fecha_modificacion >= NOW() - interval '30 days' THEN 1 ELSE 0 END) as aprobadas_por_mi_ult_30d
+            FROM conexiones
+            WHERE solicitante_id = %s OR realizador_id = %s OR aprobador_id = %s
+        """
+        params = [user_id] * 9
+        with db.cursor() as cursor:
+            cursor.execute(summary_query, params)
+            summary_row = cursor.fetchone()
+    else:
+        summary_query = """
+            SELECT
+                SUM(CASE WHEN solicitante_id = ? THEN 1 ELSE 0 END) as total_conexiones_creadas,
+                SUM(CASE WHEN solicitante_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END) as conexiones_en_proceso_solicitadas,
+                SUM(CASE WHEN solicitante_id = ? AND estado = 'APROBADO' THEN 1 ELSE 0 END) as conexiones_aprobadas_solicitadas,
+                SUM(CASE WHEN realizador_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END) as mis_tareas_en_proceso,
+                SUM(CASE WHEN realizador_id = ? AND estado = 'REALIZADO' AND fecha_modificacion >= date('now', '-30 days') THEN 1 ELSE 0 END) as mis_tareas_realizadas_ult_30d,
+                SUM(CASE WHEN aprobador_id = ? AND estado = 'APROBADO' AND fecha_modificacion >= date('now', '-30 days') THEN 1 ELSE 0 END) as aprobadas_por_mi_ult_30d
+            FROM conexiones
+            WHERE solicitante_id = ? OR realizador_id = ? OR aprobador_id = ?
+        """
+        params = [user_id] * 9
+        summary_row = db.execute(summary_query, params).fetchone()
 
     summary = dict(summary_row) if summary_row else {
         'total_conexiones_creadas': 0,
@@ -71,38 +90,82 @@ def _get_my_summary_data(db, user_id):
 def _get_my_performance_data(db, user_id):
     """Obtiene los datos para el widget 'Mi Rendimiento'."""
     performance = {'avg_completion_time': 'N/A', 'tasks_completed_this_month': 0}
-    avg_time_query = db.execute("""
-        SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
-        FROM historial_estados h1
-        JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
-        WHERE h1.usuario_id = ? AND h1.estado = 'EN_PROCESO' AND h2.estado IN ('REALIZADO', 'APROBADO')
-    """, (user_id,)).fetchone()
-    avg_days = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
-    performance['avg_completion_time'] = f"{avg_days:.1f} días" if avg_days > 0 else "N/A"
+    is_postgres = hasattr(db, 'cursor')
 
-    completed_query = db.execute("""
-        SELECT COUNT(id) as total FROM conexiones
-        WHERE (realizador_id = ? AND estado = 'REALIZADO' AND strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now'))
-        OR (aprobador_id = ? AND estado = 'APROBADO' AND strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now'))
-    """, (user_id, user_id)).fetchone()
+    if is_postgres:
+        avg_time_query_sql = """
+            SELECT AVG(h2.fecha - h1.fecha) as avg_time
+            FROM historial_estados h1
+            JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
+            WHERE h1.usuario_id = %s AND h1.estado = 'EN_PROCESO' AND h2.estado IN ('REALIZADO', 'APROBADO')
+        """
+        with db.cursor() as cursor:
+            cursor.execute(avg_time_query_sql, (user_id,))
+            avg_time_result = cursor.fetchone()
+        avg_time = avg_time_result['avg_time'] if avg_time_result and avg_time_result['avg_time'] is not None else timedelta(0)
+        performance['avg_completion_time'] = f"{avg_time.days + avg_time.seconds / 86400.0:.1f} días" if avg_time.total_seconds() > 0 else "N/A"
+
+        completed_query_sql = """
+            SELECT COUNT(id) as total FROM conexiones
+            WHERE (realizador_id = %s AND estado = 'REALIZADO' AND TO_CHAR(fecha_modificacion, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM'))
+            OR (aprobador_id = %s AND estado = 'APROBADO' AND TO_CHAR(fecha_modificacion, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM'))
+        """
+        with db.cursor() as cursor:
+            cursor.execute(completed_query_sql, (user_id, user_id))
+            completed_query = cursor.fetchone()
+    else:
+        avg_time_query = db.execute("""
+            SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
+            FROM historial_estados h1
+            JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
+            WHERE h1.usuario_id = ? AND h1.estado = 'EN_PROCESO' AND h2.estado IN ('REALIZADO', 'APROBADO')
+        """, (user_id,)).fetchone()
+        avg_days = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
+        performance['avg_completion_time'] = f"{avg_days:.1f} días" if avg_days > 0 else "N/A"
+
+        completed_query = db.execute("""
+            SELECT COUNT(id) as total FROM conexiones
+            WHERE (realizador_id = ? AND estado = 'REALIZADO' AND strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now'))
+            OR (aprobador_id = ? AND estado = 'APROBADO' AND strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now'))
+        """, (user_id, user_id)).fetchone()
+
     performance['tasks_completed_this_month'] = completed_query['total']
     return performance
 
 def _get_my_performance_chart_data(db, user_id):
     """Obtiene los datos de rendimiento para un gráfico de los últimos 30 días."""
     thirty_days_ago = datetime.now() - timedelta(days=30)
-    # Consulta para obtener el recuento de tareas completadas por día
-    completed_tasks_by_day = db.execute("""
-        SELECT
-            strftime('%Y-%m-%d', fecha_modificacion) as completion_date,
-            COUNT(id) as total
-        FROM conexiones
-        WHERE
-            ((realizador_id = ? AND estado = 'REALIZADO') OR (aprobador_id = ? AND estado = 'APROBADO'))
-            AND fecha_modificacion >= ?
-        GROUP BY completion_date
-        ORDER BY completion_date
-    """, (user_id, user_id, thirty_days_ago.strftime('%Y-%m-%d %H:%M:%S'))).fetchall()
+    is_postgres = hasattr(db, 'cursor')
+
+    if is_postgres:
+        completed_tasks_by_day_sql = """
+            SELECT
+                TO_CHAR(fecha_modificacion, 'YYYY-MM-DD') as completion_date,
+                COUNT(id) as total
+            FROM conexiones
+            WHERE
+                ((realizador_id = %s AND estado = 'REALIZADO') OR (aprobador_id = %s AND estado = 'APROBADO'))
+                AND fecha_modificacion >= %s
+            GROUP BY completion_date
+            ORDER BY completion_date
+        """
+        params = (user_id, user_id, thirty_days_ago)
+        with db.cursor() as cursor:
+            cursor.execute(completed_tasks_by_day_sql, params)
+            completed_tasks_by_day = cursor.fetchall()
+    else:
+        # Consulta para obtener el recuento de tareas completadas por día
+        completed_tasks_by_day = db.execute("""
+            SELECT
+                strftime('%Y-%m-%d', fecha_modificacion) as completion_date,
+                COUNT(id) as total
+            FROM conexiones
+            WHERE
+                ((realizador_id = ? AND estado = 'REALIZADO') OR (aprobador_id = ? AND estado = 'APROBADO'))
+                AND fecha_modificacion >= ?
+            GROUP BY completion_date
+            ORDER BY completion_date
+        """, (user_id, user_id, thirty_days_ago.strftime('%Y-%m-%d %H:%M:%S'))).fetchall()
 
     # Crear un diccionario para un acceso rápido
     tasks_map = {row['completion_date']: row['total'] for row in completed_tasks_by_day}
@@ -138,42 +201,78 @@ def _get_my_projects_summary(db, user_id):
 def _get_admin_dashboard_data(db, start_date, end_date):
     """Obtiene los KPIs y datos de gráficos para el panel de administrador."""
     admin_data = {'kpis': {}, 'charts': {}}
+    is_postgres = hasattr(db, 'cursor')
 
-    kpi_counts_query = """
-        SELECT
-            SUM(CASE WHEN estado NOT IN ('APROBADO', 'RECHAZADO') THEN 1 ELSE 0 END) as total_activas,
-            SUM(CASE WHEN DATE(fecha_creacion) = DATE('now') THEN 1 ELSE 0 END) as creadas_hoy
-        FROM conexiones
-    """
-    kpi_counts = db.execute(kpi_counts_query).fetchone()
+    if is_postgres:
+        kpi_counts_query = """
+            SELECT
+                SUM(CASE WHEN estado NOT IN ('APROBADO', 'RECHAZADO') THEN 1 ELSE 0 END) as total_activas,
+                SUM(CASE WHEN DATE(fecha_creacion) = CURRENT_DATE THEN 1 ELSE 0 END) as creadas_hoy
+            FROM conexiones
+        """
+        with db.cursor() as cursor:
+            cursor.execute(kpi_counts_query)
+            kpi_counts = cursor.fetchone()
+
+        avg_time_query_sql = """
+            SELECT AVG(h2.fecha - h1.fecha) as avg_time
+            FROM historial_estados h1
+            JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
+            WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'
+        """
+        with db.cursor() as cursor:
+            cursor.execute(avg_time_query_sql)
+            avg_time_result = cursor.fetchone()
+        avg_time = avg_time_result['avg_time'] if avg_time_result and avg_time_result['avg_time'] is not None else timedelta(0)
+        admin_data['kpis']['tiempo_aprobacion'] = f"{avg_time.days + avg_time.seconds / 86400.0:.1f} días"
+
+        with db.cursor() as cursor:
+            cursor.execute("SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO' AND fecha_creacion BETWEEN %s AND %s", (start_date, end_date))
+            total_aprobadas_en_rango_row = cursor.fetchone()
+            cursor.execute("SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO' AND fecha BETWEEN %s AND %s", (start_date, end_date))
+            total_rechazadas_en_rango_row = cursor.fetchone()
+            cursor.execute("SELECT estado, COUNT(id) as total FROM conexiones WHERE fecha_creacion BETWEEN %s AND %s GROUP BY estado", (start_date, end_date))
+            estados_data = cursor.fetchall()
+            cursor.execute("SELECT TO_CHAR(fecha_creacion, 'YYYY-MM') as mes, COUNT(id) as total FROM conexiones WHERE fecha_creacion BETWEEN %s AND %s GROUP BY mes ORDER BY mes", (start_date, end_date))
+            conexiones_por_mes_data = cursor.fetchall()
+            cursor.execute("SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.solicitante_id = u.id WHERE c.fecha_creacion BETWEEN %s AND %s GROUP BY u.id, u.nombre_completo ORDER BY total DESC LIMIT 5", (start_date, end_date))
+            admin_data['charts']['top_solicitantes'] = cursor.fetchall()
+            cursor.execute("SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.realizador_id = u.id WHERE c.realizador_id IS NOT NULL AND c.fecha_modificacion BETWEEN %s AND %s AND c.estado = 'APROBADO' GROUP BY u.id, u.nombre_completo ORDER BY total DESC LIMIT 5", (start_date, end_date))
+            admin_data['charts']['top_realizadores'] = cursor.fetchall()
+    else:
+        kpi_counts_query = """
+            SELECT
+                SUM(CASE WHEN estado NOT IN ('APROBADO', 'RECHAZADO') THEN 1 ELSE 0 END) as total_activas,
+                SUM(CASE WHEN DATE(fecha_creacion) = DATE('now') THEN 1 ELSE 0 END) as creadas_hoy
+            FROM conexiones
+        """
+        kpi_counts = db.execute(kpi_counts_query).fetchone()
+
+        avg_time_query = db.execute("""
+            SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
+            FROM historial_estados h1
+            JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
+            WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'
+        """).fetchone()
+        avg_days = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
+        admin_data['kpis']['tiempo_aprobacion'] = f"{avg_days:.1f} días"
+
+        total_aprobadas_en_rango_row = db.execute("SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO' AND fecha_creacion BETWEEN ? AND ?", (start_date, end_date)).fetchone()
+        total_rechazadas_en_rango_row = db.execute("SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO' AND fecha BETWEEN ? AND ?", (start_date, end_date)).fetchone()
+        estados_data = db.execute("SELECT estado, COUNT(id) as total FROM conexiones WHERE fecha_creacion BETWEEN ? AND ? GROUP BY estado", (start_date, end_date)).fetchall()
+        conexiones_por_mes_data = db.execute("SELECT strftime('%Y-%m', fecha_creacion) as mes, COUNT(id) as total FROM conexiones WHERE fecha_creacion BETWEEN ? AND ? GROUP BY mes ORDER BY mes", (start_date, end_date)).fetchall()
+        admin_data['charts']['top_solicitantes'] = db.execute("SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.solicitante_id = u.id WHERE c.fecha_creacion BETWEEN ? AND ? GROUP BY u.id ORDER BY total DESC LIMIT 5", (start_date, end_date)).fetchall()
+        admin_data['charts']['top_realizadores'] = db.execute("SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.realizador_id = u.id WHERE c.realizador_id IS NOT NULL AND c.fecha_modificacion BETWEEN ? AND ? AND c.estado = 'APROBADO' GROUP BY u.id ORDER BY total DESC LIMIT 5", (start_date, end_date)).fetchall()
+
     admin_data['kpis']['total_activas'] = kpi_counts['total_activas'] or 0
     admin_data['kpis']['creadas_hoy'] = kpi_counts['creadas_hoy'] or 0
-
-    avg_time_query = db.execute("""
-        SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
-        FROM historial_estados h1
-        JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
-        WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'
-    """).fetchone()
-    avg_days = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
-    admin_data['kpis']['tiempo_aprobacion'] = f"{avg_days:.1f} días"
-
-    total_aprobadas_en_rango_row = db.execute("SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO' AND fecha_creacion BETWEEN ? AND ?", (start_date, end_date)).fetchone()
     total_aprobadas_en_rango = total_aprobadas_en_rango_row['total'] if total_aprobadas_en_rango_row else 0
-    total_rechazadas_en_rango_row = db.execute("SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO' AND fecha BETWEEN ? AND ?", (start_date, end_date)).fetchone()
     total_rechazadas_en_rango = total_rechazadas_en_rango_row['total'] if total_rechazadas_en_rango_row else 0
     total_procesadas_en_rango = total_aprobadas_en_rango + total_rechazadas_en_rango
     tasa_rechazo = (total_rechazadas_en_rango / total_procesadas_en_rango * 100) if total_procesadas_en_rango > 0 else 0
     admin_data['kpis']['tasa_rechazo'] = f"{tasa_rechazo:.1f}%"
-
-    estados_data = db.execute("SELECT estado, COUNT(id) as total FROM conexiones WHERE fecha_creacion BETWEEN ? AND ? GROUP BY estado", (start_date, end_date)).fetchall()
     admin_data['charts']['estados'] = {row['estado']: row['total'] for row in estados_data}
-
-    conexiones_por_mes_data = db.execute("SELECT strftime('%Y-%m', fecha_creacion) as mes, COUNT(id) as total FROM conexiones WHERE fecha_creacion BETWEEN ? AND ? GROUP BY mes ORDER BY mes", (start_date, end_date)).fetchall()
     admin_data['charts']['conexiones_mes'] = [{'mes': row['mes'], 'total': row['total']} for row in conexiones_por_mes_data]
-
-    admin_data['charts']['top_solicitantes'] = db.execute("SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.solicitante_id = u.id WHERE c.fecha_creacion BETWEEN ? AND ? GROUP BY u.id ORDER BY total DESC LIMIT 5", (start_date, end_date)).fetchall()
-    admin_data['charts']['top_realizadores'] = db.execute("SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.realizador_id = u.id WHERE c.realizador_id IS NOT NULL AND c.fecha_modificacion BETWEEN ? AND ? AND c.estado = 'APROBADO' GROUP BY u.id ORDER BY total DESC LIMIT 5", (start_date, end_date)).fetchall()
 
     return admin_data
 
@@ -331,41 +430,55 @@ def catalogo():
 
     return render_template('catalogo.html', estructura=estructura, proyectos=proyectos, preselect_project_id=preselect_project_id, titulo="Catálogo")
 
+import sqlite3
+
 @main_bp.route('/buscar')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def buscar():
     """
-    Realiza una búsqueda de texto completo en las conexiones utilizando
-    la tabla virtual FTS5 de SQLite para mayor eficiencia.
+    Realiza una búsqueda de texto completo en las conexiones, compatible con SQLite y PostgreSQL.
     """
     query = request.args.get('q', '')
     resultados = []
     if query:
         db = get_db()
-        # CORRECCIÓN: Formatear la consulta para FTS5 para permitir búsqueda por prefijo en cada palabra.
-        # Se divide la consulta en palabras, se añade un '*' a cada una y se unen con 'AND'.
-        # Esto permite búsquedas robustas e independientes del orden.
-        # Ejemplo: "viga col" se convierte en "viga* AND col*".
+        is_postgres = hasattr(db, 'cursor')
 
-        # Saneamiento de la consulta para evitar errores de sintaxis en FTS5.
-        # Se eliminan los caracteres especiales que tienen significado en FTS5 para prevenir errores.
         sanitized_query = re.sub(r'[\'\"()\[\]{}*?^:.]', ' ', query)
         words = sanitized_query.split()
+
         if not words:
             resultados = []
         else:
-            fts_query = " AND ".join(f'{word}*' for word in words)
-
-            # La búsqueda se realiza en la tabla 'conexiones_fts' que está optimizada para esto.
-            # El JOIN permite enriquecer los resultados con datos de otras tablas.
-            resultados = db.execute("""
-                SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre
-                FROM conexiones_fts f
-                JOIN conexiones c ON f.rowid = c.id
-                JOIN proyectos p ON c.proyecto_id = p.id
-                LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-                WHERE f.conexiones_fts MATCH ?
-                ORDER BY f.rank
-            """, (fts_query,)).fetchall()
+            if is_postgres:
+                # Lógica para PostgreSQL FTS
+                fts_query = " & ".join(f'{word}:*' for word in words)
+                sql = """
+                    SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
+                           ts_rank(c.fts_document, to_tsquery('simple', %s)) as rank
+                    FROM conexiones c
+                    JOIN proyectos p ON c.proyecto_id = p.id
+                    LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
+                    WHERE c.fts_document @@ to_tsquery('simple', %s)
+                    ORDER BY rank DESC
+                """
+                params = (fts_query, fts_query)
+                with db.cursor() as cursor:
+                    cursor.execute(sql, params)
+                    resultados = cursor.fetchall()
+            else:
+                # Lógica para SQLite FTS5
+                fts_query = " AND ".join(f'{word}*' for word in words)
+                sql = """
+                    SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre
+                    FROM conexiones_fts f
+                    JOIN conexiones c ON f.rowid = c.id
+                    JOIN proyectos p ON c.proyecto_id = p.id
+                    LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
+                    WHERE f.conexiones_fts MATCH ?
+                    ORDER BY f.rank
+                """
+                params = (fts_query,)
+                resultados = db.execute(sql, params).fetchall()
 
     return render_template('buscar.html', resultados=resultados, query=query, titulo=f"Resultados para '{query}'")

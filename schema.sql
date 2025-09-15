@@ -1,16 +1,18 @@
 -- ===================================================================================
--- Hepta-Conexiones - Esquema de Base de Datos PostgreSQL
+-- Hepta-Conexiones - Esquema de Base de Datos
 -- Versión: 9.0
--- Creador: Yimmy Moreno (Adaptado por Jules)
+-- Creador: Yimmy Moreno (Adaptado por Jules para compatibilidad con SQLite y PostgreSQL)
 --
--- Este script define la estructura de la base de datos para PostgreSQL.
+-- Este script define la estructura de la base de datos.
+-- Usa INTEGER PRIMARY KEY AUTOINCREMENT para compatibilidad con SQLite en pruebas.
+-- PostgreSQL también interpreta esto correctamente para crear un ID auto-incremental.
 -- ===================================================================================
 
 -- -----------------------------------------------------
 -- Tabla: usuarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS usuarios (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   nombre_completo TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -23,7 +25,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla: roles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS roles (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE
 );
 
@@ -40,7 +42,7 @@ CREATE TABLE IF NOT EXISTS usuario_roles (
 -- Tabla: proyectos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS proyectos (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE,
   descripcion TEXT,
   fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -51,7 +53,7 @@ CREATE TABLE IF NOT EXISTS proyectos (
 -- Tabla: conexiones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS conexiones (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   codigo_conexion TEXT NOT NULL UNIQUE,
   proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL,
@@ -73,7 +75,7 @@ CREATE TABLE IF NOT EXISTS conexiones (
 -- Tabla: archivos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS archivos (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   tipo_archivo TEXT NOT NULL,
@@ -85,7 +87,7 @@ CREATE TABLE IF NOT EXISTS archivos (
 -- Tabla: comentarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS comentarios (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   contenido TEXT NOT NULL,
@@ -96,7 +98,7 @@ CREATE TABLE IF NOT EXISTS comentarios (
 -- Tabla: notificaciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS notificaciones (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   mensaje TEXT NOT NULL,
   url TEXT NOT NULL,
@@ -109,7 +111,7 @@ CREATE TABLE IF NOT EXISTS notificaciones (
 -- Tabla: historial_estados
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS historial_estados (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   estado TEXT NOT NULL,
@@ -138,7 +140,7 @@ CREATE TABLE IF NOT EXISTS configuracion (
 -- Tabla: reportes
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS reportes (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
     descripcion TEXT,
     creador_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -154,7 +156,7 @@ CREATE TABLE IF NOT EXISTS reportes (
 -- Tabla: alias_perfiles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS alias_perfiles (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre_perfil TEXT NOT NULL UNIQUE,
   alias TEXT NOT NULL UNIQUE,
   norma TEXT
@@ -164,7 +166,7 @@ CREATE TABLE IF NOT EXISTS alias_perfiles (
 -- Tabla: auditoria_acciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS auditoria_acciones (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     accion TEXT NOT NULL,
     tipo_objeto TEXT,

@@ -4,18 +4,28 @@ from flask.cli import with_appcontext
 import os
 import psycopg2
 from psycopg2.extras import DictCursor
+import sqlite3
 
 def get_db():
     """
     Obtiene una conexión a la base de datos para la solicitud actual.
-    Utiliza PostgreSQL.
+    Se conecta a SQLite si la app está en modo de prueba (TESTING=True).
+    De lo contrario, se conecta a PostgreSQL usando DATABASE_URL.
     """
     if 'db' not in g:
-        database_url = os.environ.get('DATABASE_URL')
-        if not database_url:
-            raise RuntimeError("DATABASE_URL no está configurada. La aplicación no puede continuar.")
-
-        g.db = psycopg2.connect(database_url)
+        if current_app.config.get('TESTING'):
+            # Conexión a la base de datos de prueba (SQLite)
+            db_path = current_app.config.get('DATABASE')
+            if not db_path:
+                raise RuntimeError("La configuración 'DATABASE' es necesaria para las pruebas.")
+            g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+            g.db.row_factory = sqlite3.Row
+        else:
+            # Conexión a la base de datos de producción (PostgreSQL)
+            database_url = os.environ.get('DATABASE_URL')
+            if not database_url:
+                raise RuntimeError("DATABASE_URL no está configurada. La aplicación no puede continuar.")
+            g.db = psycopg2.connect(database_url)
     
     return g.db
 
@@ -35,17 +45,26 @@ def init_db():
     """
     Inicializa la base de datos ejecutando el script SQL del archivo 'schema.sql'.
     Este script crea todas las tablas y la estructura necesaria para la aplicación.
+    Maneja la diferencia en la ejecución de scripts entre SQLite y PostgreSQL.
     """
     db = get_db()
-
     with current_app.open_resource('schema.sql') as f:
         sql_script = f.read().decode('utf8')
 
-    with db.cursor() as cursor:
-        for statement in sql_script.split(';'):
-            if statement.strip():
-                cursor.execute(statement)
-    db.commit()
+    # sqlite3 connection objects tienen 'executescript', psycopg2 no.
+    # Usamos esto para determinar el tipo de conexión y ejecutar el script apropiadamente.
+    if hasattr(db, 'executescript'):
+        # Conexión SQLite (usada en pruebas)
+        db.executescript(sql_script)
+    else:
+        # Conexión PostgreSQL (usada en producción)
+        with db.cursor() as cursor:
+            # PostgreSQL no maneja bien múltiples sentencias en un solo execute,
+            # especialmente con algunos comandos DDL. Iterar es más seguro.
+            for statement in sql_script.split(';'):
+                if statement.strip():
+                    cursor.execute(statement)
+        db.commit()
 
 @click.command('init-db')
 @with_appcontext
@@ -72,17 +91,20 @@ def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
     Registra una acción de auditoría en la base de datos.
     """
     db = get_db()
+    is_testing = current_app.config.get('TESTING', False)
+    placeholder = "?" if is_testing else "%s"
 
-    sql = """
+    sql = f"""
         INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-        VALUES (%s, %s, %s, %s, %s)
+        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
     """
     params = (usuario_id, accion, tipo_objeto, objeto_id, detalles)
 
     try:
-        with db.cursor() as cursor:
-            cursor.execute(sql, params)
+        cursor = db.cursor()
+        cursor.execute(sql, params)
         db.commit()
+        cursor.close()
     except Exception as e:
         current_app.logger.error(f"Error al registrar acción de auditoría: {accion} por {usuario_id} - {e}")
         db.rollback()

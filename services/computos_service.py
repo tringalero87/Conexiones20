@@ -36,16 +36,22 @@ def get_computos_results(conexion):
             })
     return resultados, detalles
 
+from flask import current_app
+
 def calculate_and_save_computos(conexion_id, form_data, user_id):
     """
     Calculates and saves the metric computations for a connection.
     """
     db = get_db()
-    placeholder = '%s'
+    is_testing = current_app.config.get('TESTING', False)
+    p = "?" if is_testing else "%s"
 
-    with db.cursor() as cursor:
-        cursor.execute(f'SELECT * FROM conexiones WHERE id = {placeholder}', (conexion_id,))
+    cursor = db.cursor()
+    try:
+        cursor.execute(f'SELECT * FROM conexiones WHERE id = {p}', (conexion_id,))
         conexion = cursor.fetchone()
+    finally:
+        cursor.close()
 
     if not conexion:
         return None, "La conexión no existe.", None, None
@@ -93,11 +99,17 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
             })
 
     if not has_error:
-        sql = f'UPDATE conexiones SET detalles_json = {placeholder}, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = {placeholder}'
+        timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
+        sql = f'UPDATE conexiones SET detalles_json = {p}, fecha_modificacion = {timestamp_sql} WHERE id = {p}'
         params = (json.dumps(updated_detalles), conexion_id)
-        with db.cursor() as cursor:
+
+        cursor = db.cursor()
+        try:
             cursor.execute(sql, params)
-        db.commit()
+            db.commit()
+        finally:
+            cursor.close()
+
         log_action('CALCULAR_COMPUTOS', user_id, 'conexiones', conexion_id,
                    f"Cómputos métricos calculados y guardados para conexión '{conexion['codigo_conexion']}'.")
         return resultados, "Cómputos calculados y longitudes guardadas con éxito.", None, perfiles

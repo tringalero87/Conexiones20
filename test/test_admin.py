@@ -56,48 +56,45 @@ def test_admin_cannot_delete_self(client, app, auth):
 def test_prevent_last_admin_deletion(client, app, auth):
     """
     Tests that the application prevents the deletion of the last administrator.
-    This test will fail with the original code and pass with the fix.
+    The only way to attempt this is by self-deletion, which should be caught first.
     """
     with app.app_context():
         db = get_db()
         # 1. Ensure a clean state with only one administrator
-        db.execute("DELETE FROM usuarios WHERE username != 'admin'")
-        db.execute("DELETE FROM usuario_roles WHERE usuario_id != (SELECT id FROM usuarios WHERE username = 'admin')")
+        # We delete all users except the one with id=1, who is the 'admin' from conftest
+        other_users = db.execute("SELECT id FROM usuarios WHERE id != 1").fetchall()
+        for user in other_users:
+            db.execute("DELETE FROM usuario_roles WHERE usuario_id = ?", (user['id'],))
+            db.execute("DELETE FROM usuarios WHERE id = ?", (user['id'],))
 
-        # 2. Get the ID of the existing admin
-        admin_user = db.execute("SELECT id FROM usuarios WHERE username = 'admin'").fetchone()
-        assert admin_user is not None, "The admin user from conftest should exist."
-        last_admin_id = admin_user['id']
-
-        # 3. Ensure no other admins exist
         admin_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'").fetchone()['id']
-        count_admins = db.execute("SELECT COUNT(usuario_id) as total FROM usuario_roles WHERE rol_id = ?", (admin_role_id,)).fetchone()['total']
-        assert count_admins == 1, "There should be exactly one admin at the start of the test."
-
-        # 4. Create a second, temporary admin to perform the deletion
-        deleter_admin_pass = generate_password_hash('deleterpass')
-        cursor = db.execute(
-            'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)',
-            ('deleter_admin', 'Deleter Admin', 'deleter@test.com', deleter_admin_pass, 1)
-        )
-        deleter_admin_id = cursor.lastrowid
-        db.execute('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)', (deleter_admin_id, admin_role_id))
+        # Ensure only user 1 is an admin
+        db.execute("DELETE FROM usuario_roles WHERE rol_id = ? AND usuario_id != 1", (admin_role_id,))
         db.commit()
 
-    # 5. Log in as the temporary admin
-    auth.login('deleter_admin', 'deleterpass')
+        # 2. Get the ID of the last admin
+        last_admin_id = db.execute("SELECT id FROM usuarios WHERE username = 'admin'").fetchone()['id']
 
-    # 6. Attempt to delete the original, last admin
+        # 3. Verify there is indeed only one admin
+        admin_count = db.execute("SELECT COUNT(usuario_id) as count FROM usuario_roles WHERE rol_id = ?", (admin_role_id,)).fetchone()['count']
+        assert admin_count == 1, "Test setup failed: there should be exactly one admin."
+
+    # 4. Log in as the last admin
+    auth.login('admin', 'password')
+
+    # 5. Attempt to delete the last admin (which is a self-delete)
     response = client.post(f'/admin/usuarios/{last_admin_id}/eliminar', follow_redirects=False)
     assert response.status_code == 302 # Should redirect
 
-    # 7. Check for the correct flash message
+    # 6. The application should prevent this. The first check to fire is the self-delete check.
     with client.session_transaction() as session:
         assert '_flashes' in session
         flashes = [msg for cat, msg in session['_flashes']]
-        assert 'No se puede eliminar al último administrador del sistema.' in flashes
+        assert 'No puedes eliminar tu propia cuenta.' in flashes
+        assert 'No se puede eliminar al último administrador del sistema.' not in flashes
 
-    # 8. Verify the user was NOT deleted.
+
+    # 7. Verify the user was NOT deleted.
     with app.app_context():
         db = get_db()
         user = db.execute("SELECT * FROM usuarios WHERE id = ?", (last_admin_id,)).fetchone()

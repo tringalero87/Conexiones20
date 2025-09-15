@@ -1,16 +1,12 @@
-# Hepta_Conexiones/routes/auth.py
 import json
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app
 )
 from werkzeug.security import check_password_hash, generate_password_hash
-
-# Se importa el módulo de base de datos y los formularios necesarios.
 from db import get_db, log_action
 from . import roles_required
 from forms import LoginForm, ProfileForm
 
-# Se define el Blueprint para agrupar todas las rutas de autenticación.
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 @auth_bp.route('/login', methods=('GET', 'POST'))
@@ -20,14 +16,11 @@ def login():
     Si la solicitud es GET, muestra el formulario de login.
     Si es POST, valida las credenciales y crea una sesión para el usuario.
     """
-    # Si el usuario ya ha iniciado sesión, se le redirige al dashboard.
     if g.user:
         return redirect(url_for('main.dashboard'))
 
     form = LoginForm()
 
-    # Se utiliza el método validate_on_submit() de WTForms para procesar el formulario.
-    # Este método comprueba si la solicitud es un POST y si los datos son válidos.
     if form.validate_on_submit():
         username = form.username.data
         password = form.password.data
@@ -46,13 +39,11 @@ def login():
             error = 'Nombre de usuario o contraseña incorrectos.'
 
         if error is None:
-            # Si las credenciales son válidas, se inicia una nueva sesión.
             session.clear()
             session['user_id'] = user['id']
             log_action('INICIAR_SESION', user['id'], 'usuarios', user['id'], 
                        f"Inicio de sesión exitoso para el usuario '{username}'.")
             current_app.logger.info(f"Usuario '{username}' ha iniciado sesión exitosamente.")
-            # Redirige a la página que el usuario intentaba visitar, o al dashboard.
             next_page = request.args.get('next')
             if next_page:
                 return redirect(next_page)
@@ -90,8 +81,6 @@ def perfil():
     form = ProfileForm()
     
     if form.validate_on_submit():
-        # Toda la validación, incluida la de la contraseña, ahora se maneja en ProfileForm.
-        # Simplemente procesamos la actualización si el formulario es válido.
         old_data = db.execute('SELECT nombre_completo, email FROM usuarios WHERE id = ?', (g.user['id'],)).fetchone()
         db.execute('UPDATE usuarios SET nombre_completo = ?, email = ? WHERE id = ?',
                    (form.nombre_completo.data, form.email.data, g.user['id']))
@@ -101,7 +90,6 @@ def perfil():
         if form.email.data != old_data['email']:
             changes['email'] = {'old': old_data['email'], 'new': form.email.data}
 
-        # Solo actualizamos la contraseña si se proporcionó una nueva (y ya fue validada).
         if form.new_password.data:
             password_hash = generate_password_hash(form.new_password.data)
             db.execute('UPDATE usuarios SET password_hash = ? WHERE id = ?', (password_hash, g.user['id']))
@@ -125,7 +113,6 @@ def perfil():
         current_app.logger.info(f"Usuario '{g.user['username']}' actualizó su perfil y preferencias.")
         flash('Perfil y preferencias actualizados con éxito.', 'success')
 
-        # Actualizar g.user para reflejar los cambios inmediatamente en la misma solicitud.
         g.user = dict(db.execute('SELECT * FROM usuarios WHERE id = ?', (g.user['id'],)).fetchone())
 
         return redirect(url_for('auth.perfil'))

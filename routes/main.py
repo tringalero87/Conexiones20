@@ -1,4 +1,3 @@
-# Hepta_Conexiones/routes/main.py
 """
 routes/main.py
 
@@ -7,7 +6,6 @@ como el dashboard, el catálogo de conexiones y la función de búsqueda.
 No contiene lógica de un módulo específico (como Proyectos o Conexiones),
 sino las páginas generales que unen la aplicación.
 """
-
 import json
 import os
 import re
@@ -17,12 +15,7 @@ from flask import (Blueprint, render_template, g, current_app, redirect,
 from db import get_db
 from . import roles_required
 
-# Se define el Blueprint para agrupar las rutas principales de la aplicación.
-# Un Blueprint es una forma de organizar un grupo de rutas relacionadas, lo que
-# hace que la aplicación sea más modular y fácil de mantener.
 main_bp = Blueprint('main', __name__)
-
-# --- Funciones de ayuda para el Dashboard ---
 
 def _get_my_summary_data(db, user_id):
     """Obtiene los datos para el widget 'Mi Resumen de Actividad'."""
@@ -68,7 +61,6 @@ def _get_my_summary_data(db, user_id):
         'aprobadas_por_mi_ult_30d': 0
     }
 
-    # Esta consulta es más compleja y se mantiene separada.
     pendientes_row = db.execute("""
         SELECT COUNT(c.id) as total
         FROM conexiones c
@@ -77,10 +69,8 @@ def _get_my_summary_data(db, user_id):
     """, (user_id,)).fetchone()
     summary['pendientes_mi_aprobacion'] = pendientes_row['total'] if pendientes_row else 0
 
-    # Añadir notificaciones no leídas
     summary['notificaciones_no_leidas'] = len(g.notifications) if hasattr(g, 'notifications') else 0
 
-    # Asegurarse de que todos los valores sean enteros.
     for key in summary:
         if summary[key] is None:
             summary[key] = 0
@@ -154,7 +144,6 @@ def _get_my_performance_chart_data(db, user_id):
             cursor.execute(completed_tasks_by_day_sql, params)
             completed_tasks_by_day = cursor.fetchall()
     else:
-        # Consulta para obtener el recuento de tareas completadas por día
         completed_tasks_by_day = db.execute("""
             SELECT
                 strftime('%Y-%m-%d', fecha_modificacion) as completion_date,
@@ -167,15 +156,13 @@ def _get_my_performance_chart_data(db, user_id):
             ORDER BY completion_date
         """, (user_id, user_id, thirty_days_ago.strftime('%Y-%m-%d %H:%M:%S'))).fetchall()
 
-    # Crear un diccionario para un acceso rápido
     tasks_map = {row['completion_date']: row['total'] for row in completed_tasks_by_day}
 
-    # Generar las etiquetas y los datos para los últimos 30 días
     chart_data = {'labels': [], 'data': []}
     for i in range(30):
         date = (datetime.now() - timedelta(days=i))
         date_str = date.strftime('%Y-%m-%d')
-        chart_data['labels'].insert(0, date.strftime('%d %b')) # Formato '25 Dic'
+        chart_data['labels'].insert(0, date.strftime('%d %b'))
         chart_data['data'].insert(0, tasks_map.get(date_str, 0))
 
     return chart_data
@@ -329,7 +316,6 @@ def dashboard():
     user_id = g.user['id']
     user_roles = session.get('user_roles', [])
 
-    # Inicializa el diccionario de datos del dashboard
     dashboard_data = {
         'kpis': {
             'total_activas': 0, 'tiempo_aprobacion': 'N/A', 'creadas_hoy': 0, 'tasa_rechazo': '0.0%'
@@ -348,14 +334,12 @@ def dashboard():
         'user_prefs': {}
     }
 
-    # Obtener filtros de fecha
     date_start_str = request.args.get('date_start', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
     date_end_str = request.args.get('date_end', datetime.now().strftime('%Y-%m-%d'))
     filters = {'start': date_start_str, 'end': date_end_str}
     start_date_obj = datetime.strptime(date_start_str, '%Y-%m-%d')
     end_date_obj = datetime.strptime(date_end_str, '%Y-%m-%d') + timedelta(days=1)
 
-    # Cargar datos usando las funciones de ayuda
     dashboard_data['my_summary'] = _get_my_summary_data(db, user_id)
 
     if 'REALIZADOR' in user_roles or 'APROBADOR' in user_roles:
@@ -399,7 +383,6 @@ def catalogo():
     db = get_db()
     json_path = os.path.join(current_app.root_path, 'conexiones.json')
 
-    # Se carga la estructura de conexiones desde un archivo JSON.
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             estructura = json.load(f)
@@ -408,24 +391,20 @@ def catalogo():
         flash("Error crítico: No se pudo cargar la configuración de conexiones.", "danger")
         return redirect(url_for('main.dashboard'))
     except json.JSONDecodeError:
-        current_app.logger.error(f"Error crítico: El archivo de configuración de conexiones está corrupto.", exc_info=True) # Added exc_info
+        current_app.logger.error(f"Error crítico: El archivo de configuración de conexiones está corrupto.", exc_info=True)
         flash("Error crítico: El archivo de configuración de conexiones está corrupto.", "danger")
         return redirect(url_for('main.dashboard'))
 
-    # Se obtienen los proyectos a los que el usuario tiene acceso.
     user_roles = session.get('user_roles', [])
     if 'ADMINISTRADOR' in user_roles:
-        # Los administradores ven todos los proyectos.
         proyectos = db.execute("SELECT id, nombre FROM proyectos ORDER BY nombre").fetchall()
     else:
-        # Otros usuarios solo ven los proyectos a los que están asignados.
         proyectos = db.execute("""
             SELECT p.id, p.nombre FROM proyectos p
             JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
             WHERE pu.usuario_id = ? ORDER BY p.nombre
         """, (g.user['id'],)).fetchall()
 
-    # Se obtiene un posible ID de proyecto preseleccionado desde la URL para mejorar la UX.
     preselect_project_id = request.args.get('preselect_project_id', type=int)
 
     return render_template('catalogo.html', estructura=estructura, proyectos=proyectos, preselect_project_id=preselect_project_id, titulo="Catálogo")
@@ -450,35 +429,19 @@ def buscar():
         if not words:
             resultados = []
         else:
-            if is_postgres:
-                # Lógica para PostgreSQL FTS
-                fts_query = " & ".join(f'{word}:*' for word in words)
-                sql = """
-                    SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
-                           ts_rank(c.fts_document, to_tsquery('simple', %s)) as rank
-                    FROM conexiones c
-                    JOIN proyectos p ON c.proyecto_id = p.id
-                    LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-                    WHERE c.fts_document @@ to_tsquery('simple', %s)
-                    ORDER BY rank DESC
-                """
-                params = (fts_query, fts_query)
-                with db.cursor() as cursor:
-                    cursor.execute(sql, params)
-                    resultados = cursor.fetchall()
-            else:
-                # Lógica para SQLite FTS5
-                fts_query = " AND ".join(f'{word}*' for word in words)
-                sql = """
-                    SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre
-                    FROM conexiones_fts f
-                    JOIN conexiones c ON f.rowid = c.id
-                    JOIN proyectos p ON c.proyecto_id = p.id
-                    LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-                    WHERE f.conexiones_fts MATCH ?
-                    ORDER BY f.rank
-                """
-                params = (fts_query,)
-                resultados = db.execute(sql, params).fetchall()
+            fts_query = " & ".join(f'{word}:*' for word in words)
+            sql = """
+                SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
+                        ts_rank(c.fts_document, to_tsquery('simple', %s)) as rank
+                FROM conexiones c
+                JOIN proyectos p ON c.proyecto_id = p.id
+                LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
+                WHERE c.fts_document @@ to_tsquery('simple', %s)
+                ORDER BY rank DESC
+            """
+            params = (fts_query, fts_query)
+            with db.cursor() as cursor:
+                cursor.execute(sql, params)
+                resultados = cursor.fetchall()
 
     return render_template('buscar.html', resultados=resultados, query=query, titulo=f"Resultados para '{query}'")

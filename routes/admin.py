@@ -14,9 +14,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for, g, flash, abort, current_app, make_response, send_file)
 from werkzeug.security import generate_password_hash
 from db import get_db, log_action
-# Se importan los formularios necesarios para este módulo.
 from forms import UserForm, ConfigurationForm, ReportForm, AliasForm, ComputosReportForm
-# Importar FlaskForm para el CSRF token en formularios simples que no necesitan campos específicos.
 from flask_wtf import FlaskForm
 import pandas as pd
 from weasyprint import HTML
@@ -25,22 +23,18 @@ from extensions import mail
 from collections import defaultdict
 from werkzeug.utils import secure_filename
 from utils.computos import calcular_peso_perfil
-# Se importa el decorador de roles al final para evitar circular imports si db.py depende de una ruta para current_app
 from . import roles_required
 
 
-# Se define el Blueprint para agrupar todas las rutas de administración.
-# El url_prefix='/admin' asegura que todas las rutas aquí definidas comiencen con /admin.
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
-# --- Funciones auxiliares para el scheduler ---
 def _generate_report_data_and_file(reporte_id, app_context):
     """
     Genera los datos del reporte y un archivo en memoria (BytesIO o StringIO)
     según el formato especificado en el reporte.
     Retorna (filename, mimetype, file_content, preview_results) o (None, None, None, None) si falla.
     """
-    with app_context: # Asegurarse de estar en el contexto de la aplicación
+    with app_context:
         db = get_db()
         reporte = db.execute('SELECT * FROM reportes WHERE id = ?', (reporte_id,)).fetchone()
         if not reporte:
@@ -81,10 +75,8 @@ def _generate_report_data_and_file(reporte_id, app_context):
 
         resultados_raw = db.execute(query_base, tuple(params)).fetchall()
         
-        # Para usar en la preview del email (solo los primeros 10 resultados)
         preview_results = [dict(row) for row in resultados_raw[:10]]
         
-        # Convertir resultados a lista de diccionarios para pandas/PDF
         resultados_dicts = [dict(row) for row in resultados_raw]
 
         filename_base = f"reporte_{reporte['nombre'].replace(' ', '_').lower()}"
@@ -138,7 +130,6 @@ def _generate_report_data_and_file(reporte_id, app_context):
             current_app.logger.error(f"Error generando reporte {reporte_id} en formato {output_format}: {e}", exc_info=True)
             return None, None, None, None
 
-# Tarea que será ejecutada por APScheduler
 def scheduled_report_job(reporte_id):
     """
     Esta función es el "job" que APScheduler ejecutará.
@@ -158,7 +149,6 @@ def scheduled_report_job(reporte_id):
             current_app.logger.warning(f"Reporte ID {reporte_id} programado sin destinatarios válidos.")
             return
 
-        # Fetch all necessary data including preview_results in one go
         filename, mimetype, file_content, preview_results_dicts = _generate_report_data_and_file(reporte_id, current_app.app_context())
 
         if file_content:
@@ -180,11 +170,6 @@ def scheduled_report_job(reporte_id):
                 current_app.logger.error(f"Error al enviar reporte programado '{reporte['nombre']}' ({reporte_id}): {e}", exc_info=True)
         else:
             current_app.logger.error(f"No se pudo generar el archivo para el reporte programado ID {reporte_id}.")
-
-
-# ==============================================================================
-# --- GESTIÓN DE USUARIOS ---
-# ==============================================================================
 
 @admin_bp.route('/usuarios')
 @roles_required('ADMINISTRADOR')
@@ -243,18 +228,14 @@ def editar_usuario(usuario_id):
     if not usuario:
         abort(404)
 
-    # Pasamos 'obj=usuario' para que el constructor del formulario sepa que estamos editando
     form = UserForm(obj=usuario, original_username=usuario['username'], original_email=usuario['email'])
 
-    # Poblar las opciones de roles en el formulario
     all_roles = db.execute('SELECT nombre FROM roles ORDER BY nombre').fetchall()
     form.roles.choices = [(r['nombre'], r['nombre']) for r in all_roles]
 
     if form.validate_on_submit():
-        # Este bloque se ejecuta solo en una solicitud POST válida
         old_data = dict(usuario)
         
-        # Actualizar datos del usuario desde el formulario
         db.execute(
             'UPDATE usuarios SET username = ?, nombre_completo = ?, email = ?, activo = ? WHERE id = ?',
             (form.username.data, form.nombre_completo.data, form.email.data, form.activo.data, usuario_id)
@@ -270,12 +251,10 @@ def editar_usuario(usuario_id):
         if form.activo.data != old_data['activo']:
             changes['activo'] = {'old': old_data['activo'], 'new': form.activo.data}
 
-        # Actualizar contraseña si se proporcionó una nueva
         if form.password.data:
             db.execute('UPDATE usuarios SET password_hash = ? WHERE id = ?', (generate_password_hash(form.password.data), usuario_id))
             changes['password'] = 'changed'
         
-        # Actualizar roles
         current_roles_query = db.execute('SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = ?', (usuario_id,)).fetchall()
         current_roles = set([row['nombre'] for row in current_roles_query])
         new_roles = set(form.roles.data)
@@ -296,7 +275,6 @@ def editar_usuario(usuario_id):
         return redirect(url_for('admin.listar_usuarios'))
     
     elif request.method == 'GET':
-        # Este bloque se ejecuta solo en una solicitud GET para poblar el formulario
         form.username.data = usuario['username']
         form.nombre_completo.data = usuario['nombre_completo']
         form.email.data = usuario['email']
@@ -305,7 +283,6 @@ def editar_usuario(usuario_id):
         user_roles_query = db.execute('SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = ?', (usuario_id,)).fetchall()
         form.roles.data = [row['nombre'] for row in user_roles_query]
 
-    # Renderizar la plantilla para solicitudes GET o si la validación POST falla
     return render_template('admin/usuario_form.html', form=form, usuario=usuario, titulo="Editar Usuario")
 
 @admin_bp.route('/usuarios/<int:usuario_id>/toggle_activo', methods=['POST'])
@@ -331,14 +308,12 @@ def toggle_activo(usuario_id):
         flash("Usuario no encontrado.", "danger")
     return redirect(url_for('admin.listar_usuarios'))
 
-# --- NUEVO: Ruta para eliminar usuario ---
 @admin_bp.route('/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
 @roles_required('ADMINISTRADOR')
 def eliminar_usuario(usuario_id):
     """Elimina un usuario (solo para administradores)."""
     db = get_db()
 
-    # Check if the user to be deleted is an admin
     is_admin_query = db.execute("""
         SELECT 1 FROM usuario_roles ur
         JOIN roles r ON ur.rol_id = r.id
@@ -346,7 +321,6 @@ def eliminar_usuario(usuario_id):
     """, (usuario_id,)).fetchone()
 
     if is_admin_query:
-        # Count the total number of admins
         admin_count_query = db.execute("""
             SELECT COUNT(ur.usuario_id) as admin_count
             FROM usuario_roles ur
@@ -362,7 +336,6 @@ def eliminar_usuario(usuario_id):
         flash('No puedes eliminar tu propia cuenta.', 'danger')
         return redirect(url_for('admin.listar_usuarios'))
 
-    # NUEVA VERIFICACIÓN: No permitir eliminar si el usuario está en proyectos.
     proyectos_asignados = db.execute(
         "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = ?",
         (usuario_id,)
@@ -372,7 +345,6 @@ def eliminar_usuario(usuario_id):
         flash(f"No se puede eliminar al usuario porque está asignado a {proyectos_asignados['count']} proyecto(s). Por favor, desasígnelo de todos los proyectos antes de eliminarlo.", 'danger')
         return redirect(url_for('admin.listar_usuarios'))
 
-    # Verificar si el usuario tiene conexiones activas asignadas
     conexiones_activas = db.execute(
         "SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = ? AND estado IN ('EN_PROCESO', 'REALIZADO')",
         (usuario_id,)
@@ -394,10 +366,6 @@ def eliminar_usuario(usuario_id):
         flash("Usuario no encontrado.", 'danger')
     return redirect(url_for('admin.listar_usuarios'))
 
-
-# ==============================================================================
-# --- GESTIÓN DE PERMISOS DE PROYECTOS ---
-# ==============================================================================
 
 @admin_bp.route('/proyectos/<int:proyecto_id>/permisos', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
@@ -442,10 +410,6 @@ def gestionar_permisos_proyecto(proyecto_id):
                            usuarios_con_acceso=usuarios_con_acceso,
                            titulo=f"Permisos para {proyecto['nombre']}",
                            form=form)
-
-# ==============================================================================
-# --- GESTIÓN DE ALIAS DE PERFILES ---
-# ==============================================================================
 
 @admin_bp.route('/alias', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -530,7 +494,6 @@ def eliminar_alias(alias_id):
         flash('Alias no encontrado.', 'danger')
     return redirect(url_for('admin.gestionar_alias'))
 
-# --- NUEVA RUTA: IMPORTAR ALIASES EN MASA ---
 @admin_bp.route('/alias/importar', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
 def importar_alias():
@@ -625,10 +588,6 @@ def importar_alias():
 
     return render_template('admin/importar_alias.html', titulo="Importar Alias de Perfiles")
 
-
-# ==============================================================================
-# --- PANELES DE ADMINISTRACIÓN ---
-# ==============================================================================
 
 @admin_bp.route('/eficiencia')
 @roles_required('ADMINISTRADOR')
@@ -726,7 +685,6 @@ def clear_logs():
         
     return redirect(url_for('admin.logs'))
 
-# --- Módulo de Auditoría ---
 @admin_bp.route('/auditoria')
 @roles_required('ADMINISTRADOR')
 def ver_auditoria():
@@ -776,7 +734,6 @@ def ver_auditoria():
                            total=total_acciones,
                            titulo="Historial de Auditoría")
 
-# --- Módulo de Almacenamiento ---
 @admin_bp.route('/storage')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def storage_management():
@@ -815,10 +772,6 @@ def storage_management():
                            num_files=num_files,
                            files_by_ext=dict(files_by_ext))
 
-
-# ==============================================================================
-# --- REPORTES DE CÓMPUTOS MÉTRICOS ---
-# ==============================================================================
 
 def _generate_computos_file(report_data, gran_total, file_format, filtros, proyecto_nombre_filtro):
     """
@@ -864,7 +817,6 @@ def _generate_computos_file(report_data, gran_total, file_format, filtros, proye
 @admin_bp.route('/reportes/computos', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
 def reporte_computos():
-    # Usar request.args para GET y request.form para POST
     form_data = request.args if request.method == 'GET' else request.form
     form = ComputosReportForm(form_data)
 
@@ -872,7 +824,6 @@ def reporte_computos():
     proyectos = db.execute('SELECT id, nombre FROM proyectos ORDER BY nombre').fetchall()
     form.proyecto_id.choices = [(0, 'Todos los Proyectos')] + [(p['id'], p['nombre']) for p in proyectos]
 
-    # Validar solo si hay datos (para no validar en el GET inicial)
     if form_data and form.validate():
         proyecto_id = form.proyecto_id.data
         fecha_inicio = form.fecha_inicio.data

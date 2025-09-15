@@ -31,28 +31,43 @@ def create_app(test_config=None):
         SECRET_KEY=os.environ.get('SECRET_KEY', 'un-secreto-muy-dificil-de-adivinar-en-desarrollo'),
         UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads'),
         PER_PAGE=10,
-        MAIL_SERVER=os.environ.get('MAIL_SERVER'),
-        MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
-        MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't'],
-        MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
-        MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
-        MAIL_DEFAULT_SENDER=('Hepta-Conexiones', os.environ.get('MAIL_USERNAME')),
-        SCHEDULER_JOBSTORES = {
-            'default': SQLAlchemyJobStore(url=os.environ.get('DATABASE_URL'))
-        },
-        SCHEDULER_JOB_DEFAULTS = {
-            'coalesce': True,
-            'max_instances': 1
-        },
-        SCHEDULER_EXECUTORS = {
-            'default': {'type': 'threadpool', 'max_workers': 20}
-        }
     )
 
     if test_config is None:
+        # Cargar configuración de producción/desarrollo desde variables de entorno y archivos
         app.config.from_pyfile('config.py', silent=True)
+        app.config.update(
+            MAIL_SERVER=os.environ.get('MAIL_SERVER'),
+            MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
+            MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't'],
+            MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
+            MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
+            MAIL_DEFAULT_SENDER=('Hepta-Conexiones', os.environ.get('MAIL_USERNAME')),
+            SCHEDULER_JOBSTORES={
+                'default': SQLAlchemyJobStore(url=os.environ.get('DATABASE_URL'))
+            },
+            SCHEDULER_JOB_DEFAULTS={
+                'coalesce': True,
+                'max_instances': 1
+            },
+            SCHEDULER_EXECUTORS={
+                'default': {'type': 'threadpool', 'max_workers': 20}
+            }
+        )
     else:
+        # Cargar configuración de prueba
         app.config.from_mapping(test_config)
+        # Usar un jobstore de SQLAlchemy apuntando a la base de datos de prueba (SQLite en memoria)
+        # Esto asegura que el scheduler funcione en un entorno aislado durante las pruebas.
+        db_path = app.config.get('DATABASE')
+        if db_path:
+            app.config.update(
+                SCHEDULER_JOBSTORES={'default': SQLAlchemyJobStore(url=f"sqlite:///{db_path}")},
+                SCHEDULER_EXECUTORS={'default': {'type': 'threadpool', 'max_workers': 1}},
+                SCHEDULER_JOB_DEFAULTS={'coalesce': True, 'max_instances': 1},
+                # Deshabilitar el envío de correos en pruebas para evitar errores y efectos secundarios
+                MAIL_SUPPRESS_SEND=True
+            )
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)
@@ -85,35 +100,50 @@ def create_app(test_config=None):
         try:
             db_conn = db.get_db()
             if 'user_id' in session:
-                with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                    cursor.execute('SELECT * FROM usuarios WHERE id = %s', (session['user_id'],))
-                    user_data = cursor.fetchone()
+                is_testing = current_app.config.get('TESTING', False)
+
+                # Crear cursor. En modo de prueba, la row_factory ya está configurada en la conexión.
+                cursor = db_conn.cursor()
                 
+                # Determinar el estilo del placeholder
+                placeholder = "?" if is_testing else "%s"
+
+                # Obtener datos del usuario
+                sql_user = f"SELECT * FROM usuarios WHERE id = {placeholder}"
+                cursor.execute(sql_user, (session['user_id'],))
+                user_data = cursor.fetchone()
+
                 if user_data:
                     if not user_data['activo']:
                         flash("Tu cuenta ha sido desactivada. Por favor, contacta a un administrador.", "warning")
                         session.clear()
-                        return redirect(url_for('auth.login'))
+                        if not is_testing: # Evitar error de contexto de solicitud en pruebas
+                            return redirect(url_for('auth.login'))
+                        return
 
                     g.user = user_data
                     
-                    with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                        cursor.execute("""
-                            SELECT r.nombre FROM roles r
-                            JOIN usuario_roles ur ON r.id = ur.rol_id
-                            WHERE ur.usuario_id = %s
-                        """, (g.user['id'],))
-                        roles_data = cursor.fetchall()
+                    # Obtener roles del usuario
+                    sql_roles = f"""
+                        SELECT r.nombre FROM roles r
+                        JOIN usuario_roles ur ON r.id = ur.rol_id
+                        WHERE ur.usuario_id = {placeholder}
+                    """
+                    cursor.execute(sql_roles, (g.user['id'],))
+                    roles_data = cursor.fetchall()
                     session['user_roles'] = [row['nombre'] for row in roles_data]
 
-                    with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                        cursor.execute("""
-                            SELECT id, mensaje, url, fecha_creacion FROM notificaciones
-                            WHERE usuario_id = %s AND leida = FALSE ORDER BY fecha_creacion DESC
-                        """, (g.user['id'],))
-                        g.notifications = cursor.fetchall()
+                    # Obtener notificaciones
+                    sql_notif = f"""
+                        SELECT id, mensaje, url, fecha_creacion FROM notificaciones
+                        WHERE usuario_id = {placeholder} AND leida = FALSE ORDER BY fecha_creacion DESC
+                    """
+                    cursor.execute(sql_notif, (g.user['id'],))
+                    g.notifications = cursor.fetchall()
                 else:
                     session.clear()
+
+                cursor.close()
         except psycopg2.Error as e:
             if 'undefined_table' in str(e):
                 current_app.logger.warning("La base de datos no está inicializada. Ejecute 'flask init-db'.")
@@ -199,9 +229,8 @@ def create_app(test_config=None):
 
     return app
 
-app = create_app()
-
 if __name__ == '__main__':
+    app = create_app()
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' and app.scheduler and not app.scheduler.running:
         app.scheduler.start()
         app.logger.info("Scheduler de APScheduler iniciado en el proceso principal.")

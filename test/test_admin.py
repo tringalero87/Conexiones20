@@ -60,34 +60,44 @@ def test_prevent_last_admin_deletion(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        # Ensure a clean state with only one administrator
-        db.execute("DELETE FROM usuarios")
+        # 1. Ensure a clean state with only one administrator
+        db.execute("DELETE FROM usuarios WHERE username != 'admin'")
+        db.execute("DELETE FROM usuario_roles WHERE usuario_id != (SELECT id FROM usuarios WHERE username = 'admin')")
 
-        password_hash = generate_password_hash('password')
+        # 2. Get the ID of the existing admin
+        admin_user = db.execute("SELECT id FROM usuarios WHERE username = 'admin'").fetchone()
+        assert admin_user is not None, "The admin user from conftest should exist."
+        last_admin_id = admin_user['id']
+
+        # 3. Ensure no other admins exist
+        admin_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'").fetchone()['id']
+        count_admins = db.execute("SELECT COUNT(usuario_id) as total FROM usuario_roles WHERE rol_id = ?", (admin_role_id,)).fetchone()['total']
+        assert count_admins == 1, "There should be exactly one admin at the start of the test."
+
+        # 4. Create a second, temporary admin to perform the deletion
+        deleter_admin_pass = generate_password_hash('deleterpass')
         cursor = db.execute(
             'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)',
-            ('the_last_admin', 'The Last Admin', 'tla@test.com', password_hash, 1)
+            ('deleter_admin', 'Deleter Admin', 'deleter@test.com', deleter_admin_pass, 1)
         )
-        last_admin_id = cursor.lastrowid
-
-        admin_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'").fetchone()['id']
-        db.execute('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)', (last_admin_id, admin_role_id))
+        deleter_admin_id = cursor.lastrowid
+        db.execute('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)', (deleter_admin_id, admin_role_id))
         db.commit()
 
-    # Log in as the last admin
-    auth.login('the_last_admin', 'password')
+    # 5. Log in as the temporary admin
+    auth.login('deleter_admin', 'deleterpass')
 
-    # Attempt to delete the last admin (self-deletion in this case) without following redirects
+    # 6. Attempt to delete the original, last admin
     response = client.post(f'/admin/usuarios/{last_admin_id}/eliminar', follow_redirects=False)
     assert response.status_code == 302 # Should redirect
 
-    # Check the flashed message in the session
+    # 7. Check for the correct flash message
     with client.session_transaction() as session:
         assert '_flashes' in session
         flashes = [msg for cat, msg in session['_flashes']]
         assert 'No se puede eliminar al último administrador del sistema.' in flashes
 
-    # Verify the user was NOT deleted.
+    # 8. Verify the user was NOT deleted.
     with app.app_context():
         db = get_db()
         user = db.execute("SELECT * FROM usuarios WHERE id = ?", (last_admin_id,)).fetchone()

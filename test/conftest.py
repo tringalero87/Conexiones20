@@ -1,10 +1,14 @@
 import os
+import sys
 import tempfile
 import pytest
 from werkzeug.security import generate_password_hash
 
+# Add project root to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from app import create_app
-from db import get_db
+from db import get_db, init_db
 
 @pytest.fixture
 def app():
@@ -18,7 +22,7 @@ def app():
     })
 
     with app.app_context():
-        get_db().executescript(app.open_resource('schema.sql').read().decode('utf8'))
+        init_db()
 
         db = get_db()
 

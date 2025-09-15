@@ -307,6 +307,10 @@ def eliminar_usuario(usuario_id):
     """Elimina un usuario (solo para administradores)."""
     db = get_db()
 
+    if usuario_id == g.user['id']:
+        flash('No puedes eliminar tu propia cuenta.', 'danger')
+        return redirect(url_for('admin.listar_usuarios'))
+
     is_admin_query = db.execute("""
         SELECT 1 FROM usuario_roles ur
         JOIN roles r ON ur.rol_id = r.id
@@ -324,10 +328,6 @@ def eliminar_usuario(usuario_id):
         if admin_count_query and admin_count_query['admin_count'] <= 1:
             flash('No se puede eliminar al último administrador del sistema.', 'danger')
             return redirect(url_for('admin.listar_usuarios'))
-
-    if usuario_id == g.user['id']:
-        flash('No puedes eliminar tu propia cuenta.', 'danger')
-        return redirect(url_for('admin.listar_usuarios'))
 
     proyectos_asignados = db.execute(
         "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = ?",

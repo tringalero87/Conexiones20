@@ -32,15 +32,23 @@
                 </td>
                 <td class="text-center">
                     {# Lógica para la Priorización Visual #}
-                    {% set fecha_creacion = task.fecha_creacion|fromjson if task.fecha_creacion is string else task.fecha_creacion %}
-                    {% set dias_transcurridos = (datetime.now() - fecha_creacion).days %}
-                    
-                    {% if dias_transcurridos > 7 %}
-                        <span class="badge bg-danger" title="Más de 7 días sin actualizar"><i class="bi bi-exclamation-triangle-fill"></i> Crítico</span>
-                    {% elif dias_transcurridos > 3 %}
-                        <span class="badge bg-warning text-dark" title="Más de 3 días sin actualizar"><i class="bi bi-clock-history"></i> Urgente</span>
+                    {% if task.fecha_creacion %}
+                        {% set fecha_creacion = task.fecha_creacion|fromjson if task.fecha_creacion is string else task.fecha_creacion %}
+                        {% if fecha_creacion %}
+                            {% set dias_transcurridos = (datetime.now() - fecha_creacion).days %}
+
+                            {% if dias_transcurridos > 7 %}
+                                <span class="badge bg-danger" title="Más de 7 días sin actualizar"><i class="bi bi-exclamation-triangle-fill"></i> Crítico</span>
+                            {% elif dias_transcurridos > 3 %}
+                                <span class="badge bg-warning text-dark" title="Más de 3 días sin actualizar"><i class="bi bi-clock-history"></i> Urgente</span>
+                            {% else %}
+                                 <span class="badge bg-success">Normal</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-secondary">N/A</span>
+                        {% endif %}
                     {% else %}
-                         <span class="badge bg-success">Normal</span>
+                        <span class="badge bg-secondary">N/A</span>
                     {% endif %}
                 </td>
                 <td class="text-end">

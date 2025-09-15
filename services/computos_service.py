@@ -1,4 +1,3 @@
-# This file will contain the business logic for calculating metric computations.
 import json
 from flask import g
 from db import get_db, log_action
@@ -37,22 +36,16 @@ def get_computos_results(conexion):
             })
     return resultados, detalles
 
-import sqlite3
-
 def calculate_and_save_computos(conexion_id, form_data, user_id):
     """
     Calculates and saves the metric computations for a connection.
     """
     db = get_db()
-    is_postgres = hasattr(db, 'cursor')
-    placeholder = '%s' if is_postgres else '?'
+    placeholder = '%s'
 
-    if is_postgres:
-        with db.cursor() as cursor:
-            cursor.execute(f'SELECT * FROM conexiones WHERE id = {placeholder}', (conexion_id,))
-            conexion = cursor.fetchone()
-    else:
-        conexion = db.execute(f'SELECT * FROM conexiones WHERE id = {placeholder}', (conexion_id,)).fetchone()
+    with db.cursor() as cursor:
+        cursor.execute(f'SELECT * FROM conexiones WHERE id = {placeholder}', (conexion_id,))
+        conexion = cursor.fetchone()
 
     if not conexion:
         return None, "La conexión no existe.", None, None
@@ -102,11 +95,8 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
     if not has_error:
         sql = f'UPDATE conexiones SET detalles_json = {placeholder}, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = {placeholder}'
         params = (json.dumps(updated_detalles), conexion_id)
-        if is_postgres:
-            with db.cursor() as cursor:
-                cursor.execute(sql, params)
-        else:
-            db.execute(sql, params)
+        with db.cursor() as cursor:
+            cursor.execute(sql, params)
         db.commit()
         log_action('CALCULAR_COMPUTOS', user_id, 'conexiones', conexion_id,
                    f"Cómputos métricos calculados y guardados para conexión '{conexion['codigo_conexion']}'.")

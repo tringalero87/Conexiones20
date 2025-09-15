@@ -1,12 +1,3 @@
-"""
-db.py
-
-Este módulo centraliza toda la lógica de conexión y gestión de la base de datos.
-Su propósito es desacoplar la base de datos de la aplicación principal,
-lo que previene errores de importación circular y sigue las mejores prácticas
-recomendadas por Flask para el manejo de recursos.
-"""
-
 import click
 from flask import current_app, g
 from flask.cli import with_appcontext

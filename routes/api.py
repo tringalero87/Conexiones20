@@ -1,11 +1,3 @@
-"""
-routes/api.py
-
-Este archivo contiene todos los endpoints de la API de la aplicación.
-Las APIs son rutas especiales que no devuelven una página HTML completa, sino
-datos en formato JSON. Son utilizadas por el código JavaScript del frontend para
-obtener información de forma dinámica sin tener que recargar la página.
-"""
 import json
 import os
 import re

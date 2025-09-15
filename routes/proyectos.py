@@ -1,24 +1,13 @@
-"""
-routes/proyectos.py
-
-Este archivo contiene todas las rutas y la lógica de negocio relacionadas con
-la gestión de proyectos en la aplicación Hepta-Conexiones. Incluye la creación,
-listado, visualización de detalles, edición y eliminación de proyectos.
-"""
-
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, url_for, session, current_app
 )
 from werkzeug.exceptions import abort
 
-# Se importa el módulo de base de datos, el decorador de roles y el formulario de proyecto.
-from db import get_db, log_action # Importar log_action
+from db import get_db, log_action
 from . import roles_required
 from forms import ProjectForm
-import json # Importar json para log_action
+import json
 
-# Se define el Blueprint para agrupar todas las rutas de este módulo.
-# El prefijo /proyectos asegura que todas las rutas aquí definidas comiencen con esa URL.
 proyectos_bp = Blueprint('proyectos', __name__, url_prefix='/proyectos')
 
 @proyectos_bp.route('/')
@@ -32,29 +21,31 @@ def listar_proyectos():
     db = get_db()
     user_roles = session.get('user_roles', [])
     
-    # Si el usuario es ADMINISTRADOR, se le muestran todos los proyectos.
     if 'ADMINISTRADOR' in user_roles:
-        proyectos = db.execute(
-            """SELECT p.id, p.nombre, p.descripcion, p.fecha_creacion, u.nombre_completo as creador,
-                      (SELECT COUNT(c.id) FROM conexiones c WHERE c.proyecto_id = p.id) as num_conexiones
-               FROM proyectos p LEFT JOIN usuarios u ON p.creador_id = u.id
-               ORDER BY p.fecha_creacion DESC"""
-        ).fetchall()
-    # Si no, se muestran solo los proyectos a los que el usuario está explícitamente asignado.
+        with db.cursor() as cursor:
+            cursor.execute(
+                """SELECT p.id, p.nombre, p.descripcion, p.fecha_creacion, u.nombre_completo as creador,
+                          (SELECT COUNT(c.id) FROM conexiones c WHERE c.proyecto_id = p.id) as num_conexiones
+                   FROM proyectos p LEFT JOIN usuarios u ON p.creador_id = u.id
+                   ORDER BY p.fecha_creacion DESC"""
+            )
+            proyectos = cursor.fetchall()
     else:
-        proyectos = db.execute(
-            """SELECT p.id, p.nombre, p.descripcion, p.fecha_creacion, u.nombre_completo as creador,
-                      (SELECT COUNT(c.id) FROM conexiones c WHERE c.proyecto_id = p.id) as num_conexiones
-               FROM proyectos p
-               JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
-               LEFT JOIN usuarios u ON p.creador_id = u.id
-               WHERE pu.usuario_id = ?
-               ORDER BY p.fecha_creacion DESC""",
-            (g.user['id'],)
-        ).fetchall()
+        with db.cursor() as cursor:
+            cursor.execute(
+                """SELECT p.id, p.nombre, p.descripcion, p.fecha_creacion, u.nombre_completo as creador,
+                          (SELECT COUNT(c.id) FROM conexiones c WHERE c.proyecto_id = p.id) as num_conexiones
+                   FROM proyectos p
+                   JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
+                   LEFT JOIN usuarios u ON p.creador_id = u.id
+                   WHERE pu.usuario_id = %s
+                   ORDER BY p.fecha_creacion DESC""",
+                (g.user['id'],)
+            )
+            proyectos = cursor.fetchall()
     
     log_action('VER_PROYECTOS', g.user['id'], 'proyectos', None, 
-               f"Visualizó la lista de proyectos.") # Auditoría
+               f"Visualizó la lista de proyectos.")
     return render_template('proyectos.html', proyectos=proyectos, titulo="Proyectos")
 
 
@@ -67,35 +58,37 @@ def detalle_proyecto(proyecto_id):
     """
     db = get_db()
     
-    # Se obtienen los detalles del proyecto.
-    proyecto = db.execute(
-        'SELECT p.*, u.nombre_completo as creador FROM proyectos p '
-        'LEFT JOIN usuarios u ON p.creador_id = u.id WHERE p.id = ?', (proyecto_id,)
-    ).fetchone()
+    with db.cursor() as cursor:
+        cursor.execute(
+            'SELECT p.*, u.nombre_completo as creador FROM proyectos p '
+            'LEFT JOIN usuarios u ON p.creador_id = u.id WHERE p.id = %s', (proyecto_id,)
+        )
+        proyecto = cursor.fetchone()
 
     if proyecto is None:
         abort(404, f"El proyecto con id {proyecto_id} no existe.")
 
-    # Lógica de paginación para las conexiones del proyecto.
     page = request.args.get('page', 1, type=int)
     per_page = current_app.config['PER_PAGE']
     offset = (page - 1) * per_page
 
-    # Consulta para obtener las conexiones de la página actual.
-    conexiones = db.execute(
-        'SELECT c.*, u.nombre_completo as solicitante_nombre '
-        'FROM conexiones c LEFT JOIN usuarios u ON c.solicitante_id = u.id '
-        'WHERE c.proyecto_id = ? ORDER BY c.fecha_creacion DESC LIMIT ? OFFSET ?',
-        (proyecto_id, per_page, offset)
-    ).fetchall()
+    with db.cursor() as cursor:
+        cursor.execute(
+            'SELECT c.*, u.nombre_completo as solicitante_nombre '
+            'FROM conexiones c LEFT JOIN usuarios u ON c.solicitante_id = u.id '
+            'WHERE c.proyecto_id = %s ORDER BY c.fecha_creacion DESC LIMIT %s OFFSET %s',
+            (proyecto_id, per_page, offset)
+        )
+        conexiones = cursor.fetchall()
 
-    # Consulta para obtener el número total de conexiones para construir los controles de paginación.
-    total_conexiones = db.execute(
-        'SELECT COUNT(id) as total FROM conexiones WHERE proyecto_id = ?', (proyecto_id,)
-    ).fetchone()['total']
+    with db.cursor() as cursor:
+        cursor.execute(
+            'SELECT COUNT(id) as total FROM conexiones WHERE proyecto_id = %s', (proyecto_id,)
+        )
+        total_conexiones = cursor.fetchone()['total']
 
     log_action('VER_DETALLE_PROYECTO', g.user['id'], 'proyectos', proyecto_id, 
-               f"Visualizó el detalle del proyecto '{proyecto['nombre']}'.") # Auditoría
+               f"Visualizó el detalle del proyecto '{proyecto['nombre']}'.")
     return render_template(
         'proyecto_detalle.html',
         proyecto=proyecto,
@@ -116,21 +109,22 @@ def nuevo_proyecto():
     form = ProjectForm()
     if form.validate_on_submit():
         db = get_db()
-        # Se verifica que no exista otro proyecto con el mismo nombre (insensible a mayúsculas y minúsculas).
-        if db.execute('SELECT id FROM proyectos WHERE LOWER(nombre) = ?', (form.nombre.data.lower(),)).fetchone() is not None:
-            flash(f"El proyecto '{form.nombre.data}' ya existe.", 'danger')
-        else:
-            cursor = db.execute(
-                'INSERT INTO proyectos (nombre, descripcion, creador_id) VALUES (?, ?, ?)',
-                (form.nombre.data, form.descripcion.data, g.user['id'])
-            )
-            new_project_id = cursor.lastrowid
-            db.commit()
-            log_action('CREAR_PROYECTO', g.user['id'], 'proyectos', new_project_id, 
-                       f"Proyecto '{form.nombre.data}' creado.") # Auditoría
-            current_app.logger.info(f"Admin '{g.user['username']}' creó el proyecto '{form.nombre.data}'.")
-            flash('Proyecto creado con éxito.', 'success')
-            return redirect(url_for('proyectos.listar_proyectos'))
+        with db.cursor() as cursor:
+            cursor.execute('SELECT id FROM proyectos WHERE LOWER(nombre) = %s', (form.nombre.data.lower(),))
+            if cursor.fetchone() is not None:
+                flash(f"El proyecto '{form.nombre.data}' ya existe.", 'danger')
+            else:
+                cursor.execute(
+                    'INSERT INTO proyectos (nombre, descripcion, creador_id) VALUES (%s, %s, %s) RETURNING id',
+                    (form.nombre.data, form.descripcion.data, g.user['id'])
+                )
+                new_project_id = cursor.fetchone()['id']
+                db.commit()
+                log_action('CREAR_PROYECTO', g.user['id'], 'proyectos', new_project_id,
+                           f"Proyecto '{form.nombre.data}' creado.")
+                current_app.logger.info(f"Admin '{g.user['username']}' creó el proyecto '{form.nombre.data}'.")
+                flash('Proyecto creado con éxito.', 'success')
+                return redirect(url_for('proyectos.listar_proyectos'))
 
     return render_template('proyecto_form.html', form=form, titulo="Nuevo Proyecto")
 
@@ -142,26 +136,30 @@ def editar_proyecto(proyecto_id):
     Solo los administradores pueden editar proyectos.
     """
     db = get_db()
-    proyecto = db.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone()
+    with db.cursor() as cursor:
+        cursor.execute('SELECT * FROM proyectos WHERE id = %s', (proyecto_id,))
+        proyecto = cursor.fetchone()
     if not proyecto:
         abort(404)
 
-    form = ProjectForm(obj=proyecto) # Carga los datos del proyecto en el formulario para pre-rellenarlo.
+    form = ProjectForm(obj=proyecto)
     if form.validate_on_submit():
-        # Se verifica que el nuevo nombre no entre en conflicto con otro proyecto (insensible a mayúsculas y minúsculas).
-        conflicto = db.execute(
-            'SELECT id FROM proyectos WHERE LOWER(nombre) = ? AND id != ?',
-            (form.nombre.data.lower(), proyecto_id)
-        ).fetchone()
+        with db.cursor() as cursor:
+            cursor.execute(
+                'SELECT id FROM proyectos WHERE LOWER(nombre) = %s AND id != %s',
+                (form.nombre.data.lower(), proyecto_id)
+            )
+            conflicto = cursor.fetchone()
         if conflicto:
             flash(f"Ya existe otro proyecto con el nombre '{form.nombre.data}'.", 'danger')
         else:
-            old_data = dict(proyecto) # Guardar datos antiguos para auditoría
+            old_data = dict(proyecto)
             
-            db.execute(
-                'UPDATE proyectos SET nombre = ?, descripcion = ? WHERE id = ?',
-                (form.nombre.data, form.descripcion.data, proyecto_id)
-            )
+            with db.cursor() as cursor:
+                cursor.execute(
+                    'UPDATE proyectos SET nombre = %s, descripcion = %s WHERE id = %s',
+                    (form.nombre.data, form.descripcion.data, proyecto_id)
+                )
             db.commit()
             
             changes = {}
@@ -172,12 +170,11 @@ def editar_proyecto(proyecto_id):
 
             if changes:
                 log_action('EDITAR_PROYECTO', g.user['id'], 'proyectos', proyecto_id, 
-                           f"Proyecto '{old_data['nombre']}' editado. Cambios: {json.dumps(changes)}") # Auditoría
+                           f"Proyecto '{old_data['nombre']}' editado. Cambios: {json.dumps(changes)}")
             current_app.logger.info(f"Admin '{g.user['username']}' editó el proyecto '{form.nombre.data}'.")
             flash('Proyecto actualizado con éxito.', 'success')
             return redirect(url_for('proyectos.listar_proyectos'))
     
-    # Para una solicitud GET, o si el formulario no se ha enviado, se rellena con los datos existentes.
     if request.method == 'GET':
         form.nombre.data = proyecto['nombre']
         form.descripcion.data = proyecto['descripcion']
@@ -193,9 +190,12 @@ def eliminar_proyecto(proyecto_id):
     automáticamente todos los registros hijos.
     """
     db = get_db()
-    proyecto = db.execute('SELECT nombre FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone()
+    with db.cursor() as cursor:
+        cursor.execute('SELECT nombre FROM proyectos WHERE id = %s', (proyecto_id,))
+        proyecto = cursor.fetchone()
     if proyecto:
-        db.execute('DELETE FROM proyectos WHERE id = ?', (proyecto_id,))
+        with db.cursor() as cursor:
+            cursor.execute('DELETE FROM proyectos WHERE id = %s', (proyecto_id,))
         db.commit()
         log_action('ELIMINAR_PROYECTO', g.user['id'], 'proyectos', proyecto_id, 
                    f"Proyecto '{proyecto['nombre']}' eliminado (y sus conexiones).") # Auditoría

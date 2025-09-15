@@ -1,11 +1,3 @@
-"""
-app.py
-
-Este es el archivo principal que contiene la fábrica de la aplicación Flask ("Application Factory").
-Se encarga de configurar, inicializar y unir todos los componentes del proyecto:
-configuración, extensiones, blueprints (rutas), manejadores de errores y logging.
-Este patrón de diseño hace que la aplicación sea más modular, fácil de probar y escalable.
-"""
 import os
 import logging
 from logging.handlers import RotatingFileHandler

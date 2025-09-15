@@ -98,10 +98,7 @@ ALLOWED_EXTENSIONS = {
 }
 
 def allowed_file(filename):
-    """Función auxiliar para verificar si la extensión de un archivo es válida.
-    Permite extensiones de la lista blanca.
-    CORRECCIÓN DE SEGURIDAD: Se eliminan las reglas inseguras de archivos sin extensión y patrones amplios.
-    """
+    """Función auxiliar para verificar si la extensión de un archivo es válida."""
     if '.' not in filename or filename.startswith('.'):
         return False
 
@@ -480,10 +477,6 @@ from services.import_service import importar_conexiones_from_file
 def importar_conexiones(proyecto_id):
     """
     Gestiona la importación masiva de conexiones desde un archivo Excel.
-    RECOMENDACIÓN: La importación de archivos grandes puede ser un proceso lento.
-    Para mejorar la experiencia del usuario, esta tarea debería ejecutarse de forma asíncrona
-    utilizando una cola de tareas como Celery. El usuario podría subir el archivo, recibir una
-    confirmación inmediata y ser notificado cuando la importación haya finalizado.
     """
     db = get_db()
     is_postgres = hasattr(db, 'cursor')
@@ -840,9 +833,6 @@ def computos_metricos(conexion_id):
 def reporte_computos(conexion_id):
     """
     Genera y muestra un reporte imprimible de cómputos métricos.
-    RECOMENDACIÓN: La generación de reportes (especialmente si se convierten a PDF)
-    puede ser una tarea intensiva. Considera usar una cola de tareas como Celery
-    para generar el reporte en segundo plano y notificar al usuario cuando esté listo.
     """
     conexion = _get_conexion(conexion_id)
     resultados, _ = get_computos_results(conexion)
@@ -860,9 +850,6 @@ def reporte_computos(conexion_id):
 def reporte_conexion(conexion_id):
     """
     Genera y muestra un reporte detallado de una conexión para impresión.
-    RECOMENDACIÓN: La generación de reportes (especialmente si se convierten a PDF)
-    puede ser una tarea intensiva. Considera usar una cola de tareas como Celery
-    para generar el reporte en segundo plano y notificar al usuario cuando esté listo.
     """
     db = get_db()
     conexion = _get_conexion(conexion_id)

@@ -1,10 +1,3 @@
-"""
-routes/admin.py
-
-Este archivo contiene todas las rutas y la lógica para el panel de administración
-de la aplicación Hepta-Conexiones. Todas las rutas en este módulo están protegidas
-y solo son accesibles para usuarios con el rol de 'ADMINISTRADOR'.
-"""
 import os
 import json
 import re

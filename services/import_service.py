@@ -1,4 +1,3 @@
-# This file will contain the business logic for importing connections.
 import pandas as pd
 import json
 from db import get_db, log_action
@@ -10,15 +9,11 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
     Gestiona la importación masiva de conexiones desde un archivo Excel.
     """
     db = get_db()
-    is_postgres = hasattr(db, 'cursor')
-    placeholder = '%s' if is_postgres else '?'
+    placeholder = '%s'
 
-    if is_postgres:
-        with db.cursor() as cursor:
-            cursor.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,))
-            proyecto = cursor.fetchone()
-    else:
-        proyecto = db.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,)).fetchone()
+    with db.cursor() as cursor:
+        cursor.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,))
+        proyecto = cursor.fetchone()
     if not proyecto:
         return 0, [], "El proyecto no existe."
 
@@ -33,15 +28,11 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
         imported_count = 0
         error_rows = []
 
-        if is_postgres:
-            with db.cursor() as cursor:
-                cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
-                aliases = cursor.fetchall()
-                cursor.execute("SELECT codigo_conexion FROM conexiones")
-                existing_codes = set(row['codigo_conexion'] for row in cursor.fetchall())
-        else:
-            aliases = db.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil").fetchall()
-            existing_codes = set(row['codigo_conexion'] for row in db.execute("SELECT codigo_conexion FROM conexiones").fetchall())
+        with db.cursor() as cursor:
+            cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
+            aliases = cursor.fetchall()
+            cursor.execute("SELECT codigo_conexion FROM conexiones")
+            existing_codes = set(row['codigo_conexion'] for row in cursor.fetchall())
 
         alias_map_by_fullname = {row['nombre_perfil']: row['alias'] for row in aliases}
 
@@ -104,15 +95,10 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
 
                 sql_insert_historial = f"INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES ({placeholder}, {placeholder}, {placeholder})"
 
-                if is_postgres:
-                    with db.cursor() as cursor:
-                        cursor.execute(sql_insert_conexion, params_conexion)
-                        new_conexion_id = cursor.fetchone()['id']
-                        cursor.execute(sql_insert_historial, (new_conexion_id, user_id, 'SOLICITADO'))
-                else:
-                    cursor = db.execute(sql_insert_conexion.replace('%s', '?'), params_conexion)
-                    new_conexion_id = cursor.lastrowid
-                    db.execute(sql_insert_historial.replace('%s', '?'), (new_conexion_id, user_id, 'SOLICITADO'))
+                with db.cursor() as cursor:
+                    cursor.execute(sql_insert_conexion, params_conexion)
+                    new_conexion_id = cursor.fetchone()['id']
+                    cursor.execute(sql_insert_historial, (new_conexion_id, user_id, 'SOLICITADO'))
                 db.commit()
                 log_action('IMPORTAR_CONEXION', user_id, 'conexiones', new_conexion_id,
                            f"Conexión '{codigo_conexion_final}' importada en proyecto '{proyecto['nombre']}'.")

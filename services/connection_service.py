@@ -21,16 +21,13 @@ def get_tipologia_config(tipo, subtipo, tipologia_nombre):
         current_app.logger.error(f"Error al cargar configuración de tipología: {e}")
         return None
 
-import sqlite3
-
 def _get_conexion(conexion_id):
     """
     Función auxiliar para obtener una conexión y sus datos asociados desde la base de datos.
     Lanza un error 404 si la conexión no se encuentra.
     """
     db = get_db()
-    is_postgres = hasattr(db, 'cursor')
-    placeholder = '%s' if is_postgres else '?'
+    placeholder = '%s'
 
     conexion_query = f"""
         SELECT c.*, p.nombre as proyecto_nombre,
@@ -45,12 +42,9 @@ def _get_conexion(conexion_id):
         WHERE c.id = {placeholder}
     """
 
-    if is_postgres:
-        with db.cursor() as cursor:
-            cursor.execute(conexion_query, (conexion_id,))
-            conexion = cursor.fetchone()
-    else:
-        conexion = db.execute(conexion_query, (conexion_id,)).fetchone()
+    with db.cursor() as cursor:
+        cursor.execute(conexion_query, (conexion_id,))
+        conexion = cursor.fetchone()
 
     if conexion is None:
         from flask import abort
@@ -60,8 +54,6 @@ def _get_conexion(conexion_id):
 def _send_email_notification(recipients, subject, template, **kwargs):
     """
     Función auxiliar para enviar notificaciones por correo electrónico de forma asíncrona.
-    RECOMENDACIÓN: Para una aplicación en producción, es mejor usar una cola de tareas como Celery
-    en lugar de hilos de threading directamente para manejar el envío de correos.
     """
     if not recipients:
         return # No enviar si no hay destinatarios
@@ -95,15 +87,9 @@ def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
     """
     conexion = _get_conexion(conexion_id)
     proyecto_id = conexion['proyecto_id']
-    is_postgres = hasattr(db, 'cursor')
 
-    # Adaptar placeholders para la consulta IN
-    if is_postgres:
-        placeholders = ', '.join(['%s'] * len(roles_to_notify))
-        params = [proyecto_id] + roles_to_notify
-    else:
-        placeholders = ', '.join(['?'] * len(roles_to_notify))
-        params = [proyecto_id] + roles_to_notify
+    placeholders = ', '.join(['%s'] * len(roles_to_notify))
+    params = [proyecto_id] + roles_to_notify
 
     query = f"""
         SELECT DISTINCT u.id, u.email, u.nombre_completo, COALESCE(pn.email_notif_estado, TRUE) as email_notif_estado
@@ -112,29 +98,21 @@ def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
         JOIN usuario_roles ur ON u.id = ur.usuario_id
         JOIN roles r ON ur.rol_id = r.id
         LEFT JOIN preferencias_notificaciones pn ON u.id = pn.usuario_id
-        WHERE pu.proyecto_id = {'%s' if is_postgres else '?'} AND r.nombre IN ({placeholders}) AND u.activo = TRUE
+        WHERE pu.proyecto_id = %s AND r.nombre IN ({placeholders}) AND u.activo = TRUE
     """
 
-    if is_postgres:
-        with db.cursor() as cursor:
-            cursor.execute(query, params)
-            users_to_notify = cursor.fetchall()
-    else:
-        users_to_notify = db.execute(query, params).fetchall()
+    with db.cursor() as cursor:
+        cursor.execute(query, params)
+        users_to_notify = cursor.fetchall()
 
     # First, insert all internal notifications to ensure DB persistence
     for user in users_to_notify:
         if user['id'] != g.user['id'] or (url_suffix == "" and "RECHAZADO" in message):
             sql_insert = "INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES (%s, %s, %s, %s)"
             insert_params = (user['id'], message, url_for('conexiones.detalle_conexion', conexion_id=conexion_id) + url_suffix, conexion_id)
-            if not is_postgres:
-                sql_insert = sql_insert.replace('%s', '?')
 
-            if is_postgres:
-                with db.cursor() as cursor:
-                    cursor.execute(sql_insert, insert_params)
-            else:
-                db.execute(sql_insert, insert_params)
+            with db.cursor() as cursor:
+                cursor.execute(sql_insert, insert_params)
     db.commit()
 
     # Now, send emails
@@ -157,15 +135,11 @@ def process_connection_state_transition(db, conexion_id, new_status_form, user_i
     Procesa un cambio de estado de conexión de forma centralizada.
     Retorna (success, message, new_db_state_name_for_audit)
     """
-    is_postgres = hasattr(db, 'cursor')
-    placeholder = '%s' if is_postgres else '?'
+    placeholder = '%s'
 
     def execute_query(sql, params):
-        if is_postgres:
-            with db.cursor() as cursor:
-                cursor.execute(sql, params)
-        else:
-            db.execute(sql, params)
+        with db.cursor() as cursor:
+            cursor.execute(sql, params)
 
     conexion = _get_conexion(conexion_id)
     estado_actual = conexion['estado']

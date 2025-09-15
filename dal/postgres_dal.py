@@ -22,7 +22,6 @@ class PostgresDAL(BaseDAL):
             return cursor.fetchone()
 
     def get_conexiones_by_proyecto(self, proyecto_id):
-        # This method is not implemented yet.
         pass
 
     def create_conexion(self, conexion_data):

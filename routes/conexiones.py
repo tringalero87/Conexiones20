@@ -1,4 +1,3 @@
-# Hepta_Conexiones/routes/conexiones.py
 import os
 import json
 import datetime
@@ -16,12 +15,10 @@ from db import get_db, log_action
 from . import roles_required
 from forms import ConnectionForm
 from utils.computos import calcular_peso_perfil
-import re # Asegúrate de que re esté importado al inicio del archivo
+import re
 
-# Se define el Blueprint para agrupar todas las rutas de este módulo.
 conexiones_bp = Blueprint('conexiones', __name__, url_prefix='/conexiones')
 
-# Define las extensiones de archivo permitidas para la subida.
 ALLOWED_EXTENSIONS = {
     'csv', 'ideacon', 'j1', 'j10', 'j100', 'j100000007', 'j1001', 'j1002', 'j1003', 'j1004',
     'j1006', 'j101', 'j1010', 'j1011', 'j1013', 'j1014', 'j1015', 'j1016', 'j1017', 'j1019',
@@ -105,21 +102,14 @@ def allowed_file(filename):
     Permite extensiones de la lista blanca.
     CORRECCIÓN DE SEGURIDAD: Se eliminan las reglas inseguras de archivos sin extensión y patrones amplios.
     """
-    # 1. CORRECCIÓN DE SEGURIDAD: NO permitir archivos sin extensión o que comiencen con un punto (dotfiles).
-    # Un archivo sin nombre de base o un archivo oculto puede ser un vector de ataque o un error.
     if '.' not in filename or filename.startswith('.'):
         return False
 
     extension = filename.rsplit('.', 1)[1].lower()
 
-    # 2. Permitir solo extensiones de la lista blanca estándar
     return extension in ALLOWED_EXTENSIONS
 
 from services.connection_service import process_connection_state_transition, _get_conexion, _notify_users, get_tipologia_config
-
-
-
-# --- Rutas para CREAR Conexiones ---
 
 @conexiones_bp.route('/crear', methods=['GET'])
 @roles_required('ADMINISTRADOR', 'SOLICITANTE')
@@ -211,7 +201,6 @@ def procesar_creacion_conexion():
             flash(f"El campo 'Perfil {i}' es obligatorio.", "danger")
             return redirect(url_for('conexiones.crear_conexion_form', proyecto_id=proyecto_id, tipo=tipo, subtipo=subtipo, tipologia=tipologia_nombre))
         
-        # Buscar alias para el nombre_completo_perfil
         if is_postgres:
             with db.cursor() as cursor:
                 cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {placeholder}', (nombre_completo_perfil,))
@@ -226,7 +215,6 @@ def procesar_creacion_conexion():
 
     codigo_conexion_base = plantilla_codigo.format(**perfiles_para_plantilla)
 
-    # Optimización: chequear existencia y luego iterar si es necesario.
     if is_postgres:
         with db.cursor() as cursor:
             cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {placeholder}', (codigo_conexion_base,))
@@ -270,13 +258,10 @@ def procesar_creacion_conexion():
     db.commit()
 
     log_action('CREAR_CONEXION', g.user['id'], 'conexiones', new_conexion_id, 
-               f"Conexión '{codigo_conexion_final}' creada en proyecto '{_get_conexion(new_conexion_id)['proyecto_nombre']}'.") # Auditoría
+               f"Conexión '{codigo_conexion_final}' creada en proyecto '{_get_conexion(new_conexion_id)['proyecto_nombre']}'.")
     _notify_users(db, new_conexion_id, f"Nueva conexión '{codigo_conexion_final}' lista para ser tomada.", "", ['REALIZADOR', 'ADMINISTRADOR'])
     flash(f'Conexión {codigo_conexion_final} creada con éxito.', 'success')
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=new_conexion_id))
-
-
-# --- Rutas de Gestión de Conexiones ---
 
 @conexiones_bp.route('/<int:conexion_id>')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -329,7 +314,6 @@ def editar_conexion(conexion_id):
     user_roles = session.get('user_roles', [])
     user_id = g.user['id']
 
-    # --- Lógica de Autorización Mejorada ---
     can_edit = False
     if 'ADMINISTRADOR' in user_roles:
         can_edit = True
@@ -339,11 +323,9 @@ def editar_conexion(conexion_id):
         can_edit = True
 
     if not can_edit:
-        # Se verifica si el estado es el motivo por el cual no se puede editar para dar un mensaje más claro.
         if conexion['estado'] not in ['SOLICITADO', 'EN_PROCESO']:
              flash('Esta conexión ya no puede ser editada porque ha avanzado en el flujo de trabajo.', 'warning')
         else:
-             # Si el estado es correcto pero el usuario no es el propietario, se deniega el acceso.
              abort(403)
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
@@ -355,8 +337,6 @@ def editar_conexion(conexion_id):
     num_perfiles = tipologia_config.get('perfiles', 0)
     
     form = ConnectionForm()
-    # Eliminar campos de perfil no necesarios de la instancia del formulario
-    # Esto es un workaround. Lo ideal sería construir el formulario dinámicamente.
     if num_perfiles < 3 and hasattr(form, 'perfil_3'):
         del form.perfil_3
     if num_perfiles < 2 and hasattr(form, 'perfil_2'):
@@ -366,11 +346,9 @@ def editar_conexion(conexion_id):
         perfiles_nuevos_dict_alias = {}
         perfiles_nuevos_dict_full_name = {}
         
-        # Bandera para saber si los perfiles o sus alias han cambiado de forma que afecte el código.
         perfiles_cambiaron_para_codigo = False 
-        old_perfiles_in_code = {} # Para almacenar los perfiles como estaban en el código original
+        old_perfiles_in_code = {}
 
-        # Recuperar los perfiles de la conexión original para comparar
         is_postgres = hasattr(db, 'cursor')
         placeholder = '%s' if is_postgres else '?'
 
@@ -459,7 +437,7 @@ def editar_conexion(conexion_id):
             db.execute(sql_update, params_update)
         db.commit()
         log_action('EDITAR_CONEXION', g.user['id'], 'conexiones', conexion_id,
-                   f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.") # Auditoría
+                   f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.")
         current_app.logger.info(f"Usuario '{g.user['username']}' editó la conexión {conexion_id}.")
         flash('Conexión actualizada con éxito.', 'success')
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
@@ -467,7 +445,6 @@ def editar_conexion(conexion_id):
     if request.method == 'GET':
         detalles_actuales = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
         form.descripcion.data = conexion['descripcion']
-        # Rellenar los campos de perfil del formulario según num_perfiles
         for i in range(1, num_perfiles + 1):
             if hasattr(form, f'perfil_{i}'):
                 setattr(getattr(form, f'perfil_{i}'), 'data', detalles_actuales.get(f'Perfil {i}'))
@@ -491,13 +468,10 @@ def eliminar_conexion(conexion_id):
         db.execute(f'DELETE FROM conexiones WHERE id = {placeholder}', (conexion_id,))
     db.commit()
     log_action('ELIMINAR_CONEXION', g.user['id'], 'conexiones', conexion_id,
-               f"Conexión '{conexion['codigo_conexion']}' eliminada.") # Auditoría
+               f"Conexión '{conexion['codigo_conexion']}' eliminada.")
     current_app.logger.warning(f"Admin '{g.user['username']}' eliminó la conexión {conexion['codigo_conexion']} (ID: {conexion_id}).")
     flash(f"La conexión {conexion['codigo_conexion']} ha sido eliminada.", 'success')
     return redirect(url_for('proyectos.detalle_proyecto', proyecto_id=conexion['proyecto_id']))
-
-
-# --- Ruta para IMPORTAR Conexiones ---
 
 from services.import_service import importar_conexiones_from_file
 
@@ -551,8 +525,6 @@ def importar_conexiones(proyecto_id):
     return render_template('importar_conexiones.html', proyecto=proyecto, titulo="Importar Conexiones")
 
 
-# --- Rutas para el Ciclo de Vida de la Conexión ---
-
 @conexiones_bp.route('/<int:conexion_id>/cambiar_estado', methods=('POST',))
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'APROBADOR')
 def cambiar_estado(conexion_id):
@@ -581,10 +553,6 @@ def asignar_realizador(conexion_id):
     db = get_db()
     conexion = _get_conexion(conexion_id)
     
-    # Solo el Administrador, el Solicitante, el Realizador o el Aprobador pueden asignar.
-    # El Administrador puede asignar a cualquiera.
-    # Solicitante, Realizador y Aprobador solo pueden asignar si la conexión está en ciertos estados
-    # y/o si están directamente relacionados con ella (ej. el solicitante original).
     user_roles = session.get('user_roles', [])
 
     if not ('ADMINISTRADOR' in user_roles or \
@@ -600,13 +568,11 @@ def asignar_realizador(conexion_id):
         flash('Debes especificar un nombre de usuario para asignar la tarea.', 'danger')
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
-    # Eliminar el '@' si el usuario lo ingresa.
     username_a_asignar_limpio = username_a_asignar.lstrip('@')
 
     is_postgres = hasattr(db, 'cursor')
     placeholder = '%s' if is_postgres else '?'
 
-    # Buscar el ID del usuario a asignar
     if is_postgres:
         with db.cursor() as cursor:
             cursor.execute(f'SELECT id, nombre_completo FROM usuarios WHERE username = {placeholder} AND activo = TRUE', (username_a_asignar_limpio,))
@@ -619,8 +585,6 @@ def asignar_realizador(conexion_id):
         flash(f"Usuario '{username_a_asignar}' no encontrado o inactivo. Por favor, verifica el nombre de usuario.", 'danger')
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
-    # Actualizar el realizador_id de la conexión.
-    # Si la conexión está en estado SOLICITADO, se cambia a EN_PROCESO automáticamente al asignar.
     if conexion['estado'] == 'SOLICITADO':
         nuevo_estado = 'EN_PROCESO'
         mensaje_cambio_estado = f"Conexión '{conexion['codigo_conexion']}' asignada a {usuario_a_asignar['nombre_completo']} y puesta 'En Proceso'."
@@ -642,9 +606,8 @@ def asignar_realizador(conexion_id):
         _notify_users(db, conexion_id,
                       f"La conexión {conexion['codigo_conexion']} ha sido asignada a {usuario_a_asignar['nombre_completo']} por {g.user['nombre_completo']}.",
                       "",
-                      ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR']) # Notificar a todos los relevantes
+                      ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
     else:
-        # Si la conexión ya está en proceso o en otro estado, solo se cambia el realizador.
         sql_update = f'UPDATE conexiones SET realizador_id = {placeholder}, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = {placeholder}'
         params_update = (usuario_a_asignar['id'], conexion_id)
 
@@ -654,14 +617,12 @@ def asignar_realizador(conexion_id):
         else:
             db.execute(sql_update, params_update)
         mensaje_cambio_estado = f"Realizador de la conexión '{conexion['codigo_conexion']}' cambiado a {usuario_a_asignar['nombre_completo']}."
-        # No se inserta un nuevo historial de estado si solo se cambia el asignado sin cambiar el estado principal.
-        # Se puede añadir un log de auditoría para esto:
         log_action('REASIGNAR_CONEXION', g.user['id'], 'conexiones', conexion_id,
                    f"Conexión '{conexion['codigo_conexion']}' reasignada a '{usuario_a_asignar['nombre_completo']}'.")
         _notify_users(db, conexion_id,
                       f"La conexión {conexion['codigo_conexion']} ha sido reasignada a {usuario_a_asignar['nombre_completo']} por {g.user['nombre_completo']}.",
                       "",
-                      ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR']) # Notificar a todos los relevantes
+                      ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
         
     db.commit()
     flash(mensaje_cambio_estado, 'success')
@@ -698,7 +659,7 @@ def subir_archivo(conexion_id):
             db.execute(sql, params)
         db.commit()
         log_action('SUBIR_ARCHIVO', g.user['id'], 'archivos', conexion_id,
-                   f"Archivo '{filename}' ({tipo_archivo}) subido para conexión '{conexion['codigo_conexion']}'.") # Auditoría
+                   f"Archivo '{filename}' ({tipo_archivo}) subido para conexión '{conexion['codigo_conexion']}'.")
         flash(f"Archivo '{tipo_archivo}' subido con éxito.", 'success')
     else:
         flash('Tipo de archivo no permitido.', 'danger')
@@ -710,7 +671,6 @@ def subir_archivo(conexion_id):
 def descargar_archivo(conexion_id, filename):
     """Permite la descarga de un archivo asociado a una conexión."""
     directory = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
-    # Asegúrate de que el archivo exista en la BD antes de intentar servirlo
     db = get_db()
     is_postgres = hasattr(db, 'cursor')
     placeholder = '%s' if is_postgres else '?'
@@ -729,7 +689,7 @@ def descargar_archivo(conexion_id, filename):
         abort(404, description="El archivo no existe o no está asociado a esta conexión.")
     
     log_action('DESCARGAR_ARCHIVO', g.user['id'], 'archivos', conexion_id,
-               f"Archivo '{filename}' descargado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.") # Auditoría
+               f"Archivo '{filename}' descargado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.")
     return send_from_directory(directory, filename, as_attachment=True)
 
 @conexiones_bp.route('/<int:conexion_id>/eliminar_archivo/<int:archivo_id>', methods=['POST',])
@@ -750,38 +710,31 @@ def eliminar_archivo(conexion_id, archivo_id):
         archivo = db.execute(sql, params).fetchone()
 
     if archivo:
-        # CORRECCIÓN DE FLUJO DE TRABAJO: Permitir que el admin, el que subió el archivo,
-        # o el realizador actual de la conexión puedan eliminar el archivo.
         conexion = _get_conexion(conexion_id)
         if 'ADMINISTRADOR' not in session.get('user_roles', []) and g.user['id'] != archivo['usuario_id'] and g.user['id'] != conexion['realizador_id']:
              flash('No tienes permiso para eliminar este archivo.', 'danger')
              return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
         try:
-            conexion = _get_conexion(conexion_id) # Se obtiene para el log y el redirect
-            # CORRECCIÓN DE SEGURIDAD/ROBUSTEZ: Eliminar el registro de la DB primero, luego el archivo.
-            # Esto previene un archivo huérfano si la eliminación de la DB falla.
+            conexion = _get_conexion(conexion_id)
             sql_delete = f'DELETE FROM archivos WHERE id = {placeholder}'
             if is_postgres:
                 with db.cursor() as cursor:
                     cursor.execute(sql_delete, (archivo_id,))
             else:
                 db.execute(sql_delete, (archivo_id,))
-            db.commit() # Commit inmediato para asegurar la eliminación de la DB
+            db.commit()
             
             file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), archivo['nombre_archivo'])
             if os.path.exists(file_path):
                 os.remove(file_path)
             
             log_action('ELIMINAR_ARCHIVO', g.user['id'], 'archivos', conexion_id,
-                       f"Archivo '{archivo['nombre_archivo']}' eliminado de conexión '{conexion['codigo_conexion']}'.") # Auditoría
+                       f"Archivo '{archivo['nombre_archivo']}' eliminado de conexión '{conexion['codigo_conexion']}'.")
             flash('Archivo eliminado con éxito.', 'success')
         except Exception as e:
             current_app.logger.error(f"Error al eliminar archivo: {e}")
             flash('Ocurrió un error al eliminar el archivo.', 'danger')
-            # Rollback si se desea deshacer el commit de la DB si el archivo en disco no se pudo eliminar
-            # Sin embargo, generalmente es mejor tener un registro sin archivo que un archivo sin registro.
-            # Una solución más avanzada podría mover el archivo a una "papelera" primero.
     else:
         flash('El archivo no existe.', 'danger')
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
@@ -808,7 +761,7 @@ def agregar_comentario(conexion_id):
             db.execute(sql, params)
         db.commit()
         log_action('AGREGAR_COMENTARIO', g.user['id'], 'conexiones', conexion_id,
-                   f"Comentario añadido a conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.") # Auditoría
+                   f"Comentario añadido a conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.")
         _notify_users(db, conexion_id, f"{g.user['nombre_completo']} ha comentado en la conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.", "#comentarios", ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
         flash('Comentario añadido.', 'success')
     else:
@@ -842,7 +795,7 @@ def eliminar_comentario(conexion_id, comentario_id):
             db.execute(sql_delete, (comentario_id,))
         db.commit()
         log_action('ELIMINAR_COMENTARIO', g.user['id'], 'comentarios', comentario_id,
-                   f"Comentario (ID: {comentario_id}) eliminado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.") # Auditoría
+                   f"Comentario (ID: {comentario_id}) eliminado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.")
         flash('Comentario eliminado.', 'success')
     else:
         flash('El comentario no existe.', 'danger')
@@ -914,21 +867,18 @@ def reporte_conexion(conexion_id):
     db = get_db()
     conexion = _get_conexion(conexion_id)
     
-    # Asegúrate de tener todos los datos necesarios para el reporte
     historial = db.execute("SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = ? ORDER BY h.fecha ASC", (conexion_id,)).fetchall()
     comentarios = db.execute("SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = ? ORDER BY c.fecha_creacion ASC", (conexion_id,)).fetchall()
     archivos_raw = db.execute('SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = ? ORDER BY a.fecha_subida ASC', (conexion_id,)).fetchall()
     
-    # Agrupar archivos por tipo, si tu template los necesita así
     archivos_agrupados = defaultdict(list)
     for archivo in archivos_raw:
         archivos_agrupados[archivo['tipo_archivo']].append(archivo)
 
-    # Cargar detalles adicionales y configuración de tipología
     detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
     tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
     log_action('GENERAR_REPORTE_CONEXION', g.user['id'], 'conexiones', conexion_id,
-               f"Reporte de conexión generado para '{conexion['codigo_conexion']}'.") # Auditoría
+               f"Reporte de conexión generado para '{conexion['codigo_conexion']}'.")
     return render_template('reporte_conexion.html',
                            conexion=conexion,
                            historial=historial,

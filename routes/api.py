@@ -1,4 +1,3 @@
-# Hepta_Conexiones/routes/api.py
 """
 routes/api.py
 
@@ -7,22 +6,15 @@ Las APIs son rutas especiales que no devuelven una página HTML completa, sino
 datos en formato JSON. Son utilizadas por el código JavaScript del frontend para
 obtener información de forma dinámica sin tener que recargar la página.
 """
-
 import json
 import os
-import re # Importar para normalización de texto
+import re
 from flask import Blueprint, jsonify, request, g, current_app, session
-from datetime import datetime # Importar datetime para posibles usos de CURRENT_TIMESTAMP si no es directo de SQLite
-
-# Se importa el módulo de base de datos y el decorador de roles.
+from datetime import datetime
 from db import get_db
 from . import roles_required
-
-# CORRECCIÓN DE MANTENIBILIDAD: Se importa la función centralizada desde el service correspondiente.
 from services.connection_service import _notify_users, process_connection_state_transition
 
-# Se define el Blueprint para agrupar todas las rutas de la API.
-# El prefijo /api asegura que todas estas rutas comiencen con esa URL.
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 @api_bp.route('/tipologias')
@@ -37,7 +29,6 @@ def get_tipologias():
     subtipo = request.args.get('subtipo')
 
     if not tipo or not subtipo:
-        # Si no se proporcionan los parámetros necesarios, devuelve una lista vacía.
         return jsonify([])
 
     json_path = os.path.join(current_app.root_path, 'conexiones.json')
@@ -45,12 +36,9 @@ def get_tipologias():
         with open(json_path, 'r', encoding='utf-8') as f:
             estructura = json.load(f)
         
-        # Se navega por la estructura del JSON para encontrar las tipologías correspondientes.
         tipologias = estructura[tipo]['subtipos'][subtipo]['tipologias']
         return jsonify(tipologias)
     except (KeyError, FileNotFoundError, json.JSONDecodeError) as e:
-        # Si ocurre un error (ej. archivo no encontrado, clave incorrecta),
-        # se registra el error y se devuelve una lista vacía para no bloquear el frontend.
         current_app.logger.error(f"API Error: No se pudieron obtener las tipologías para tipo='{tipo}', subtipo='{subtipo}'. Error: {e}")
         return jsonify([])
 
@@ -83,15 +71,12 @@ def buscar_perfiles():
     if not query:
         return jsonify([])
 
-    # Normalizar la consulta del usuario de la misma manera que se normalizará en la BD
     normalized_query = re.sub(r'[ -]', '', query).lower()
     db = get_db()
     
     resultados = []
     added_profiles = set()
 
-    # 1. Buscar en alias_perfiles con normalización en la consulta SQL
-    # Se usa REPLACE anidado para quitar espacios y guiones, y LOWER para ser case-insensitive.
     sql_query = """
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
@@ -105,14 +90,12 @@ def buscar_perfiles():
     
     for row in aliases:
         if row['nombre_perfil'] not in added_profiles:
-            # Si el alias coincide, mostrarlo en la etiqueta para mayor claridad
             if row['alias'] and normalized_query in re.sub(r'[ -]', '', row['alias']).lower():
                  resultados.append({'label': f"{row['alias']} ({row['nombre_perfil']})", 'value': row['nombre_perfil']})
             else:
                  resultados.append({'label': row['nombre_perfil'], 'value': row['nombre_perfil']})
             added_profiles.add(row['nombre_perfil'])
 
-    # 2. Buscar directamente en perfiles_propiedades.json (la lógica aquí se mantiene)
     json_path = os.path.join(current_app.root_path, 'perfiles_propiedades.json')
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
@@ -128,7 +111,6 @@ def buscar_perfiles():
     except (FileNotFoundError, json.JSONDecodeError):
         current_app.logger.error("API Error: No se pudo cargar 'perfiles_propiedades.json' para sugerencias.")
 
-    # Limitar el número de resultados para no sobrecargar el frontend
     return jsonify(sorted(resultados, key=lambda x: x['label'])[:10])
 
 
@@ -142,12 +124,10 @@ def set_theme():
     data = request.get_json()
     if data and 'theme' in data:
         theme = data['theme']
-        # Se valida que el tema sea uno de los valores permitidos para seguridad.
         if theme in ['light', 'dark']:
             session['theme'] = theme
             return jsonify({'success': True, 'message': f'Tema establecido a {theme}'})
     
-    # Si los datos no son válidos, se devuelve un error.
     return jsonify({'success': False, 'message': 'Datos de tema inválidos'}), 400
 
 @api_bp.route('/notificaciones/marcar-leidas', methods=['POST'])
@@ -166,7 +146,6 @@ def marcar_notificaciones_leidas():
         current_app.logger.error(f"API Error: No se pudieron marcar las notificaciones como leídas para el usuario {g.user['id']}. Error: {e}")
         return jsonify({'success': False, 'message': 'Error en la base de datos'}), 500
 
-# CORRECCIÓN DE MANTENIBILIDAD: Usar la función centralizada de cambio de estado
 @api_bp.route('/conexiones/<int:conexion_id>/cambiar_estado_rapido', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'APROBADOR')
 def cambiar_estado_rapido(conexion_id):
@@ -176,14 +155,11 @@ def cambiar_estado_rapido(conexion_id):
     """
     db = get_db()
 
-    # VERIFICACIÓN DE AUTORIZACIÓN: Asegurarse de que el usuario pertenece al proyecto de la conexión.
     conexion = db.execute('SELECT proyecto_id FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()
     if not conexion:
         return jsonify({'success': False, 'message': 'La conexión no existe.'}), 404
 
-    # Comprobar si el usuario es administrador, en cuyo caso tiene acceso a todo.
     if 'ADMINISTRADOR' not in session.get('user_roles', []):
-        # Si no es admin, comprobar si está asignado al proyecto.
         acceso = db.execute('SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?',
                               (conexion['proyecto_id'], g.user['id'])).fetchone()
         if not acceso:
@@ -191,7 +167,7 @@ def cambiar_estado_rapido(conexion_id):
 
     data = request.get_json()
     nuevo_estado = data.get('estado')
-    detalles = data.get('detalles', '') # Para el motivo de rechazo
+    detalles = data.get('detalles', '')
 
     success, message, _ = process_connection_state_transition(
         db, conexion_id, nuevo_estado, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles
@@ -200,12 +176,10 @@ def cambiar_estado_rapido(conexion_id):
     if success:
         return jsonify({'success': True, 'message': message})
     else:
-        # Asegurarse de que el status code sea 400 o 403 si hay un error de negocio
         status_code = 400 if "Debes proporcionar un motivo" in message else 403
         return jsonify({'success': False, 'message': message}), status_code
 
 
-# NUEVO ENDPOINT: Guardar preferencias de personalización del dashboard
 @api_bp.route('/dashboard/save_preferences', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def save_dashboard_preferences():
@@ -217,7 +191,6 @@ def save_dashboard_preferences():
     widgets_config = json.dumps(data.get('widgets_config', {}))
     
     try:
-        # Usa INSERT OR REPLACE para actualizar si ya existe o insertar si no.
         db.execute(
             'INSERT OR REPLACE INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (?, ?)',
             (g.user['id'], widgets_config)

@@ -92,12 +92,20 @@ def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
     """
     db = get_db()
     is_testing = current_app.config.get('TESTING', False)
-    placeholder = "?" if is_testing else "%s"
 
-    sql = f"""
-        INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
-    """
+    if is_testing:
+        # Sintaxis para SQLite
+        sql = """
+            INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
+            VALUES (?, ?, ?, ?, ?)
+        """
+    else:
+        # Sintaxis para PostgreSQL
+        sql = """
+            INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+
     params = (usuario_id, accion, tipo_objeto, objeto_id, detalles)
 
     try:

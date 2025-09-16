@@ -564,8 +564,14 @@ function initMyPerformanceChart() {
  * @description Inicializa los gráficos de la página de Análisis de Eficiencia.
  */
 function initEficienciaCharts() {
+    const dataEl = document.getElementById('eficiencia-chart-data');
+    if (!dataEl) return;
+
+    const timeByStateData = JSON.parse(dataEl.dataset.timeByState);
+    const completedByUserData = JSON.parse(dataEl.dataset.completedByUser);
+
     const ctx1 = document.getElementById('tiempoPorEstadoChart');
-    if (ctx1 && typeof timeByStateData !== 'undefined') {
+    if (ctx1 && Object.keys(timeByStateData).length > 0) {
         new Chart(ctx1, {
             type: 'bar',
             data: {
@@ -583,7 +589,7 @@ function initEficienciaCharts() {
     }
 
     const ctx2 = document.getElementById('conexionesPorRealizadorChart');
-    if (ctx2 && typeof completedByUserData !== 'undefined') {
+    if (ctx2 && completedByUserData.length > 0) {
         new Chart(ctx2, {
             type: 'bar',
             data: {

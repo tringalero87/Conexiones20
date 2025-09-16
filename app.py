@@ -14,58 +14,80 @@ from commands import crear_admin_command
 
 load_dotenv()
 
+
 def create_app(test_config=None):
     """
     Application Factory: Crea y configura la instancia de la aplicación Flask.
-    
+
     Args:
         test_config (dict, optional): Un diccionario de configuración para usar durante las pruebas.
                                       Si es None, se usa la configuración de producción/desarrollo.
-    
+
     Returns:
         Flask: La instancia de la aplicación Flask configurada.
     """
     app = Flask(__name__, instance_relative_config=True)
 
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get('SECRET_KEY', 'un-secreto-muy-dificil-de-adivinar-en-desarrollo'),
-        UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads'),
+        SECRET_KEY=os.environ.get(
+            'SECRET_KEY',
+            'un-secreto-muy-dificil-de-adivinar-en-desarrollo'),
+        UPLOAD_FOLDER=os.path.join(
+            app.root_path,
+            'uploads'),
         PER_PAGE=10,
     )
 
     if test_config is None:
-        # Cargar configuración de producción/desarrollo desde variables de entorno y archivos
+        # Cargar configuración de producción/desarrollo desde variables de
+        # entorno y archivos
         app.config.from_pyfile('config.py', silent=True)
         app.config.update(
             MAIL_SERVER=os.environ.get('MAIL_SERVER'),
-            MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
-            MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't'],
+            MAIL_PORT=int(
+                os.environ.get(
+                    'MAIL_PORT',
+                    587)),
+            MAIL_USE_TLS=os.environ.get(
+                'MAIL_USE_TLS',
+                'true').lower() in [
+                    'true',
+                    '1',
+                    't'],
             MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
             MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
-            MAIL_DEFAULT_SENDER=('Hepta-Conexiones', os.environ.get('MAIL_USERNAME')),
+            MAIL_DEFAULT_SENDER=(
+                'Hepta-Conexiones',
+                os.environ.get('MAIL_USERNAME')),
             SCHEDULER_JOBSTORES={
-                'default': SQLAlchemyJobStore(url=os.environ.get('DATABASE_URL'))
-            },
+                'default': SQLAlchemyJobStore(
+                    url=os.environ.get('DATABASE_URL'))},
             SCHEDULER_JOB_DEFAULTS={
                 'coalesce': True,
-                'max_instances': 1
-            },
+                'max_instances': 1},
             SCHEDULER_EXECUTORS={
-                'default': {'type': 'threadpool', 'max_workers': 20}
-            }
-        )
+                'default': {
+                    'type': 'threadpool',
+                    'max_workers': 20}})
     else:
         # Cargar configuración de prueba
         app.config.from_mapping(test_config)
         # Usar un jobstore de SQLAlchemy apuntando a la base de datos de prueba (SQLite en memoria)
-        # Esto asegura que el scheduler funcione en un entorno aislado durante las pruebas.
+        # Esto asegura que el scheduler funcione en un entorno aislado durante
+        # las pruebas.
         db_path = app.config.get('DATABASE')
         if db_path:
             app.config.update(
-                SCHEDULER_JOBSTORES={'default': SQLAlchemyJobStore(url=f"sqlite:///{db_path}")},
-                SCHEDULER_EXECUTORS={'default': {'type': 'threadpool', 'max_workers': 1}},
+                SCHEDULER_JOBSTORES={
+                    'default': SQLAlchemyJobStore(
+                        url=f"sqlite:///{db_path}")},
+                SCHEDULER_EXECUTORS={
+                    'default': {
+                        'type': 'threadpool',
+                        'max_workers': 1}},
                 SCHEDULER_JOB_DEFAULTS={'coalesce': True, 'max_instances': 1},
-                # Deshabilitar el envío de correos en pruebas para evitar errores y efectos secundarios
+                # Deshabilitar el envío de correos en pruebas para evitar
+                # errores y efectos secundarios
                 MAIL_SUPPRESS_SEND=True
             )
 
@@ -80,11 +102,12 @@ def create_app(test_config=None):
     db.init_app(app)
     app.cli.add_command(crear_admin_command)
 
-    scheduler = BackgroundScheduler(jobstores=app.config['SCHEDULER_JOBSTORES'],
-                                    executors=app.config['SCHEDULER_EXECUTORS'],
-                                    job_defaults=app.config['SCHEDULER_JOB_DEFAULTS'])
-    scheduler.app = app 
-    
+    scheduler = BackgroundScheduler(
+        jobstores=app.config['SCHEDULER_JOBSTORES'],
+        executors=app.config['SCHEDULER_EXECUTORS'],
+        job_defaults=app.config['SCHEDULER_JOB_DEFAULTS'])
+    scheduler.app = app
+
     app.scheduler = scheduler
 
     @app.before_request
@@ -96,13 +119,13 @@ def create_app(test_config=None):
         """
         g.user = None
         session.setdefault('user_roles', [])
-        
+
         try:
             db_conn = db.get_db()
             if 'user_id' in session:
                 is_testing = current_app.config.get('TESTING', False)
                 cursor = db_conn.cursor()
-                
+
                 if is_testing:
                     sql_user = "SELECT * FROM usuarios WHERE id = ?"
                     sql_roles = """
@@ -132,14 +155,16 @@ def create_app(test_config=None):
 
                 if user_data:
                     if not user_data['activo']:
-                        flash("Tu cuenta ha sido desactivada. Por favor, contacta a un administrador.", "warning")
+                        flash(
+                            "Tu cuenta ha sido desactivada. Por favor, contacta a un administrador.",
+                            "warning")
                         session.clear()
-                        if not is_testing: # Evitar error de contexto de solicitud en pruebas
+                        if not is_testing:  # Evitar error de contexto de solicitud en pruebas
                             return redirect(url_for('auth.login'))
                         return
 
                     g.user = dict(user_data)
-                    
+
                     # Obtener roles del usuario
                     cursor.execute(sql_roles, (g.user['id'],))
                     roles_data = cursor.fetchall()
@@ -156,10 +181,11 @@ def create_app(test_config=None):
                 cursor.close()
         except psycopg2.Error as e:
             if 'undefined_table' in str(e):
-                current_app.logger.warning("La base de datos no está inicializada. Ejecute 'flask init-db'.")
+                current_app.logger.warning(
+                    "La base de datos no está inicializada. Ejecute 'flask init-db'.")
             else:
-                current_app.logger.error(f"Error operacional de base de datos: {e}")
-
+                current_app.logger.error(
+                    f"Error operacional de base de datos: {e}")
 
     @app.context_processor
     def inject_global_vars():
@@ -168,7 +194,7 @@ def create_app(test_config=None):
         Esto evita tener que pasar estas variables en cada `render_template`.
         """
         theme = session.get('theme', 'dark')
-        
+
         return {
             'g': g,
             'app_name': "Hepta-Conexiones",
@@ -211,7 +237,7 @@ def create_app(test_config=None):
     app.register_blueprint(proyectos.proyectos_bp)
     app.register_blueprint(admin.admin_bp)
     app.register_blueprint(api.api_bp)
-    
+
     @app.errorhandler(403)
     def forbidden_error(error):
         return render_template('errors/403.html'), 403
@@ -239,10 +265,13 @@ def create_app(test_config=None):
 
     return app
 
+
 if __name__ == '__main__':
     app = create_app()
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' and app.scheduler and not app.scheduler.running:
+    if os.environ.get(
+            'WERKZEUG_RUN_MAIN') == 'true' and app.scheduler and not app.scheduler.running:
         app.scheduler.start()
-        app.logger.info("Scheduler de APScheduler iniciado en el proceso principal.")
-        
+        app.logger.info(
+            "Scheduler de APScheduler iniciado en el proceso principal.")
+
     app.run(debug=True, host='0.0.0.0', port=5000)

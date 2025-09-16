@@ -175,16 +175,37 @@ def scheduled_report_job(reporte_id):
 def listar_usuarios():
     """Muestra una lista completa de todos los usuarios registrados en el sistema, incluyendo sus roles."""
     db = get_db()
-    usuarios = db.execute("""
-        SELECT
-            u.id, u.username, u.nombre_completo, u.email, u.activo,
-            GROUP_CONCAT(r.nombre, ', ') as roles
-        FROM usuarios u
-        LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
-        LEFT JOIN roles r ON ur.rol_id = r.id
-        GROUP BY u.id
-        ORDER BY u.nombre_completo
-    """).fetchall()
+
+    if _is_testing():
+        # SQLite version
+        sql = """
+            SELECT
+                u.id, u.username, u.nombre_completo, u.email, u.activo,
+                GROUP_CONCAT(r.nombre, ', ') as roles
+            FROM usuarios u
+            LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
+            LEFT JOIN roles r ON ur.rol_id = r.id
+            GROUP BY u.id
+            ORDER BY u.nombre_completo
+        """
+    else:
+        # PostgreSQL version
+        sql = """
+            SELECT
+                u.id, u.username, u.nombre_completo, u.email, u.activo,
+                STRING_AGG(r.nombre, ', ') as roles
+            FROM usuarios u
+            LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
+            LEFT JOIN roles r ON ur.rol_id = r.id
+            GROUP BY u.id
+            ORDER BY u.nombre_completo
+        """
+
+    cursor = db.cursor()
+    cursor.execute(sql)
+    usuarios = cursor.fetchall()
+    cursor.close()
+
     log_action('VER_USUARIOS', g.user['id'], 'usuarios', None, "Visualizó la lista de usuarios.")
     return render_template('admin/usuarios.html', usuarios=usuarios, titulo="Gestión de Usuarios")
 
@@ -193,28 +214,46 @@ def listar_usuarios():
 def nuevo_usuario():
     """Gestiona la creación de un nuevo usuario usando un formulario seguro de Flask-WTF."""
     form = UserForm()
-    form.roles.choices = [(r['nombre'], r['nombre']) for r in get_db().execute('SELECT nombre FROM roles ORDER BY nombre').fetchall()] 
+    db = get_db()
+    cursor = db.cursor()
 
-    if form.validate_on_submit():
-        db = get_db()
-        password_hash = generate_password_hash(form.password.data)
-        
-        cursor = db.execute(
-            'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)',
-            (form.username.data, form.nombre_completo.data, form.email.data, password_hash, form.activo.data)
-        )
-        new_user_id = cursor.lastrowid
-        
-        for rol_nombre in form.roles.data:
-            rol_id = db.execute('SELECT id FROM roles WHERE nombre = ?', (rol_nombre,)).fetchone()['id']
-            db.execute('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)', (new_user_id, rol_id))
-        
-        db.commit()
-        log_action('CREAR_USUARIO', g.user['id'], 'usuarios', new_user_id, 
-                   f"Usuario '{form.username.data}' creado con roles: {', '.join(form.roles.data)}.")
-        current_app.logger.info(f"Admin '{g.user['username']}' creó el usuario '{form.username.data}'.")
-        flash('Usuario creado con éxito.', 'success')
-        return redirect(url_for('admin.listar_usuarios'))
+    try:
+        cursor.execute('SELECT nombre FROM roles ORDER BY nombre')
+        form.roles.choices = [(r['nombre'], r['nombre']) for r in cursor.fetchall()]
+
+        if form.validate_on_submit():
+            password_hash = generate_password_hash(form.password.data)
+
+            if _is_testing():
+                sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)'
+                sql_get_rol = 'SELECT id FROM roles WHERE nombre = ?'
+                sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)'
+            else:
+                sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id'
+                sql_get_rol = 'SELECT id FROM roles WHERE nombre = %s'
+                sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)'
+
+            params_user = (form.username.data, form.nombre_completo.data, form.email.data, password_hash, form.activo.data)
+            cursor.execute(sql_insert_user, params_user)
+
+            if _is_testing():
+                new_user_id = cursor.lastrowid
+            else:
+                new_user_id = cursor.fetchone()['id']
+
+            for rol_nombre in form.roles.data:
+                cursor.execute(sql_get_rol, (rol_nombre,))
+                rol_id = cursor.fetchone()['id']
+                cursor.execute(sql_insert_rol, (new_user_id, rol_id))
+
+            db.commit()
+            log_action('CREAR_USUARIO', g.user['id'], 'usuarios', new_user_id,
+                       f"Usuario '{form.username.data}' creado con roles: {', '.join(form.roles.data)}.")
+            current_app.logger.info(f"Admin '{g.user['username']}' creó el usuario '{form.username.data}'.")
+            flash('Usuario creado con éxito.', 'success')
+            return redirect(url_for('admin.listar_usuarios'))
+    finally:
+        cursor.close()
 
     return render_template('admin/usuario_form.html', form=form, titulo="Nuevo Usuario")
 
@@ -223,64 +262,72 @@ def nuevo_usuario():
 def editar_usuario(usuario_id):
     """Gestiona la edición de un usuario existente."""
     db = get_db()
-    usuario = db.execute('SELECT * FROM usuarios WHERE id = ?', (usuario_id,)).fetchone()
-    if not usuario:
-        abort(404)
+    cursor = db.cursor()
+    p = _get_placeholder()
 
-    form = UserForm(obj=usuario, original_username=usuario['username'], original_email=usuario['email'])
+    try:
+        # Definir consultas seguras y portables
+        sql_get_user = f"SELECT * FROM usuarios WHERE id = {p}"
+        sql_get_all_roles = "SELECT nombre FROM roles ORDER BY nombre"
+        sql_update_user = f"UPDATE usuarios SET username = {p}, nombre_completo = {p}, email = {p}, activo = {p} WHERE id = {p}"
+        sql_update_pass = f"UPDATE usuarios SET password_hash = {p} WHERE id = {p}"
+        sql_get_user_roles = f"SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = {p}"
+        sql_delete_user_roles = f"DELETE FROM usuario_roles WHERE usuario_id = {p}"
+        sql_get_rol_id = f"SELECT id FROM roles WHERE nombre = {p}"
+        sql_insert_user_role = f"INSERT INTO usuario_roles (usuario_id, rol_id) VALUES ({p}, {p})"
 
-    all_roles = db.execute('SELECT nombre FROM roles ORDER BY nombre').fetchall()
-    form.roles.choices = [(r['nombre'], r['nombre']) for r in all_roles]
+        cursor.execute(sql_get_user, (usuario_id,))
+        usuario = cursor.fetchone()
+        if not usuario:
+            abort(404)
 
-    if form.validate_on_submit():
-        old_data = dict(usuario)
+        form = UserForm(obj=usuario, original_username=usuario['username'], original_email=usuario['email'])
+
+        cursor.execute(sql_get_all_roles)
+        all_roles = cursor.fetchall()
+        form.roles.choices = [(r['nombre'], r['nombre']) for r in all_roles]
+
+        if form.validate_on_submit():
+            old_data = dict(usuario)
+
+            cursor.execute(sql_update_user, (form.username.data, form.nombre_completo.data, form.email.data, form.activo.data, usuario_id))
+
+            changes = {k: {'old': old_data[k], 'new': getattr(form, k).data} for k in ['username', 'nombre_completo', 'email', 'activo'] if getattr(form, k).data != old_data[k]}
+
+            if form.password.data:
+                cursor.execute(sql_update_pass, (generate_password_hash(form.password.data), usuario_id))
+                changes['password'] = 'changed'
+
+            cursor.execute(sql_get_user_roles, (usuario_id,))
+            current_roles = {row['nombre'] for row in cursor.fetchall()}
+            new_roles = set(form.roles.data)
+
+            if current_roles != new_roles:
+                changes['roles'] = {'old': list(current_roles), 'new': list(new_roles)}
+                cursor.execute(sql_delete_user_roles, (usuario_id,))
+                for rol_nombre in new_roles:
+                    cursor.execute(sql_get_rol_id, (rol_nombre,))
+                    rol_id = cursor.fetchone()['id']
+                    cursor.execute(sql_insert_user_role, (usuario_id, rol_id))
+
+            db.commit()
+            if changes:
+                log_action('EDITAR_USUARIO', g.user['id'], 'usuarios', usuario_id,
+                           f"Usuario '{old_data['username']}' editado. Cambios: {json.dumps(changes)}.")
+            flash('Usuario actualizado con éxito.', 'success')
+            return redirect(url_for('admin.listar_usuarios'))
         
-        db.execute(
-            'UPDATE usuarios SET username = ?, nombre_completo = ?, email = ?, activo = ? WHERE id = ?',
-            (form.username.data, form.nombre_completo.data, form.email.data, form.activo.data, usuario_id)
-        )
-        
-        changes = {}
-        if form.username.data != old_data['username']:
-            changes['username'] = {'old': old_data['username'], 'new': form.username.data}
-        if form.nombre_completo.data != old_data['nombre_completo']:
-            changes['nombre_completo'] = {'old': old_data['nombre_completo'], 'new': form.nombre_completo.data}
-        if form.email.data != old_data['email']:
-            changes['email'] = {'old': old_data['email'], 'new': form.email.data}
-        if form.activo.data != old_data['activo']:
-            changes['activo'] = {'old': old_data['activo'], 'new': form.activo.data}
+        elif request.method == 'GET':
+            form.username.data = usuario['username']
+            form.nombre_completo.data = usuario['nombre_completo']
+            form.email.data = usuario['email']
+            form.activo.data = usuario['activo']
 
-        if form.password.data:
-            db.execute('UPDATE usuarios SET password_hash = ? WHERE id = ?', (generate_password_hash(form.password.data), usuario_id))
-            changes['password'] = 'changed'
-        
-        current_roles_query = db.execute('SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = ?', (usuario_id,)).fetchall()
-        current_roles = set([row['nombre'] for row in current_roles_query])
-        new_roles = set(form.roles.data)
+            cursor.execute(sql_get_user_roles, (usuario_id,))
+            form.roles.data = [row['nombre'] for row in cursor.fetchall()]
 
-        if current_roles != new_roles:
-            changes['roles'] = {'old': list(current_roles), 'new': list(new_roles)}
-            db.execute('DELETE FROM usuario_roles WHERE usuario_id = ?', (usuario_id,))
-            for rol_nombre in new_roles:
-                rol_id = db.execute('SELECT id FROM roles WHERE nombre = ?', (rol_nombre,)).fetchone()['id']
-                db.execute('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)', (usuario_id, rol_id))
-        
-        db.commit()
-        if changes:
-            log_action('EDITAR_USUARIO', g.user['id'], 'usuarios', usuario_id, 
-                       f"Usuario '{old_data['username']}' editado. Cambios: {json.dumps(changes)}.")
-        current_app.logger.info(f"Admin '{g.user['username']}' editó al usuario '{form.username.data}'.")
-        flash('Usuario actualizado con éxito.', 'success')
-        return redirect(url_for('admin.listar_usuarios'))
-    
-    elif request.method == 'GET':
-        form.username.data = usuario['username']
-        form.nombre_completo.data = usuario['nombre_completo']
-        form.email.data = usuario['email']
-        form.activo.data = usuario['activo']
-
-        user_roles_query = db.execute('SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = ?', (usuario_id,)).fetchall()
-        form.roles.data = [row['nombre'] for row in user_roles_query]
+    finally:
+        cursor.close()
 
     return render_template('admin/usuario_form.html', form=form, usuario=usuario, titulo="Editar Usuario")
 
@@ -293,18 +340,26 @@ def toggle_activo(usuario_id):
         return redirect(url_for('admin.listar_usuarios'))
     
     db = get_db()
-    usuario = db.execute('SELECT activo, username FROM usuarios WHERE id = ?', (usuario_id,)).fetchone()
-    if usuario:
-        nuevo_estado = not usuario['activo']
-        db.execute('UPDATE usuarios SET activo = ? WHERE id = ?', (nuevo_estado, usuario_id))
-        db.commit()
-        estado_texto = 'activado' if nuevo_estado else 'desactivado'
-        log_action('TOGGLE_USUARIO_ACTIVO', g.user['id'], 'usuarios', usuario_id, 
-                   f"Usuario '{usuario['username']}' ha sido {estado_texto}.")
-        current_app.logger.info(f"Admin '{g.user['username']}' ha {estado_texto} al usuario '{usuario['username']}'.")
-        flash(f"El usuario ha sido {estado_texto}.", 'success')
-    else:
-        flash("Usuario no encontrado.", "danger")
+    p = _get_placeholder()
+    cursor = db.cursor()
+
+    try:
+        cursor.execute(f'SELECT activo, username FROM usuarios WHERE id = {p}', (usuario_id,))
+        usuario = cursor.fetchone()
+        if usuario:
+            nuevo_estado = not usuario['activo']
+            cursor.execute(f'UPDATE usuarios SET activo = {p} WHERE id = {p}', (nuevo_estado, usuario_id))
+            db.commit()
+            estado_texto = 'activado' if nuevo_estado else 'desactivado'
+            log_action('TOGGLE_USUARIO_ACTIVO', g.user['id'], 'usuarios', usuario_id,
+                       f"Usuario '{usuario['username']}' ha sido {estado_texto}.")
+            current_app.logger.info(f"Admin '{g.user['username']}' ha {estado_texto} al usuario '{usuario['username']}'.")
+            flash(f"El usuario ha sido {estado_texto}.", 'success')
+        else:
+            flash("Usuario no encontrado.", "danger")
+    finally:
+        cursor.close()
+
     return redirect(url_for('admin.listar_usuarios'))
 
 @admin_bp.route('/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
@@ -312,57 +367,58 @@ def toggle_activo(usuario_id):
 def eliminar_usuario(usuario_id):
     """Elimina un usuario (solo para administradores)."""
     db = get_db()
+    p = _get_placeholder()
+    cursor = db.cursor()
 
-    if usuario_id == g.user['id']:
-        flash('No puedes eliminar tu propia cuenta.', 'danger')
-        return redirect(url_for('admin.listar_usuarios'))
-
-    is_admin_query = db.execute("""
-        SELECT 1 FROM usuario_roles ur
-        JOIN roles r ON ur.rol_id = r.id
-        WHERE ur.usuario_id = ? AND r.nombre = 'ADMINISTRADOR'
-    """, (usuario_id,)).fetchone()
-
-    if is_admin_query:
-        admin_count_query = db.execute("""
-            SELECT COUNT(ur.usuario_id) as admin_count
-            FROM usuario_roles ur
-            JOIN roles r ON ur.rol_id = r.id
-            WHERE r.nombre = 'ADMINISTRADOR'
-        """).fetchone()
-
-        if admin_count_query and admin_count_query['admin_count'] <= 1:
-            flash('No se puede eliminar al último administrador del sistema.', 'danger')
+    try:
+        if usuario_id == g.user['id']:
+            flash('No puedes eliminar tu propia cuenta.', 'danger')
             return redirect(url_for('admin.listar_usuarios'))
 
-    proyectos_asignados = db.execute(
-        "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = ?",
-        (usuario_id,)
-    ).fetchone()
+        # Comprobar si el usuario es administrador
+        sql_is_admin = f"SELECT 1 FROM usuario_roles ur JOIN roles r ON ur.rol_id = r.id WHERE ur.usuario_id = {p} AND r.nombre = 'ADMINISTRADOR'"
+        cursor.execute(sql_is_admin, (usuario_id,))
+        is_admin_query = cursor.fetchone()
 
-    if proyectos_asignados and proyectos_asignados['count'] > 0:
-        flash(f"No se puede eliminar al usuario porque está asignado a {proyectos_asignados['count']} proyecto(s). Por favor, desasígnelo de todos los proyectos antes de eliminarlo.", 'danger')
-        return redirect(url_for('admin.listar_usuarios'))
+        if is_admin_query:
+            sql_admin_count = "SELECT COUNT(ur.usuario_id) as admin_count FROM usuario_roles ur JOIN roles r ON ur.rol_id = r.id WHERE r.nombre = 'ADMINISTRADOR'"
+            cursor.execute(sql_admin_count)
+            admin_count_query = cursor.fetchone()
+            if admin_count_query and admin_count_query['admin_count'] <= 1:
+                flash('No se puede eliminar al último administrador del sistema.', 'danger')
+                return redirect(url_for('admin.listar_usuarios'))
 
-    conexiones_activas = db.execute(
-        "SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = ? AND estado IN ('EN_PROCESO', 'REALIZADO')",
-        (usuario_id,)
-    ).fetchone()
+        # Comprobar si está asignado a proyectos
+        sql_proyectos = f"SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = {p}"
+        cursor.execute(sql_proyectos, (usuario_id,))
+        proyectos_asignados = cursor.fetchone()
+        if proyectos_asignados and proyectos_asignados['count'] > 0:
+            flash(f"No se puede eliminar al usuario porque está asignado a {proyectos_asignados['count']} proyecto(s).", 'danger')
+            return redirect(url_for('admin.listar_usuarios'))
 
-    if conexiones_activas and conexiones_activas['count'] > 0:
-        flash(f"No se puede eliminar al usuario porque tiene {conexiones_activas['count']} conexión(es) activa(s) asignada(s). Por favor, reasigna estas conexiones antes de eliminar al usuario.", 'danger')
-        return redirect(url_for('admin.listar_usuarios'))
+        # Comprobar si tiene conexiones activas
+        sql_conexiones = f"SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = {p} AND estado IN ('EN_PROCESO', 'REALIZADO')"
+        cursor.execute(sql_conexiones, (usuario_id,))
+        conexiones_activas = cursor.fetchone()
+        if conexiones_activas and conexiones_activas['count'] > 0:
+            flash(f"No se puede eliminar al usuario porque tiene {conexiones_activas['count']} conexión(es) activa(s) asignada(s).", 'danger')
+            return redirect(url_for('admin.listar_usuarios'))
 
-    usuario = db.execute('SELECT username FROM usuarios WHERE id = ?', (usuario_id,)).fetchone()
-    if usuario:
-        db.execute('DELETE FROM usuarios WHERE id = ?', (usuario_id,))
-        db.commit()
-        log_action('ELIMINAR_USUARIO', g.user['id'], 'usuarios', usuario_id, 
-                   f"Usuario '{usuario['username']}' eliminado.")
-        current_app.logger.warning(f"Admin '{g.user['username']}' eliminó el usuario '{usuario['username']}'.")
-        flash(f"El usuario '{usuario['username']}' ha sido eliminado.", 'success')
-    else:
-        flash("Usuario no encontrado.", 'danger')
+        # Eliminar el usuario
+        sql_get_user = f'SELECT username FROM usuarios WHERE id = {p}'
+        cursor.execute(sql_get_user, (usuario_id,))
+        usuario = cursor.fetchone()
+        if usuario:
+            sql_delete_user = f'DELETE FROM usuarios WHERE id = {p}'
+            cursor.execute(sql_delete_user, (usuario_id,))
+            db.commit()
+            log_action('ELIMINAR_USUARIO', g.user['id'], 'usuarios', usuario_id, f"Usuario '{usuario['username']}' eliminado.")
+            flash(f"El usuario '{usuario['username']}' ha sido eliminado.", 'success')
+        else:
+            flash("Usuario no encontrado.", "danger")
+    finally:
+        cursor.close()
+
     return redirect(url_for('admin.listar_usuarios'))
 
 
@@ -371,38 +427,54 @@ def eliminar_usuario(usuario_id):
 def gestionar_permisos_proyecto(proyecto_id):
     """Gestiona qué usuarios tienen acceso a un proyecto específico."""
     db = get_db()
-    proyecto = db.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,)).fetchone()
-    if not proyecto:
-        abort(404)
+    p = _get_placeholder()
+    cursor = db.cursor()
     
-    form = FlaskForm()
+    try:
+        sql_get_proyecto = f'SELECT * FROM proyectos WHERE id = {p}'
+        cursor.execute(sql_get_proyecto, (proyecto_id,))
+        proyecto = cursor.fetchone()
+        if not proyecto:
+            abort(404)
         
-    if form.validate_on_submit():
-        usuarios_asignados = request.form.getlist('usuarios_asignados')
-        
-        current_assigned_users_query = db.execute('SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?', (proyecto_id,)).fetchall()
-        current_assigned_users_ids = {row['usuario_id'] for row in current_assigned_users_query}
-        new_assigned_users_ids = {int(uid) for uid in usuarios_asignados}
+        form = FlaskForm()
 
-        db.execute('DELETE FROM proyecto_usuarios WHERE proyecto_id = ?', (proyecto_id,))
-        for user_id in usuarios_asignados:
-            db.execute('INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)', (proyecto_id, int(user_id)))
-        db.commit()
+        if form.validate_on_submit():
+            usuarios_asignados = request.form.getlist('usuarios_asignados')
+
+            sql_get_assigned = f'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = {p}'
+            cursor.execute(sql_get_assigned, (proyecto_id,))
+            current_assigned_users_ids = {row['usuario_id'] for row in cursor.fetchall()}
+            new_assigned_users_ids = {int(uid) for uid in usuarios_asignados}
+
+            sql_delete_perm = f'DELETE FROM proyecto_usuarios WHERE proyecto_id = {p}'
+            cursor.execute(sql_delete_perm, (proyecto_id,))
+
+            sql_insert_perm = f'INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES ({p}, {p})'
+            for user_id in usuarios_asignados:
+                cursor.execute(sql_insert_perm, (proyecto_id, int(user_id)))
+            db.commit()
+
+            if current_assigned_users_ids != new_assigned_users_ids:
+                changes = {'usuarios_asignados': {'old': list(current_assigned_users_ids), 'new': list(new_assigned_users_ids)}}
+                log_action('ACTUALIZAR_PERMISOS_PROYECTO', g.user['id'], 'proyectos', proyecto_id,
+                           f"Permisos del proyecto '{proyecto['nombre']}' actualizados. Cambios: {json.dumps(changes)}.")
+            flash('Permisos del proyecto actualizados con éxito.', 'success')
+            return redirect(url_for('admin.gestionar_permisos_proyecto', proyecto_id=proyecto_id))
         
-        if current_assigned_users_ids != new_assigned_users_ids:
-            changes = {'usuarios_asignados': {'old': list(current_assigned_users_ids), 'new': list(new_assigned_users_ids)}}
-            log_action('ACTUALIZAR_PERMISOS_PROYECTO', g.user['id'], 'proyectos', proyecto_id, 
-                       f"Permisos del proyecto '{proyecto['nombre']}' actualizados. Cambios: {json.dumps(changes)}.")
-        current_app.logger.info(f"Admin '{g.user['username']}' actualizó los permisos para el proyecto '{proyecto['nombre']}'.")
-        flash('Permisos del proyecto actualizados con éxito.', 'success')
-        return redirect(url_for('admin.gestionar_permisos_proyecto', proyecto_id=proyecto_id))
-    
-    todos_usuarios = db.execute('SELECT id, nombre_completo FROM usuarios WHERE activo = 1 ORDER BY nombre_completo').fetchall()
-    usuarios_con_acceso_query = db.execute('SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?', (proyecto_id,)).fetchall()
-    usuarios_con_acceso = {row['usuario_id'] for row in usuarios_con_acceso_query}
-    
-    log_action('VER_PERMISOS_PROYECTO', g.user['id'], 'proyectos', proyecto_id, 
-               f"Visualizó permisos del proyecto '{proyecto['nombre']}'.")
+        sql_get_all_users = 'SELECT id, nombre_completo FROM usuarios WHERE activo = 1 ORDER BY nombre_completo'
+        cursor.execute(sql_get_all_users)
+        todos_usuarios = cursor.fetchall()
+
+        sql_get_access = f'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = {p}'
+        cursor.execute(sql_get_access, (proyecto_id,))
+        usuarios_con_acceso = {row['usuario_id'] for row in cursor.fetchall()}
+
+        log_action('VER_PERMISOS_PROYECTO', g.user['id'], 'proyectos', proyecto_id,
+                   f"Visualizó permisos del proyecto '{proyecto['nombre']}'.")
+    finally:
+        cursor.close()
+
     return render_template('admin/proyecto_permisos.html', 
                            proyecto=proyecto, 
                            todos_usuarios=todos_usuarios,
@@ -416,26 +488,37 @@ def gestionar_alias():
     """Gestiona la creación y listado de alias para perfiles."""
     form = AliasForm()
     db = get_db()
+    p = _get_placeholder()
+    cursor = db.cursor()
 
-    if form.validate_on_submit():
-        nombre_perfil = form.nombre_perfil.data
-        alias = form.alias.data
-        norma = form.norma.data
-        
-        existe = db.execute('SELECT id FROM alias_perfiles WHERE nombre_perfil = ? OR alias = ?', (nombre_perfil, alias)).fetchone()
-        if existe:
-            flash('El nombre del perfil o el alias ya existen.', 'danger')
-        else:
-            cursor = db.execute('INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)', (nombre_perfil, alias, norma))
-            new_alias_id = cursor.lastrowid
-            db.commit()
-            log_action('CREAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', new_alias_id, 
-                       f"Alias '{alias}' para perfil '{nombre_perfil}' (Norma: {norma}) creado.")
-            flash('Alias guardado con éxito.', 'success')
-        return redirect(url_for('admin.gestionar_alias'))
+    try:
+        if form.validate_on_submit():
+            nombre_perfil = form.nombre_perfil.data
+            alias = form.alias.data
+            norma = form.norma.data
 
-    aliases = db.execute('SELECT * FROM alias_perfiles ORDER BY nombre_perfil').fetchall()
-    log_action('VER_ALIAS_PERFILES', g.user['id'], 'alias_perfiles', None, "Visualizó la gestión de alias de perfiles.")
+            sql_check = f'SELECT id FROM alias_perfiles WHERE nombre_perfil = {p} OR alias = {p}'
+            cursor.execute(sql_check, (nombre_perfil, alias))
+            existe = cursor.fetchone()
+
+            if existe:
+                flash('El nombre del perfil o el alias ya existen.', 'danger')
+            else:
+                sql_insert = f'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES ({p}, {p}, {p})'
+                cursor.execute(sql_insert, (nombre_perfil, alias, norma))
+
+                new_alias_id = cursor.lastrowid if hasattr(cursor, 'lastrowid') else db.execute('SELECT LASTVAL()').fetchone()[0]
+                db.commit()
+                log_action('CREAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', new_alias_id, f"Alias '{alias}' para perfil '{nombre_perfil}' (Norma: {norma}) creado.")
+                flash('Alias guardado con éxito.', 'success')
+            return redirect(url_for('admin.gestionar_alias'))
+
+        cursor.execute('SELECT * FROM alias_perfiles ORDER BY nombre_perfil')
+        aliases = cursor.fetchall()
+        log_action('VER_ALIAS_PERFILES', g.user['id'], 'alias_perfiles', None, "Visualizó la gestión de alias de perfiles.")
+    finally:
+        cursor.close()
+
     return render_template('admin/alias_manager.html', aliases=aliases, form=form, titulo="Gestión de Alias de Perfiles")
 
 @admin_bp.route('/alias/<int:alias_id>/editar', methods=['POST'])
@@ -446,34 +529,32 @@ def editar_alias(alias_id):
     alias = request.form.get('alias')
     norma = request.form.get('norma')
     db = get_db()
+    p = _get_placeholder()
+    cursor = db.cursor()
 
-    old_alias_data = db.execute('SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = ?', (alias_id,)).fetchone()
+    try:
+        sql_get_old = f'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = {p}'
+        cursor.execute(sql_get_old, (alias_id,))
+        old_alias_data = cursor.fetchone()
 
-    existe = db.execute(
-        'SELECT id FROM alias_perfiles WHERE (nombre_perfil = ? OR alias = ?) AND id != ?', 
-        (nombre_perfil, alias, alias_id)
-    ).fetchone()
+        sql_check = f'SELECT id FROM alias_perfiles WHERE (nombre_perfil = {p} OR alias = {p}) AND id != {p}'
+        cursor.execute(sql_check, (nombre_perfil, alias, alias_id))
+        existe = cursor.fetchone()
 
-    if existe:
-        flash('El nombre del perfil o el alias ya están en uso por otro registro.', 'danger')
-    else:
-        db.execute(
-            'UPDATE alias_perfiles SET nombre_perfil = ?, alias = ?, norma = ? WHERE id = ?',
-            (nombre_perfil, alias, norma, alias_id)
-        )
-        db.commit()
-        changes = {}
-        if nombre_perfil != old_alias_data['nombre_perfil']:
-            changes['nombre_perfil'] = {'old': old_alias_data['nombre_perfil'], 'new': nombre_perfil}
-        if alias != old_alias_data['alias']:
-            changes['alias'] = {'old': old_alias_data['alias'], 'new': alias}
-        if norma != old_alias_data['norma']:
-            changes['norma'] = {'old': old_alias_data['norma'], 'new': norma}
-        
-        if changes:
-            log_action('EDITAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', alias_id, 
-                       f"Alias '{old_alias_data['alias']}' editado. Cambios: {json.dumps(changes)}.")
-        flash('Alias actualizado con éxito.', 'success')
+        if existe:
+            flash('El nombre del perfil o el alias ya están en uso por otro registro.', 'danger')
+        else:
+            sql_update = f'UPDATE alias_perfiles SET nombre_perfil = {p}, alias = {p}, norma = {p} WHERE id = {p}'
+            cursor.execute(sql_update, (nombre_perfil, alias, norma, alias_id))
+            db.commit()
+
+            changes = {k: {'old': old_alias_data[k], 'new': v} for k, v in [('nombre_perfil', nombre_perfil), ('alias', alias), ('norma', norma)] if old_alias_data[k] != v}
+            if changes:
+                log_action('EDITAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', alias_id, f"Alias '{old_alias_data['alias']}' editado. Cambios: {json.dumps(changes)}.")
+            flash('Alias actualizado con éxito.', 'success')
+    finally:
+        cursor.close()
+
     return redirect(url_for('admin.gestionar_alias'))
 
 
@@ -482,15 +563,25 @@ def editar_alias(alias_id):
 def eliminar_alias(alias_id):
     """Elimina un alias de perfil existente."""
     db = get_db()
-    alias_data = db.execute('SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = ?', (alias_id,)).fetchone()
-    if alias_data:
-        db.execute('DELETE FROM alias_perfiles WHERE id = ?', (alias_id,))
-        db.commit()
-        log_action('ELIMINAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', alias_id, 
-                   f"Alias '{alias_data['alias']}' (Norma: {alias_data['norma']}) para perfil '{alias_data['nombre_perfil']}' eliminado.")
-        flash('Alias eliminado con éxito.', 'success')
-    else:
-        flash('Alias no encontrado.', 'danger')
+    p = _get_placeholder()
+    cursor = db.cursor()
+
+    try:
+        sql_get = f'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = {p}'
+        cursor.execute(sql_get, (alias_id,))
+        alias_data = cursor.fetchone()
+
+        if alias_data:
+            sql_delete = f'DELETE FROM alias_perfiles WHERE id = {p}'
+            cursor.execute(sql_delete, (alias_id,))
+            db.commit()
+            log_action('ELIMINAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', alias_id, f"Alias '{alias_data['alias']}' (Norma: {alias_data['norma']}) para perfil '{alias_data['nombre_perfil']}' eliminado.")
+            flash('Alias eliminado con éxito.', 'success')
+        else:
+            flash('Alias no encontrado.', 'danger')
+    finally:
+        cursor.close()
+
     return redirect(url_for('admin.gestionar_alias'))
 
 @admin_bp.route('/alias/importar', methods=['GET', 'POST'])
@@ -499,29 +590,28 @@ def importar_alias():
     """
     Gestiona la importación masiva de alias de perfiles desde un archivo Excel/CSV.
     """
-    db = get_db()
-
     if request.method == 'POST':
-        if 'archivo_alias' not in request.files or not request.files['archivo_alias'].filename:
-            flash('No se seleccionó ningún archivo para importar.', 'danger')
-            return redirect(request.url)
-        
-        file = request.files['archivo_alias']
-        filename = secure_filename(file.filename)
-        
-        if not (filename.endswith('.xlsx') or filename.endswith('.csv')):
-            flash('Formato de archivo no válido. Sube un archivo .xlsx o .csv.', 'warning')
-            return redirect(request.url)
-        
-        imported_count = 0
-        updated_count = 0
-        error_rows = []
+        db = get_db()
+        p = _get_placeholder()
+        cursor = db.cursor()
 
         try:
-            if filename.endswith('.xlsx'):
-                df = pd.read_excel(file, engine='openpyxl')
-            else: # Asume .csv
-                df = pd.read_csv(file)
+            if 'archivo_alias' not in request.files or not request.files['archivo_alias'].filename:
+                flash('No se seleccionó ningún archivo para importar.', 'danger')
+                return redirect(request.url)
+
+            file = request.files['archivo_alias']
+            filename = secure_filename(file.filename)
+
+            if not (filename.endswith('.xlsx') or filename.endswith('.csv')):
+                flash('Formato de archivo no válido. Sube un archivo .xlsx o .csv.', 'warning')
+                return redirect(request.url)
+
+            imported_count = 0
+            updated_count = 0
+            error_rows = []
+
+            df = pd.read_excel(file, engine='openpyxl') if filename.endswith('.xlsx') else pd.read_csv(file)
             
             required_cols = ['NOMBRE_PERFIL', 'ALIAS', 'NORMA']
             df.columns = [col.upper().strip() for col in df.columns]
@@ -529,59 +619,51 @@ def importar_alias():
             if not all(col in df.columns for col in required_cols):
                 flash('El archivo debe contener las columnas: NOMBRE_PERFIL, ALIAS, NORMA.', 'danger')
                 return redirect(request.url)
-            
+
+            # Definir SQL fuera del bucle
+            sql_check = f'SELECT id FROM alias_perfiles WHERE nombre_perfil = {p}'
+            sql_update = f'UPDATE alias_perfiles SET alias = {p}, norma = {p} WHERE id = {p}'
+            sql_insert = f'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES ({p}, {p}, {p})'
+
             for index, row in df.iterrows():
                 try:
-                    nombre_perfil = str(row['NOMBRE_PERFIL']).strip()
-                    alias = str(row['ALIAS']).strip()
-                    norma = str(row['NORMA']).strip() if 'NORMA' in row else ''
+                    nombre_perfil = str(row.get('NOMBRE_PERFIL', '')).strip()
+                    alias = str(row.get('ALIAS', '')).strip()
+                    norma = str(row.get('NORMA', '')).strip()
                     if norma == 'nan': norma = ''
                     
                     if not nombre_perfil or not alias:
                         error_rows.append(f"Fila {index+2}: NOMBRE_PERFIL y ALIAS son obligatorios.")
                         continue
                     
-                    existing_alias = db.execute('SELECT id FROM alias_perfiles WHERE nombre_perfil = ?', (nombre_perfil,)).fetchone()
+                    cursor.execute(sql_check, (nombre_perfil,))
+                    existing_alias = cursor.fetchone()
                     
                     if existing_alias:
-                        db.execute('UPDATE alias_perfiles SET alias = ?, norma = ? WHERE id = ?', 
-                                   (alias, norma, existing_alias['id']))
+                        cursor.execute(sql_update, (alias, norma, existing_alias['id']))
                         updated_count += 1
-                        log_action('ACTUALIZAR_ALIAS_MASIVO', g.user['id'], 'alias_perfiles', existing_alias['id'],
-                                   f"Alias '{nombre_perfil}' actualizado a '{alias}' (Norma: {norma}) mediante importación masiva.")
                     else:
-                        cursor = db.execute('INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)',
-                                           (nombre_perfil, alias, norma))
+                        cursor.execute(sql_insert, (nombre_perfil, alias, norma))
                         imported_count += 1
-                        log_action('CREAR_ALIAS_MASIVO', g.user['id'], 'alias_perfiles', cursor.lastrowid,
-                                   f"Alias '{nombre_perfil}' creado como '{alias}' (Norma: {norma}) mediante importación masiva.")
                 except Exception as row_e:
                     error_rows.append(f"Fila {index+2}: Error al procesar - {row_e}")
-                    current_app.logger.error(f"Error procesando fila {index+2} de importación de alias: {row_e}", exc_info=True)
             
             db.commit()
 
-            msg_success = []
-            if imported_count > 0:
-                msg_success.append(f"Se crearon {imported_count} nuevos alias.")
-            if updated_count > 0:
-                msg_success.append(f"Se actualizaron {updated_count} alias existentes.")
-            
-            if msg_success:
-                flash("Importación completada: " + " ".join(msg_success), 'success')
-            elif not error_rows:
-                flash("No se encontraron alias válidos para importar/actualizar.", 'info')
-
-            if error_rows:
-                flash(f"Errores en {len(error_rows)} fila(s): " + "; ".join(error_rows[:5]) + ("..." if len(error_rows) > 5 else ""), 'danger')
+            # Lógica de mensajes flash...
+            msg_parts = []
+            if imported_count > 0: msg_parts.append(f"Se crearon {imported_count} nuevos alias.")
+            if updated_count > 0: msg_parts.append(f"Se actualizaron {updated_count} alias existentes.")
+            if msg_parts: flash("Importación completada: " + " ".join(msg_parts), 'success')
+            if error_rows: flash(f"Errores en {len(error_rows)} fila(s): " + "; ".join(error_rows[:5]), 'danger')
 
         except pd.errors.EmptyDataError:
-            flash('El archivo está vacío o no contiene datos válidos.', 'danger')
-        except pd.errors.ParserError as pe:
-            flash(f'Error al analizar el archivo: {pe}. Asegúrate de que el formato sea correcto.', 'danger')
+            flash('El archivo está vacío.', 'danger')
         except Exception as e:
-            flash(f"Ocurrió un error inesperado durante la importación: {e}", "danger")
-            current_app.logger.error(f"Ocurrió un error inesperado durante la importación: {e}", exc_info=True)
+            flash(f"Ocurrió un error inesperado: {e}", "danger")
+        finally:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
         
         return redirect(url_for('admin.gestionar_alias'))
 

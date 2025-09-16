@@ -58,10 +58,12 @@ def buscar_perfiles():
     normalized_query = re.sub(r'[ -]', '', query).lower()
     db = get_db()
     p = _get_placeholder()
+    cursor = db.cursor()
     
     resultados = []
     added_profiles = set()
 
+    # La función REPLACE es compatible con SQLite y PostgreSQL
     sql_query = f"""
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
@@ -71,7 +73,9 @@ def buscar_perfiles():
     """
     like_param = f'%{normalized_query}%'
 
-    aliases = db.execute(sql_query, (like_param, like_param)).fetchall()
+    cursor.execute(sql_query, (like_param, like_param))
+    aliases = cursor.fetchall()
+    cursor.close()
     
     for row in aliases:
         if row['nombre_perfil'] not in added_profiles:
@@ -113,65 +117,102 @@ def marcar_notificaciones_leidas():
     db = get_db()
     p = _get_placeholder()
     sql = f'UPDATE notificaciones SET leida = 1 WHERE usuario_id = {p} AND leida = 0'
+    cursor = db.cursor()
     try:
-        db.execute(sql, (g.user['id'],))
+        cursor.execute(sql, (g.user['id'],))
         db.commit()
         return jsonify({'success': True})
     except Exception as e:
+        db.rollback()
         current_app.logger.error(f"API Error: No se pudieron marcar las notificaciones como leídas para el usuario {g.user['id']}. Error: {e}")
         return jsonify({'success': False, 'error': 'Error en la base de datos'}), 500
+    finally:
+        cursor.close()
+
+@api_bp.route('/dashboard/project-details')
+@roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
+def get_project_details_for_chart():
+    proyecto_id = request.args.get('proyecto_id', type=int)
+    estado = request.args.get('estado')
+
+    if not proyecto_id or not estado:
+        return jsonify({'error': 'Parámetros incompletos'}), 400
+
+    db = get_db()
+    p = _get_placeholder()
+    cursor = db.cursor()
+
+    try:
+        sql = f"SELECT id, codigo_conexion, fecha_creacion FROM conexiones WHERE proyecto_id = {p} AND estado = {p} ORDER BY fecha_creacion DESC"
+        cursor.execute(sql, (proyecto_id, estado))
+        conexiones = cursor.fetchall()
+
+        # Convertir a una lista de diccionarios para JSON
+        results = [dict(row) for row in conexiones]
+        return jsonify(results)
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener detalles del proyecto para el gráfico: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        cursor.close()
 
 @api_bp.route('/conexiones/<int:conexion_id>/cambiar_estado_rapido', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'APROBADOR')
 def cambiar_estado_rapido(conexion_id):
     db = get_db()
     p = _get_placeholder()
+    cursor = db.cursor()
 
-    conexion_sql = f"SELECT proyecto_id FROM conexiones WHERE id = {p}"
-    conexion = db.execute(conexion_sql, (conexion_id,)).fetchone()
-    if not conexion:
-        return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
+    try:
+        conexion_sql = f"SELECT proyecto_id FROM conexiones WHERE id = {p}"
+        cursor.execute(conexion_sql, (conexion_id,))
+        conexion = cursor.fetchone()
+        if not conexion:
+            return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
 
-    if 'ADMINISTRADOR' not in session.get('user_roles', []):
-        acceso_sql = f"SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = {p} AND usuario_id = {p}"
-        acceso = db.execute(acceso_sql, (conexion['proyecto_id'], g.user['id'])).fetchone()
-        if not acceso:
-            return jsonify({'success': False, 'error': 'No tienes permiso para acceder a esta conexión.'}), 403
+        if 'ADMINISTRADOR' not in session.get('user_roles', []):
+            acceso_sql = f"SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = {p} AND usuario_id = {p}"
+            cursor.execute(acceso_sql, (conexion['proyecto_id'], g.user['id']))
+            acceso = cursor.fetchone()
+            if not acceso:
+                return jsonify({'success': False, 'error': 'No tienes permiso para acceder a esta conexión.'}), 403
 
-    data = request.get_json()
-    nuevo_estado = data.get('estado')
-    detalles = data.get('detalles', '')
+        data = request.get_json()
+        nuevo_estado = data.get('estado')
+        detalles = data.get('detalles', '')
 
-    success, message, _ = process_connection_state_transition(
-        db, conexion_id, nuevo_estado, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles
-    )
+        success, message, _ = process_connection_state_transition(
+            db, conexion_id, nuevo_estado, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles
+        )
 
-    if success:
-        return jsonify({'success': True, 'message': message})
-    else:
-        status_code = 400 if "Debes proporcionar un motivo" in message else 403
-        return jsonify({'success': False, 'error': message}), status_code
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            status_code = 400 if "Debes proporcionar un motivo" in message else 403
+            return jsonify({'success': False, 'error': message}), status_code
+    finally:
+        cursor.close()
 
 @api_bp.route('/dashboard/save_preferences', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def save_dashboard_preferences():
     db = get_db()
-    p = _get_placeholder()
     data = request.get_json()
     widgets_config = json.dumps(data.get('widgets_config', {}))
     
     if _is_testing():
-        sql = f'INSERT OR REPLACE INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES ({p}, {p})'
+        sql = 'INSERT OR REPLACE INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (?, ?)'
     else:
-        sql = """
-            INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (%s, %s)
-            ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = EXCLUDED.widgets_config
-        """
+        sql = "INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (%s, %s) ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = EXCLUDED.widgets_config"
 
+    cursor = db.cursor()
     try:
-        db.execute(sql, (g.user['id'], widgets_config))
+        cursor.execute(sql, (g.user['id'], widgets_config))
         db.commit()
         return jsonify({'success': True, 'message': 'Preferencias del dashboard guardadas con éxito.'})
     except Exception as e:
+        db.rollback()
         current_app.logger.error(f"Error al guardar preferencias de dashboard para usuario {g.user['id']}: {e}")
         return jsonify({'success': False, 'error': 'Error al guardar preferencias del dashboard.'}), 500
+    finally:
+        cursor.close()

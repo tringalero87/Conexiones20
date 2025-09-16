@@ -25,7 +25,7 @@ def get_db():
             database_url = os.environ.get('DATABASE_URL')
             if not database_url:
                 raise RuntimeError("DATABASE_URL no está configurada. La aplicación no puede continuar.")
-            g.db = psycopg2.connect(database_url)
+            g.db = psycopg2.connect(database_url, cursor_factory=DictCursor)
     
     return g.db
 

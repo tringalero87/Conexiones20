@@ -124,7 +124,9 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
                            content_type='application/json')
 
     assert response.status_code == 200
-    assert b'ha sido tomada por' in response.data
+    json_data = response.get_json()
+    assert json_data['success'] is True
+    assert 'tomada por' in json_data['message']
 
     # 7. Verify the connection state DID change
     with app.app_context():

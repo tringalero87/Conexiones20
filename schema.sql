@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   activo INTEGER NOT NULL DEFAULT 1,
-  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS proyectos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE,
   descripcion TEXT,
-  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   creador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
@@ -66,9 +66,10 @@ CREATE TABLE IF NOT EXISTS conexiones (
   solicitante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   realizador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   aprobador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  fecha_modificacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  detalles_rechazo TEXT
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_modificacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  detalles_rechazo TEXT,
+  fts_document TEXT -- Columna para FTS. En PG se usará con to_tsvector, en SQLite con LIKE.
 );
 
 -- -----------------------------------------------------
@@ -80,7 +81,7 @@ CREATE TABLE IF NOT EXISTS archivos (
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   tipo_archivo TEXT NOT NULL,
   nombre_archivo TEXT NOT NULL,
-  fecha_subida TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_subida TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -91,7 +92,7 @@ CREATE TABLE IF NOT EXISTS comentarios (
   conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   contenido TEXT NOT NULL,
-  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -104,7 +105,7 @@ CREATE TABLE IF NOT EXISTS notificaciones (
   url TEXT NOT NULL,
   conexion_id INTEGER REFERENCES conexiones(id) ON DELETE CASCADE,
   leida INTEGER NOT NULL DEFAULT 0,
-  fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -116,7 +117,7 @@ CREATE TABLE IF NOT EXISTS historial_estados (
   usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   estado TEXT NOT NULL,
   detalles TEXT,
-  fecha TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -148,8 +149,8 @@ CREATE TABLE IF NOT EXISTS reportes (
     programado INTEGER NOT NULL DEFAULT 0,
     frecuencia TEXT,
     destinatarios TEXT,
-    ultima_ejecucion TEXT,
-    fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ultima_ejecucion TIMESTAMP,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -172,7 +173,7 @@ CREATE TABLE IF NOT EXISTS auditoria_acciones (
     tipo_objeto TEXT,
     objeto_id INTEGER,
     detalles TEXT,
-    fecha TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------

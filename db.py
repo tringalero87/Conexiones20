@@ -5,6 +5,21 @@ import os
 import psycopg2
 from psycopg2.extras import DictCursor
 import sqlite3
+import datetime
+
+# --- Adaptadores y Conversores para SQLite ---
+# Soluciona DeprecationWarning en Python 3.12+ para timestamps.
+def adapt_datetime_iso(val):
+    """Adapta un objeto datetime.datetime a un formato de texto ISO 8601."""
+    return val.isoformat()
+
+def convert_timestamp(val):
+    """Convierte una columna de tipo TIMESTAMP de la BD (bytes) a un objeto datetime."""
+    return datetime.datetime.fromisoformat(val.decode())
+
+sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
+sqlite3.register_converter("timestamp", convert_timestamp)
+
 
 def get_db():
     """

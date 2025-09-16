@@ -187,10 +187,22 @@ def test_dashboard_admin_kpis(client, app, auth):
     response_data = response.data.decode('utf-8')
 
     assert '<h3 class="mb-3">Panel de Administrador</h3>' in response_data
+    import re
+
+    # Helper to check for a KPI value within its card, making the test less
+    # brittle.
+    def check_admin_kpi(label, value):
+        safe_label = re.escape(label)
+        pattern = f'<h6.*?>{safe_label}</h6>\\s*<h4 class="mb-0">{value}</h4>'
+        assert re.search(
+            pattern,
+            response_data,
+            re.DOTALL), f"Admin KPI '{label}' con valor '{value}' no encontrado."
+
     # KPI: Conexiones Activas (1, which is ADMIN-002)
-    assert '<h6 class="text-muted mb-1">Conexiones Activas</h6><h4 class="mb-0">1</h4>' in response_data
+    check_admin_kpi('Conexiones Activas', 1)
     # KPI: Creadas Hoy (2)
-    assert '<h6 class="text-muted mb-1">Creadas Hoy</h6><h4 class="mb-0">2</h4>' in response_data
+    check_admin_kpi('Creadas Hoy', 2)
     # Check for charts
     assert '<canvas id="estadosChart"></canvas>' in response_data
     assert '<canvas id="mesesChart"></canvas>' in response_data

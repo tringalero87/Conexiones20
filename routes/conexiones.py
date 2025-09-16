@@ -1,25 +1,20 @@
 import os
 import json
-import datetime
 import bleach
-import pandas as pd
 from flask import (Blueprint, render_template, request, redirect, url_for, g,
-                   current_app, flash, abort, send_from_directory, jsonify, session)
+                   current_app, flash, abort, send_from_directory, session)
 from werkzeug.utils import secure_filename
 from collections import defaultdict
-from flask_mail import Message
-from extensions import mail
-import threading
 
 from db import get_db, log_action
 from . import roles_required
 from forms import ConnectionForm
-from utils.computos import calcular_peso_perfil
-import re
 
 # Importa el servicio de cómputos
 from services.computos_service import get_computos_results, calculate_and_save_computos
-from services.connection_service import process_connection_state_transition, _get_conexion, _notify_users, get_tipologia_config
+from services.connection_service import (
+    process_connection_state_transition, _get_conexion, _notify_users, get_tipologia_config
+)
 
 conexiones_bp = Blueprint('conexiones', __name__, url_prefix='/conexiones')
 
@@ -110,7 +105,6 @@ def allowed_file(filename):
 
     return extension in ALLOWED_EXTENSIONS
 
-from services.connection_service import process_connection_state_transition, _get_conexion, _notify_users, get_tipologia_config
 
 def _is_testing():
     return current_app.config.get('TESTING', False)
@@ -425,17 +419,20 @@ def cambiar_estado(conexion_id):
     db = get_db()
     nuevo_estado_form = request.form.get('estado')
     detalles_form = request.form.get('detalles', '')
-    
+
     success, message, _ = process_connection_state_transition(
-        db, conexion_id, nuevo_estado_form, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles_form
+        db, conexion_id, nuevo_estado_form, g.user['id'],
+        g.user['nombre_completo'], session.get('user_roles', []), detalles_form
     )
 
     if success:
         flash(message, 'success')
     else:
         flash(message, 'danger')
-    
-    return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+
+    return redirect(url_for('conexiones.detalle_conexion',
+                            conexion_id=conexion_id))
+
 
 @conexiones_bp.route('/<int:conexion_id>/asignar', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -443,18 +440,22 @@ def asignar_realizador(conexion_id):
     db = get_db()
     p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
-    
+
     user_roles = session.get('user_roles', [])
 
-    if not ('ADMINISTRADOR' in user_roles or \
-            ('SOLICITANTE' in user_roles and g.user['id'] == conexion['solicitante_id']) or \
-            ('REALIZADOR' in user_roles and g.user['id'] == conexion['realizador_id']) or \
-            ('APROBADOR' in user_roles and conexion['estado'] == 'REALIZADO')):
+    can_assign = (
+        'ADMINISTRADOR' in user_roles or
+        ('SOLICITANTE' in user_roles and g.user['id'] == conexion['solicitante_id']) or
+        ('REALIZADOR' in user_roles and g.user['id'] == conexion['realizador_id']) or
+        ('APROBADOR' in user_roles and conexion['estado'] == 'REALIZADO')
+    )
+
+    if not can_assign:
         flash('No tienes permisos para asignar esta conexión.', 'danger')
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
     username_a_asignar = request.form.get('username_a_asignar')
-    
+
     if not username_a_asignar:
         flash('Debes especificar un nombre de usuario para asignar la tarea.', 'danger')
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
@@ -492,8 +493,9 @@ def asignar_realizador(conexion_id):
         db.commit()
     finally:
         cursor.close()
-        
+
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+
 
 @conexiones_bp.route('/<int:conexion_id>/subir_archivo', methods=('POST',))
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
@@ -505,7 +507,7 @@ def subir_archivo(conexion_id):
     if 'archivo' not in request.files or not request.files['archivo'].filename:
         flash('No se seleccionó ningún archivo.', 'danger')
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
-    
+
     file = request.files['archivo']
     tipo_archivo = request.form.get('tipo_archivo')
 
@@ -514,7 +516,7 @@ def subir_archivo(conexion_id):
         upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
         os.makedirs(upload_path, exist_ok=True)
         file.save(os.path.join(upload_path, filename))
-        
+
         sql = f'INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES ({p}, {p}, {p}, {p})'
         params = (conexion_id, g.user['id'], tipo_archivo, filename)
 
@@ -529,8 +531,9 @@ def subir_archivo(conexion_id):
         flash(f"Archivo '{tipo_archivo}' subido con éxito.", 'success')
     else:
         flash('Tipo de archivo no permitido.', 'danger')
-        
+
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+
 
 @conexiones_bp.route('/<int:conexion_id>/descargar/<path:filename>')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -549,9 +552,10 @@ def descargar_archivo(conexion_id, filename):
 
     if not archivo_db:
         abort(404, description="El archivo no existe o no está asociado a esta conexión.")
-    
+
     log_action('DESCARGAR_ARCHIVO', g.user['id'], 'archivos', conexion_id, f"Archivo '{filename}' descargado.")
     return send_from_directory(directory, filename, as_attachment=True)
+
 
 @conexiones_bp.route('/<int:conexion_id>/eliminar_archivo/<int:archivo_id>', methods=['POST',])
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
@@ -566,9 +570,13 @@ def eliminar_archivo(conexion_id, archivo_id):
 
         if archivo:
             conexion = _get_conexion(conexion_id)
-            if 'ADMINISTRADOR' not in session.get('user_roles', []) and g.user['id'] != archivo['usuario_id'] and g.user['id'] != conexion['realizador_id']:
-                 flash('No tienes permiso para eliminar este archivo.', 'danger')
-                 return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+            is_admin = 'ADMINISTRADOR' in session.get('user_roles', [])
+            is_owner = g.user['id'] == archivo['usuario_id']
+            is_realizador = g.user['id'] == conexion['realizador_id']
+
+            if not (is_admin or is_owner or is_realizador):
+                flash('No tienes permiso para eliminar este archivo.', 'danger')
+                return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
             sql_delete = f'DELETE FROM archivos WHERE id = {p}'
             cursor.execute(sql_delete, (archivo_id,))
@@ -584,6 +592,7 @@ def eliminar_archivo(conexion_id, archivo_id):
         cursor.close()
 
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+
 
 @conexiones_bp.route('/<int:conexion_id>/comentar', methods=('POST',))
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -601,13 +610,14 @@ def agregar_comentario(conexion_id):
         finally:
             cursor.close()
 
-        log_action('AGREGAR_COMENTARIO', g.user['id'], 'conexiones', conexion_id, f"Comentario añadido.")
+        log_action('AGREGAR_COMENTARIO', g.user['id'], 'conexiones', conexion_id, "Comentario añadido.")
         _notify_users(db, conexion_id, f"{g.user['nombre_completo']} ha comentado.", "#comentarios", ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
         flash('Comentario añadido.', 'success')
     else:
         flash('El comentario no puede estar vacío.', 'warning')
-        
+
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id) + "#comentarios")
+
 
 @conexiones_bp.route('/<int:conexion_id>/eliminar_comentario/<int:comentario_id>', methods=['POST',])
 @roles_required('ADMINISTRADOR')
@@ -628,16 +638,19 @@ def eliminar_comentario(conexion_id, comentario_id):
 
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id) + "#comentarios")
 
+
 @conexiones_bp.route('/<int:conexion_id>/computos', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def computos_metricos(conexion_id):
     conexion = _get_conexion(conexion_id)
-    
+
     if request.method == 'POST':
         resultados, success_message, error_messages, perfiles = calculate_and_save_computos(conexion_id, request.form, g.user['id'])
-        if success_message: flash('Cómputos guardados con éxito.', 'success')
+        if success_message:
+            flash('Cómputos guardados con éxito.', 'success')
         if error_messages:
-            for error in error_messages: flash(error, 'danger')
+            for error in error_messages:
+                flash(error, 'danger')
         return redirect(url_for('conexiones.computos_metricos', conexion_id=conexion_id))
 
     resultados, detalles = get_computos_results(conexion)
@@ -648,15 +661,17 @@ def computos_metricos(conexion_id):
                            conexion=conexion, perfiles=perfiles,
                            resultados=resultados, detalles=detalles)
 
+
 @conexiones_bp.route('/<int:conexion_id>/reporte_computos')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def reporte_computos(conexion_id):
     conexion = _get_conexion(conexion_id)
     resultados, _ = get_computos_results(conexion)
-    log_action('GENERAR_REPORTE_COMPUTOS', g.user['id'], 'conexiones', conexion_id, f"Reporte de cómputos generado.")
+    log_action('GENERAR_REPORTE_COMPUTOS', g.user['id'], 'conexiones', conexion_id, "Reporte de cómputos generado.")
     return render_template('reporte_computos.html',
                            titulo=f"Reporte de Cómputos para {conexion['codigo_conexion']}",
                            conexion=conexion, resultados=resultados)
+
 
 @conexiones_bp.route('/<int:conexion_id>/reporte')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -664,31 +679,53 @@ def reporte_conexion(conexion_id):
     db = get_db()
     p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
-    
+
     cursor = db.cursor()
     try:
-        sql_historial = f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha ASC"
+        sql_historial = f"""
+            SELECT h.*, u.nombre_completo FROM historial_estados h
+            JOIN usuarios u ON h.usuario_id = u.id
+            WHERE h.conexion_id = {p} ORDER BY h.fecha ASC
+        """
         cursor.execute(sql_historial, (conexion_id,))
         historial = cursor.fetchall()
 
-        sql_comentarios = f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion ASC"
+        sql_comentarios = f"""
+            SELECT c.*, u.nombre_completo FROM comentarios c
+            JOIN usuarios u ON c.usuario_id = u.id
+            WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion ASC
+        """
         cursor.execute(sql_comentarios, (conexion_id,))
         comentarios = cursor.fetchall()
 
-        sql_archivos = f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida ASC'
+        sql_archivos = f"""
+            SELECT a.*, u.nombre_completo as subido_por FROM archivos a
+            JOIN usuarios u ON a.usuario_id = u.id
+            WHERE a.conexion_id = {p} ORDER BY a.fecha_subida ASC
+        """
         cursor.execute(sql_archivos, (conexion_id,))
         archivos_raw = cursor.fetchall()
     finally:
         cursor.close()
-    
+
     archivos_agrupados = defaultdict(list)
     for archivo in archivos_raw:
         archivos_agrupados[archivo['tipo_archivo']].append(archivo)
 
     detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
-    log_action('GENERAR_REPORTE_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Reporte de conexión generado.")
-    return render_template('reporte_conexion.html',
-                           conexion=conexion, historial=historial, comentarios=comentarios,
-                           archivos_agrupados=archivos_agrupados, detalles=detalles,
-                           tipologia_config=tipologia_config, titulo=f"Reporte de Conexión: {conexion['codigo_conexion']}")
+    tipologia_config = get_tipologia_config(conexion['tipo'],
+                                            conexion['subtipo'],
+                                            conexion['tipologia'])
+    log_action('GENERAR_REPORTE_CONEXION', g.user['id'], 'conexiones',
+               conexion_id, "Reporte de conexión generado.")
+
+    return render_template(
+        'reporte_conexion.html',
+        conexion=conexion,
+        historial=historial,
+        comentarios=comentarios,
+        archivos_agrupados=archivos_agrupados,
+        detalles=detalles,
+        tipologia_config=tipologia_config,
+        titulo=f"Reporte de Conexión: {conexion['codigo_conexion']}"
+    )

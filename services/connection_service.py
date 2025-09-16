@@ -6,13 +6,18 @@ from flask_mail import Message
 from extensions import mail
 from db import get_db, log_action
 
+def _is_testing():
+    return current_app.config.get('TESTING', False)
+
+def _get_placeholder():
+    return "?" if _is_testing() else "%s"
+
 def get_tipologia_config(tipo, subtipo, tipologia_nombre):
     """Función auxiliar para obtener la configuración de una tipología desde conexiones.json."""
     json_path = os.path.join(current_app.root_path, 'conexiones.json')
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             estructura = json.load(f)
-        # Asegúrate de que las claves de tipo y subtipo existan
         if tipo in estructura and subtipo in estructura[tipo]['subtipos']:
             tipologia_obj_list = estructura[tipo]['subtipos'][subtipo]['tipologias']
             return next((t for t in tipologia_obj_list if t['nombre'] == tipologia_nombre), None)
@@ -27,24 +32,22 @@ def _get_conexion(conexion_id):
     Lanza un error 404 si la conexión no se encuentra.
     """
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
-    conexion_query = f"""
-        SELECT c.*, p.nombre as proyecto_nombre,
-               sol.nombre_completo as solicitante_nombre,
-               real.nombre_completo as realizador_nombre,
-               aprob.nombre_completo as aprobador_nombre
-        FROM conexiones c
-        JOIN proyectos p ON c.proyecto_id = p.id
-        LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-        LEFT JOIN usuarios real ON c.realizador_id = real.id
-        LEFT JOIN usuarios aprob ON c.aprobador_id = aprob.id
-        WHERE c.id = {p}
-    """
-
+    p = _get_placeholder()
     cursor = db.cursor()
+
     try:
+        conexion_query = f"""
+            SELECT c.*, p.nombre as proyecto_nombre,
+                   sol.nombre_completo as solicitante_nombre,
+                   real.nombre_completo as realizador_nombre,
+                   aprob.nombre_completo as aprobador_nombre
+            FROM conexiones c
+            JOIN proyectos p ON c.proyecto_id = p.id
+            LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
+            LEFT JOIN usuarios real ON c.realizador_id = real.id
+            LEFT JOIN usuarios aprob ON c.aprobador_id = aprob.id
+            WHERE c.id = {p}
+        """
         cursor.execute(conexion_query, (conexion_id,))
         conexion = cursor.fetchone()
     finally:
@@ -81,18 +84,12 @@ def _send_email_notification(recipients, subject, template, **kwargs):
     thr.start()
 
 def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
-    """
-    Función auxiliar para crear notificaciones para usuarios con roles específicos
-    y también enviar correos electrónicos si tienen un email y sus preferencias lo permiten.
-    """
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    """Crea notificaciones y envía correos electrónicos a usuarios con roles específicos."""
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
-    proyecto_id = conexion['proyecto_id']
 
     placeholders = ', '.join([p] * len(roles_to_notify))
-    params = [proyecto_id] + roles_to_notify
+    params = [conexion['proyecto_id']] + roles_to_notify
 
     query = f"""
         SELECT DISTINCT u.id, u.email, u.nombre_completo, COALESCE(pn.email_notif_estado, TRUE) as email_notif_estado
@@ -109,103 +106,91 @@ def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
         cursor.execute(query, params)
         users_to_notify = cursor.fetchall()
 
-        # First, insert all internal notifications to ensure DB persistence
+        sql_insert = f"INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES ({p}, {p}, {p}, {p})"
         for user in users_to_notify:
-            if user['id'] != g.user['id'] or (url_suffix == "" and "RECHAZADO" in message):
-                sql_insert = f"INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES ({p}, {p}, {p}, {p})"
+            if user['id'] != g.user['id']:
                 full_url = url_for('conexiones.detalle_conexion', conexion_id=conexion_id, _external=True) + url_suffix
-                insert_params = (user['id'], message, full_url, conexion_id)
-                cursor.execute(sql_insert, insert_params)
+                cursor.execute(sql_insert, (user['id'], message, full_url, conexion_id))
         db.commit()
     finally:
         cursor.close()
 
-    # Now, send emails
+    # Enviar correos fuera de la transacción de la base de datos
     for user in users_to_notify:
-        if user['id'] != g.user['id'] or (url_suffix == "" and "RECHAZADO" in message):
-            if user['email'] and user['email_notif_estado']:
-                full_url = url_for('conexiones.detalle_conexion', conexion_id=conexion_id, _external=True) + url_suffix
-                _send_email_notification(
-                    recipients=[user['email']],
-                    subject=f"Hepta-Conexiones: Notificación sobre conexión {conexion['codigo_conexion']}",
-                    template='email/notification.html',
-                    nombre_usuario=user['nombre_completo'],
-                    mensaje_notificacion=message,
-                    url_accion=full_url
-                )
+        if user['id'] != g.user['id'] and user['email'] and user['email_notif_estado']:
+            full_url = url_for('conexiones.detalle_conexion', conexion_id=conexion_id, _external=True) + url_suffix
+            _send_email_notification(
+                recipients=[user['email']],
+                subject=f"Hepta-Conexiones: Notificación sobre {conexion['codigo_conexion']}",
+                template='email/notification.html',
+                nombre_usuario=user['nombre_completo'],
+                mensaje_notificacion=message,
+                url_accion=full_url
+            )
 
 def process_connection_state_transition(db, conexion_id, new_status_form, user_id, user_full_name, user_roles, details=None):
-    """
-    Procesa un cambio de estado de conexión de forma centralizada.
-    Retorna (success, message, new_db_state_name_for_audit)
-    """
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    """Procesa un cambio de estado de conexión de forma centralizada y segura."""
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     estado_actual = conexion['estado']
-    new_db_state = None
-    message = ""
+    new_db_state, message, audit_action = None, "", ""
     success = False
-    audit_action = ""
+
+    # Lógica de transición de estado
+    if new_status_form == 'EN_PROCESO' and estado_actual == 'SOLICITADO' and ('REALIZADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
+        new_db_state, audit_action, message, success = 'EN_PROCESO', 'TOMAR_CONEXION', f"Conexión tomada por {user_full_name}.", True
+    elif new_status_form == 'REALIZADO' and estado_actual == 'EN_PROCESO' and (conexion['realizador_id'] == user_id or 'ADMINISTRADOR' in user_roles):
+        new_db_state, audit_action, message, success = 'REALIZADO', 'MARCAR_REALIZADO_CONEXION', "Conexión lista para aprobación.", True
+    elif new_status_form == 'APROBADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
+        new_db_state, audit_action, message, success = 'APROBADO', 'APROBAR_CONEXION', "Conexión APROBADA.", True
+    elif new_status_form == 'RECHAZADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
+        if not details: return False, 'Debes proporcionar un motivo para el rechazo.', None
+        new_db_state, audit_action, message, success = 'EN_PROCESO', 'RECHAZAR_CONEXION', f"Conexión rechazada. Motivo: {details}", True
+
+    if not success:
+        return False, 'Acción no permitida o estado inválido.', None
 
     cursor = db.cursor()
-
     try:
-        if new_status_form == 'EN_PROCESO' and estado_actual == 'SOLICITADO' and ('REALIZADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-            new_db_state = 'EN_PROCESO'
-            cursor.execute(f'UPDATE conexiones SET realizador_id = {p} WHERE id = {p}', (user_id, conexion_id))
-            audit_action = 'TOMAR_CONEXION'
-            message = f"La conexión {conexion['codigo_conexion']} ha sido tomada por {user_full_name}."
-            success = True
+        timestamp_expr = "CURRENT_TIMESTAMP" if not _is_testing() else "datetime('now')"
+        sql_update = f"UPDATE conexiones SET estado = {p}, fecha_modificacion = {timestamp_expr}"
+        params = [new_db_state]
 
-        elif new_status_form == 'REALIZADO' and estado_actual == 'EN_PROCESO' and (conexion['realizador_id'] == user_id or 'ADMINISTRADOR' in user_roles):
-            new_db_state = 'REALIZADO'
-            audit_action = 'MARCAR_REALIZADO_CONEXION'
-            message = f"La conexión {conexion['codigo_conexion']} está lista para ser aprobada."
-            success = True
+        if new_db_state == 'EN_PROCESO' and audit_action == 'TOMAR_CONEXION':
+            sql_update += f", realizador_id = {p}"
+            params.append(user_id)
+        elif new_db_state == 'APROBADO':
+            sql_update += f", aprobador_id = {p}"
+            params.append(user_id)
+        elif audit_action == 'RECHAZAR_CONEXION':
+            sql_update += f", detalles_rechazo = {p}"
+            params.append(details)
 
-        elif new_status_form == 'APROBADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-            new_db_state = 'APROBADO'
-            cursor.execute(f'UPDATE conexiones SET aprobador_id = {p} WHERE id = {p}', (user_id, conexion_id))
-            audit_action = 'APROBAR_CONEXION'
-            message = f"La conexión {conexion['codigo_conexion']} ha sido APROBADA."
-            success = True
+        sql_update += f" WHERE id = {p}"
+        params.append(conexion_id)
+        cursor.execute(sql_update, tuple(params))
 
-        elif new_status_form == 'RECHAZADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-            if not details:
-                return False, 'Debes proporcionar un motivo para el rechazo.', None
-            new_db_state = 'EN_PROCESO'
-            cursor.execute(f'UPDATE conexiones SET detalles_rechazo = {p} WHERE id = {p}', (details, conexion_id))
-            audit_action = 'RECHAZAR_CONEXION'
-            message = f"Atención: La conexión {conexion['codigo_conexion']} fue rechazada. Motivo: {details}"
-            success = True
-
-        if success and new_db_state:
-            current_timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
-            cursor.execute(f'UPDATE conexiones SET estado = {p}, fecha_modificacion = {current_timestamp_sql} WHERE id = {p}', (new_db_state, conexion_id))
-            cursor.execute(f'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES ({p}, {p}, {p}, {p})',
-                       (conexion_id, user_id, new_status_form, details))
-
-            # Log action and commit everything at once
-            db.commit()
-
-            # These can be called after commit
-            log_action(audit_action, user_id, 'conexiones', conexion_id,
-                       f"Conexión '{conexion['codigo_conexion']}' Estado: {estado_actual} -> {new_db_state}. Detalles: {details if details else 'N/A'}")
-
-            # Notify users after the state is securely saved
-            if new_db_state == 'EN_PROCESO':
-                 _notify_users(db, conexion_id, message, "", ['SOLICITANTE', 'ADMINISTRADOR'])
-            elif new_db_state == 'REALIZADO':
-                _notify_users(db, conexion_id, message, "", ['APROBADOR', 'ADMINISTRADOR'])
-            elif new_db_state == 'APROBADO':
-                _notify_users(db, conexion_id, message, "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
-            elif audit_action == 'RECHAZAR_CONEXION':
-                _notify_users(db, conexion_id, message, "", ['REALIZADOR', 'ADMINISTRADOR'])
-
-            return True, message, new_db_state
-        else:
-            return False, 'Acción no permitida o estado inválido.', None
+        sql_historial = f"INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES ({p}, {p}, {p}, {p})"
+        cursor.execute(sql_historial, (conexion_id, user_id, new_status_form, details))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Error en transición de estado para conexión {conexion_id}: {e}", exc_info=True)
+        return False, "Error interno al cambiar de estado.", None
     finally:
         cursor.close()
+
+    log_action(audit_action, user_id, 'conexiones', conexion_id, f"Estado: {estado_actual} -> {new_db_state}. Detalles: {details or 'N/A'}")
+
+    # Notificar a los usuarios relevantes
+    roles_map = {
+        'EN_PROCESO': ['SOLICITANTE', 'ADMINISTRADOR'],
+        'REALIZADO': ['APROBADOR', 'ADMINISTRADOR'],
+        'APROBADO': ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'],
+    }
+    if audit_action == 'RECHAZAR_CONEXION':
+        _notify_users(db, conexion_id, message, "", ['REALIZADOR', 'ADMINISTRADOR'])
+    elif new_db_state in roles_map:
+        _notify_users(db, conexion_id, message, "", roles_map[new_db_state])
+
+    return True, message, new_db_state

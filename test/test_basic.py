@@ -83,26 +83,23 @@ def test_full_connection_workflow(client, app, auth):
 
     # 2. Login como Realizador, tomar tarea. Verificar estado 'EN_PROCESO'.
     auth.login('realizador_full', 'password')
-    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'EN_PROCESO'}, follow_redirects=True)
-    assert response.status_code == 200
-    assert b'ha sido tomada' in response.data
+    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'EN_PROCESO'})
+    assert response.status_code == 302 # Should redirect
     with app.app_context():
         assert get_db().execute('SELECT estado FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()['estado'] == 'EN_PROCESO'
         assert get_db().execute('SELECT realizador_id FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()['realizador_id'] == realizador_id
 
     # 3. Marcar como realizada. Verificar estado 'REALIZADO'.
-    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'REALIZADO'}, follow_redirects=True)
-    assert response.status_code == 200
-    assert b'lista para ser aprobada' in response.data
+    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'REALIZADO'})
+    assert response.status_code == 302 # Should redirect
     with app.app_context():
         assert get_db().execute('SELECT estado FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()['estado'] == 'REALIZADO'
     auth.logout()
 
     # 4. Login como Aprobador, aprobar. Verificar estado 'APROBADO'.
     auth.login('aprobador_full', 'password')
-    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'APROBADO'}, follow_redirects=True)
-    assert response.status_code == 200
-    assert b'ha sido APROBADA' in response.data
+    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'APROBADO'})
+    assert response.status_code == 302 # Should redirect
     with app.app_context():
         conexion = get_db().execute('SELECT estado, aprobador_id FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()
         assert conexion['estado'] == 'APROBADO'

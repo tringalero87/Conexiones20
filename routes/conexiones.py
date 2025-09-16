@@ -112,6 +112,12 @@ def allowed_file(filename):
 
 from services.connection_service import process_connection_state_transition, _get_conexion, _notify_users, get_tipologia_config
 
+def _is_testing():
+    return current_app.config.get('TESTING', False)
+
+def _get_placeholder():
+    return "?" if _is_testing() else "%s"
+
 @conexiones_bp.route('/crear', methods=['GET'])
 @roles_required('ADMINISTRADOR', 'SOLICITANTE')
 def crear_conexion_form():
@@ -126,20 +132,20 @@ def crear_conexion_form():
         return redirect(url_for('main.catalogo'))
 
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     cursor = db.cursor()
+
     try:
-        cursor.execute(f'SELECT * FROM proyectos WHERE id = {p}', (proyecto_id,))
+        sql_get_proyecto = f'SELECT * FROM proyectos WHERE id = {p}'
+        cursor.execute(sql_get_proyecto, (proyecto_id,))
         proyecto = cursor.fetchone()
+        if not proyecto:
+            abort(404)
+
         cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
         lista_de_alias = cursor.fetchall()
     finally:
         cursor.close()
-
-    if not proyecto:
-        abort(404)
 
     tipologia_seleccionada = get_tipologia_config(tipo, subtipo, tipologia_nombre)
     if not tipologia_seleccionada:
@@ -157,89 +163,72 @@ def crear_conexion_form():
 @conexiones_bp.route('/crear', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'SOLICITANTE')
 def procesar_creacion_conexion():
-    """
-    Procesa el formulario, busca si los perfiles digitados tienen un alias
-    y genera el código de conexión de forma inteligente.
-    """
+    """Procesa el formulario y crea una nueva conexión de forma segura y portable."""
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
-    proyecto_id = request.form.get('proyecto_id', type=int)
-    tipo = request.form.get('tipo')
-    subtipo = request.form.get('subtipo')
-    tipologia_nombre = request.form.get('tipologia_nombre')
-    
-    tipologia_config = get_tipologia_config(tipo, subtipo, tipologia_nombre)
-    if not tipologia_config:
-        flash("Error: No se pudo encontrar la configuración de la tipología al procesar.", "danger")
-        return redirect(url_for('main.catalogo'))
-
-    plantilla_codigo = tipologia_config.get('plantilla', '')
-    num_perfiles = tipologia_config.get('perfiles', 0)
-    descripcion = request.form.get('descripcion')
-
+    p = _get_placeholder()
     cursor = db.cursor()
+
     try:
-        cursor.execute(f'SELECT id FROM proyectos WHERE id = {p}', (proyecto_id,))
-        if not cursor.fetchone():
-            flash("Error: El proyecto seleccionado ya no existe.", "danger")
+        proyecto_id = request.form.get('proyecto_id', type=int)
+        tipo = request.form.get('tipo')
+        subtipo = request.form.get('subtipo')
+        tipologia_nombre = request.form.get('tipologia_nombre')
+        descripcion = request.form.get('descripcion')
+
+        tipologia_config = get_tipologia_config(tipo, subtipo, tipologia_nombre)
+        if not tipologia_config:
+            flash("Error: Configuración de tipología no encontrada.", "danger")
             return redirect(url_for('main.catalogo'))
 
-        perfiles_para_plantilla = {}
-        perfiles_para_detalles = {}
+        # Validar perfiles
+        num_perfiles = tipologia_config.get('perfiles', 0)
+        perfiles_para_plantilla, perfiles_para_detalles = {}, {}
+        sql_get_alias = f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}'
 
         for i in range(1, num_perfiles + 1):
             nombre_campo = f'perfil_{i}'
             nombre_completo_perfil = request.form.get(nombre_campo)
-
             if not nombre_completo_perfil:
                 flash(f"El campo 'Perfil {i}' es obligatorio.", "danger")
                 return redirect(url_for('conexiones.crear_conexion_form', proyecto_id=proyecto_id, tipo=tipo, subtipo=subtipo, tipologia=tipologia_nombre))
 
-            cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}', (nombre_completo_perfil,))
+            cursor.execute(sql_get_alias, (nombre_completo_perfil,))
             alias_row = cursor.fetchone()
-
-            valor_para_codigo = alias_row['alias'] if alias_row else nombre_completo_perfil
-
-            perfiles_para_plantilla[f'p{i}'] = valor_para_codigo
+            perfiles_para_plantilla[f'p{i}'] = alias_row['alias'] if alias_row else nombre_completo_perfil
             perfiles_para_detalles[f'Perfil {i}'] = nombre_completo_perfil
 
-        codigo_conexion_base = plantilla_codigo.format(**perfiles_para_plantilla)
+        # Generar código de conexión único
+        codigo_conexion_base = tipologia_config.get('plantilla', '').format(**perfiles_para_plantilla)
+        codigo_conexion_final = codigo_conexion_base
+        contador = 1
+        sql_check_code = f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p}'
+        while True:
+            cursor.execute(sql_check_code, (codigo_conexion_final,))
+            if not cursor.fetchone():
+                break
+            contador += 1
+            codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
 
-        cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p}', (codigo_conexion_base,))
-        exists = cursor.fetchone()
-
-        if exists:
-            contador = 1
-            codigo_conexion_final = codigo_conexion_base
-            while True:
-                cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p}', (codigo_conexion_final,))
-                if not cursor.fetchone():
-                    break
-                contador += 1
-                codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
-        else:
-            codigo_conexion_final = codigo_conexion_base
-
+        # Insertar conexión
         detalles_json = json.dumps(perfiles_para_detalles)
+        sql_insert_conexion = f"INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})"
+        if not _is_testing():
+            sql_insert_conexion += " RETURNING id"
         
-        returning_clause = "RETURNING id" if not is_testing else ""
-        sql_insert_conexion = f"INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}) {returning_clause}"
         params_conexion = (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion, detalles_json, g.user['id'])
-
         cursor.execute(sql_insert_conexion, params_conexion)
-        new_conexion_id = cursor.lastrowid if is_testing else cursor.fetchone()['id']
 
+        new_conexion_id = cursor.lastrowid if _is_testing() else cursor.fetchone()['id']
+
+        # Insertar historial
         sql_insert_historial = f"INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES ({p}, {p}, {p})"
         cursor.execute(sql_insert_historial, (new_conexion_id, g.user['id'], 'SOLICITADO'))
-        db.commit()
 
+        db.commit()
     finally:
         cursor.close()
 
-    log_action('CREAR_CONEXION', g.user['id'], 'conexiones', new_conexion_id, 
-               f"Conexión '{codigo_conexion_final}' creada en proyecto '{_get_conexion(new_conexion_id)['proyecto_nombre']}'.")
+    log_action('CREAR_CONEXION', g.user['id'], 'conexiones', new_conexion_id, f"Conexión '{codigo_conexion_final}' creada.")
     _notify_users(db, new_conexion_id, f"Nueva conexión '{codigo_conexion_final}' lista para ser tomada.", "", ['REALIZADOR', 'ADMINISTRADOR'])
     flash(f'Conexión {codigo_conexion_final} creada con éxito.', 'success')
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=new_conexion_id))
@@ -248,17 +237,21 @@ def procesar_creacion_conexion():
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def detalle_conexion(conexion_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     
     cursor = db.cursor()
     try:
-        cursor.execute(f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida DESC', (conexion_id,))
+        sql_archivos = f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida DESC'
+        cursor.execute(sql_archivos, (conexion_id,))
         archivos_raw = cursor.fetchall()
-        cursor.execute(f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion DESC", (conexion_id,))
+
+        sql_comentarios = f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion DESC"
+        cursor.execute(sql_comentarios, (conexion_id,))
         comentarios = cursor.fetchall()
-        cursor.execute(f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha DESC", (conexion_id,))
+
+        sql_historial = f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha DESC"
+        cursor.execute(sql_historial, (conexion_id,))
         historial = cursor.fetchall()
     finally:
         cursor.close()
@@ -284,27 +277,17 @@ def detalle_conexion(conexion_id):
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'SOLICITANTE')
 def editar_conexion(conexion_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     user_roles = session.get('user_roles', [])
     user_id = g.user['id']
 
-    can_edit = False
-    if 'ADMINISTRADOR' in user_roles:
-        can_edit = True
-    elif 'SOLICITANTE' in user_roles and conexion['estado'] == 'SOLICITADO' and conexion['solicitante_id'] == user_id:
-        can_edit = True
-    elif 'REALIZADOR' in user_roles and conexion['estado'] == 'EN_PROCESO' and conexion['realizador_id'] == user_id:
-        can_edit = True
+    can_edit = ('ADMINISTRADOR' in user_roles or
+                ('SOLICITANTE' in user_roles and conexion['estado'] == 'SOLICITADO' and conexion['solicitante_id'] == user_id) or
+                ('REALIZADOR' in user_roles and conexion['estado'] == 'EN_PROCESO' and conexion['realizador_id'] == user_id))
 
     if not can_edit:
-        if conexion['estado'] not in ['SOLICITADO', 'EN_PROCESO']:
-             flash('Esta conexión ya no puede ser editada porque ha avanzado en el flujo de trabajo.', 'warning')
-        else:
-             abort(403)
-        return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+        abort(403)
 
     tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
     if not tipologia_config:
@@ -312,94 +295,66 @@ def editar_conexion(conexion_id):
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
     
     num_perfiles = tipologia_config.get('perfiles', 0)
-    
     form = ConnectionForm()
-    if num_perfiles < 3 and hasattr(form, 'perfil_3'):
-        del form.perfil_3
-    if num_perfiles < 2 and hasattr(form, 'perfil_2'):
-        del form.perfil_2
+    # Dynamically remove unused form fields if they exist
+    for i in range(3, 1, -1):
+        if num_perfiles < i and hasattr(form, f'perfil_{i}'):
+            delattr(form, f'perfil_{i}')
 
     if form.validate_on_submit():
-        perfiles_nuevos_dict_alias = {}
-        perfiles_nuevos_dict_full_name = {}
-        perfiles_cambiaron_para_codigo = False 
-        old_perfiles_in_code = {}
-
         cursor = db.cursor()
         try:
-            old_detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] and isinstance(conexion['detalles_json'], str) else conexion['detalles_json'] or {}
+            # --- Lógica de regeneración de código ---
+            perfiles_nuevos_dict_alias = {}
+            perfiles_nuevos_dict_full_name = {}
+            sql_get_alias = f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}'
             for i in range(1, num_perfiles + 1):
-                old_full_profile_name = old_detalles.get(f'Perfil {i}')
-                if old_full_profile_name:
-                    cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}', (old_full_profile_name,))
-                    old_alias_row = cursor.fetchone()
-                    old_value_for_code = old_alias_row['alias'] if old_alias_row else old_full_profile_name
-                    old_perfiles_in_code[f'p{i}'] = old_value_for_code
-
-            for i in range(1, num_perfiles + 1):
-                nombre_campo = f'perfil_{i}'
-                perfil_campo = getattr(form, nombre_campo)
-                nombre_completo_perfil_nuevo = perfil_campo.data.strip()
-
-                if not nombre_completo_perfil_nuevo:
-                    flash(f"El campo 'Perfil {i}' es obligatorio.", "danger")
-                    return render_template('conexion_form_edit.html', form=form, conexion=conexion, tipologia=tipologia_config, titulo="Editar Conexión")
-
-                cursor.execute(f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}', (nombre_completo_perfil_nuevo,))
-                alias_row_nuevo = cursor.fetchone()
-                valor_para_codigo_nuevo = alias_row_nuevo['alias'] if alias_row_nuevo else nombre_completo_perfil_nuevo
-
-                perfiles_nuevos_dict_alias[f'p{i}'] = valor_para_codigo_nuevo
+                nombre_completo_perfil_nuevo = getattr(form, f'perfil_{i}').data.strip()
+                cursor.execute(sql_get_alias, (nombre_completo_perfil_nuevo,))
+                alias_row = cursor.fetchone()
+                perfiles_nuevos_dict_alias[f'p{i}'] = alias_row['alias'] if alias_row else nombre_completo_perfil_nuevo
                 perfiles_nuevos_dict_full_name[f'Perfil {i}'] = nombre_completo_perfil_nuevo
 
-                if old_perfiles_in_code.get(f'p{i}') != valor_para_codigo_nuevo:
-                    perfiles_cambiaron_para_codigo = True
-
             nuevo_codigo_base = tipologia_config['plantilla'].format(**perfiles_nuevos_dict_alias)
-            current_codigo_parsed = conexion['codigo_conexion'].rsplit('-', 1)[0] if '-' in conexion['codigo_conexion'] else conexion['codigo_conexion']
+            codigo_a_guardar = conexion['codigo_conexion']
             
-            if nuevo_codigo_base != current_codigo_parsed or perfiles_cambiaron_para_codigo:
-                cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p} AND id != {p}', (nuevo_codigo_base, conexion_id))
-                exists = cursor.fetchone()
-                if exists:
-                    contador = 1
-                    codigo_conexion_final_generado = nuevo_codigo_base
-                    while True:
-                        cursor.execute(f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p} AND id != {p}', (codigo_conexion_final_generado, conexion_id))
-                        if not cursor.fetchone():
-                            break
-                        contador += 1
-                        codigo_conexion_final_generado = f"{nuevo_codigo_base}-{contador}"
-                    codigo_a_guardar = codigo_conexion_final_generado
-                else:
-                    codigo_a_guardar = nuevo_codigo_base
+            # Regenerate code only if base has changed
+            if not conexion['codigo_conexion'].startswith(nuevo_codigo_base):
+                codigo_a_guardar = nuevo_codigo_base
+                contador = 1
+                sql_check_code = f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p}'
+                while True:
+                    cursor.execute(sql_check_code, (codigo_a_guardar,))
+                    if not cursor.fetchone():
+                        break
+                    contador += 1
+                    codigo_a_guardar = f"{nuevo_codigo_base}-{contador}"
+                flash(f"El código de la conexión se ha actualizado a '{codigo_a_guardar}'.", "info")
 
-                if codigo_a_guardar != conexion['codigo_conexion']:
-                     flash(f"El código de la conexión se ha actualizado a '{codigo_a_guardar}' debido a cambios en los perfiles o sus alias.", "info")
-            else:
-                codigo_a_guardar = conexion['codigo_conexion']
-
+            # --- Actualización en la base de datos ---
             nuevos_detalles_json = json.dumps(perfiles_nuevos_dict_full_name)
+            timestamp_expr = "CURRENT_TIMESTAMP" if not _is_testing() else "datetime('now')"
 
-            timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
-            sql_update = f'UPDATE conexiones SET codigo_conexion = {p}, descripcion = {p}, detalles_json = {p}, fecha_modificacion = {timestamp_sql} WHERE id = {p}'
+            sql_update = f"""UPDATE conexiones SET codigo_conexion = {p}, descripcion = {p},
+                             detalles_json = {p}, fecha_modificacion = {timestamp_expr}
+                             WHERE id = {p}"""
             params_update = (codigo_a_guardar, form.descripcion.data, nuevos_detalles_json, conexion_id)
             cursor.execute(sql_update, params_update)
             db.commit()
+
+            log_action('EDITAR_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.")
+            flash('Conexión actualizada con éxito.', 'success')
+            return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
+
         finally:
             cursor.close()
-
-        log_action('EDITAR_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.")
-        current_app.logger.info(f"Usuario '{g.user['username']}' editó la conexión {conexion_id}.")
-        flash('Conexión actualizada con éxito.', 'success')
-        return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
     if request.method == 'GET':
         detalles_actuales = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
         form.descripcion.data = conexion['descripcion']
         for i in range(1, num_perfiles + 1):
             if hasattr(form, f'perfil_{i}'):
-                setattr(getattr(form, f'perfil_{i}'), 'data', detalles_actuales.get(f'Perfil {i}'))
+                getattr(form, f'perfil_{i}').data = detalles_actuales.get(f'Perfil {i}', '')
 
     return render_template('conexion_form_edit.html', form=form, conexion=conexion, tipologia=tipologia_config, titulo="Editar Conexión")
 
@@ -409,9 +364,7 @@ def editar_conexion(conexion_id):
 def eliminar_conexion(conexion_id):
     conexion = _get_conexion(conexion_id)
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     cursor = db.cursor()
     try:
         cursor.execute(f'DELETE FROM conexiones WHERE id = {p}', (conexion_id,))
@@ -420,7 +373,6 @@ def eliminar_conexion(conexion_id):
         cursor.close()
 
     log_action('ELIMINAR_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Conexión '{conexion['codigo_conexion']}' eliminada.")
-    current_app.logger.warning(f"Admin '{g.user['username']}' eliminó la conexión {conexion['codigo_conexion']} (ID: {conexion_id}).")
     flash(f"La conexión {conexion['codigo_conexion']} ha sido eliminada.", 'success')
     return redirect(url_for('proyectos.detalle_proyecto', proyecto_id=conexion['proyecto_id']))
 
@@ -430,9 +382,7 @@ from services.import_service import importar_conexiones_from_file
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def importar_conexiones(proyecto_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     cursor = db.cursor()
     try:
         cursor.execute(f'SELECT * FROM proyectos WHERE id = {p}', (proyecto_id,))
@@ -491,9 +441,7 @@ def cambiar_estado(conexion_id):
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def asignar_realizador(conexion_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     
     user_roles = session.get('user_roles', [])
@@ -512,61 +460,46 @@ def asignar_realizador(conexion_id):
         return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
     username_a_asignar_limpio = username_a_asignar.lstrip('@')
-
     cursor = db.cursor()
+
     try:
-        cursor.execute(f'SELECT id, nombre_completo FROM usuarios WHERE username = {p} AND activo = TRUE', (username_a_asignar_limpio,))
+        sql_get_user = f'SELECT id, nombre_completo FROM usuarios WHERE username = {p} AND activo = TRUE'
+        cursor.execute(sql_get_user, (username_a_asignar_limpio,))
         usuario_a_asignar = cursor.fetchone()
 
         if not usuario_a_asignar:
-            flash(f"Usuario '{username_a_asignar}' no encontrado o inactivo. Por favor, verifica el nombre de usuario.", 'danger')
+            flash(f"Usuario '{username_a_asignar}' no encontrado o inactivo.", 'danger')
             return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
+        timestamp_expr = "CURRENT_TIMESTAMP" if not _is_testing() else "datetime('now')"
         if conexion['estado'] == 'SOLICITADO':
             nuevo_estado = 'EN_PROCESO'
-            mensaje_cambio_estado = f"Conexión '{conexion['codigo_conexion']}' asignada a {usuario_a_asignar['nombre_completo']} y puesta 'En Proceso'."
-
-            timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
-            sql_update = f'UPDATE conexiones SET realizador_id = {p}, estado = {p}, fecha_modificacion = {timestamp_sql} WHERE id = {p}'
-            params_update = (usuario_a_asignar['id'], nuevo_estado, conexion_id)
-            cursor.execute(sql_update, params_update)
+            sql_update = f'UPDATE conexiones SET realizador_id = {p}, estado = {p}, fecha_modificacion = {timestamp_expr} WHERE id = {p}'
+            cursor.execute(sql_update, (usuario_a_asignar['id'], nuevo_estado, conexion_id))
 
             sql_insert = f'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES ({p}, {p}, {p}, {p})'
-            params_insert = (conexion_id, g.user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}")
-            cursor.execute(sql_insert, params_insert)
+            cursor.execute(sql_insert, (conexion_id, g.user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}"))
 
-            _notify_users(db, conexion_id,
-                          f"La conexión {conexion['codigo_conexion']} ha sido asignada a {usuario_a_asignar['nombre_completo']} por {g.user['nombre_completo']}.",
-                          "",
-                          ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
+            _notify_users(db, conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido asignada.", "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
+            flash(f"Conexión asignada a {usuario_a_asignar['nombre_completo']}.", 'success')
         else:
-            timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
-            sql_update = f'UPDATE conexiones SET realizador_id = {p}, fecha_modificacion = {timestamp_sql} WHERE id = {p}'
-            params_update = (usuario_a_asignar['id'], conexion_id)
-            cursor.execute(sql_update, params_update)
-
-            mensaje_cambio_estado = f"Realizador de la conexión '{conexion['codigo_conexion']}' cambiado a {usuario_a_asignar['nombre_completo']}."
-            log_action('REASIGNAR_CONEXION', g.user['id'], 'conexiones', conexion_id,
-                       f"Conexión '{conexion['codigo_conexion']}' reasignada a '{usuario_a_asignar['nombre_completo']}'.")
-            _notify_users(db, conexion_id,
-                          f"La conexión {conexion['codigo_conexion']} ha sido reasignada a {usuario_a_asignar['nombre_completo']} por {g.user['nombre_completo']}.",
-                          "",
-                          ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
+            sql_update = f'UPDATE conexiones SET realizador_id = {p}, fecha_modificacion = {timestamp_expr} WHERE id = {p}'
+            cursor.execute(sql_update, (usuario_a_asignar['id'], conexion_id))
+            log_action('REASIGNAR_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Conexión reasignada a '{usuario_a_asignar['nombre_completo']}'.")
+            _notify_users(db, conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido reasignada.", "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
+            flash('Realizador de la conexión actualizado.', 'success')
 
         db.commit()
     finally:
         cursor.close()
         
-    flash(mensaje_cambio_estado, 'success')
     return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
 @conexiones_bp.route('/<int:conexion_id>/subir_archivo', methods=('POST',))
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def subir_archivo(conexion_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
 
     if 'archivo' not in request.files or not request.files['archivo'].filename:
@@ -592,7 +525,7 @@ def subir_archivo(conexion_id):
         finally:
             cursor.close()
 
-        log_action('SUBIR_ARCHIVO', g.user['id'], 'archivos', conexion_id, f"Archivo '{filename}' ({tipo_archivo}) subido para conexión '{conexion['codigo_conexion']}'.")
+        log_action('SUBIR_ARCHIVO', g.user['id'], 'archivos', conexion_id, f"Archivo '{filename}' ({tipo_archivo}) subido.")
         flash(f"Archivo '{tipo_archivo}' subido con éxito.", 'success')
     else:
         flash('Tipo de archivo no permitido.', 'danger')
@@ -604,15 +537,12 @@ def subir_archivo(conexion_id):
 def descargar_archivo(conexion_id, filename):
     directory = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     sql = f'SELECT id FROM archivos WHERE conexion_id = {p} AND nombre_archivo = {p}'
-    params = (conexion_id, filename)
 
     cursor = db.cursor()
     try:
-        cursor.execute(sql, params)
+        cursor.execute(sql, (conexion_id, filename))
         archivo_db = cursor.fetchone()
     finally:
         cursor.close()
@@ -620,20 +550,18 @@ def descargar_archivo(conexion_id, filename):
     if not archivo_db:
         abort(404, description="El archivo no existe o no está asociado a esta conexión.")
     
-    log_action('DESCARGAR_ARCHIVO', g.user['id'], 'archivos', conexion_id,
-               f"Archivo '{filename}' descargado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.")
+    log_action('DESCARGAR_ARCHIVO', g.user['id'], 'archivos', conexion_id, f"Archivo '{filename}' descargado.")
     return send_from_directory(directory, filename, as_attachment=True)
 
 @conexiones_bp.route('/<int:conexion_id>/eliminar_archivo/<int:archivo_id>', methods=['POST',])
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def eliminar_archivo(conexion_id, archivo_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     cursor = db.cursor()
     try:
-        cursor.execute(f'SELECT * FROM archivos WHERE id = {p} AND conexion_id = {p}', (archivo_id, conexion_id))
+        sql_get_archivo = f'SELECT * FROM archivos WHERE id = {p} AND conexion_id = {p}'
+        cursor.execute(sql_get_archivo, (archivo_id, conexion_id))
         archivo = cursor.fetchone()
 
         if archivo:
@@ -642,20 +570,14 @@ def eliminar_archivo(conexion_id, archivo_id):
                  flash('No tienes permiso para eliminar este archivo.', 'danger')
                  return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
-            try:
-                cursor.execute(f'DELETE FROM archivos WHERE id = {p}', (archivo_id,))
-                db.commit()
+            sql_delete = f'DELETE FROM archivos WHERE id = {p}'
+            cursor.execute(sql_delete, (archivo_id,))
+            db.commit()
 
-                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), archivo['nombre_archivo'])
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
-                log_action('ELIMINAR_ARCHIVO', g.user['id'], 'archivos', conexion_id,
-                           f"Archivo '{archivo['nombre_archivo']}' eliminado de conexión '{conexion['codigo_conexion']}'.")
-                flash('Archivo eliminado con éxito.', 'success')
-            except Exception as e:
-                current_app.logger.error(f"Error al eliminar archivo: {e}")
-                flash('Ocurrió un error al eliminar el archivo.', 'danger')
+            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), archivo['nombre_archivo'])
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            flash('Archivo eliminado con éxito.', 'success')
         else:
             flash('El archivo no existe.', 'danger')
     finally:
@@ -669,22 +591,18 @@ def agregar_comentario(conexion_id):
     contenido = request.form.get('contenido')
     if contenido:
         sanitized_content = bleach.clean(contenido, tags=bleach.sanitizer.ALLOWED_TAGS + ['p', 'br'], strip=True)
-        
         db = get_db()
-        is_testing = current_app.config.get('TESTING', False)
-        p = "?" if is_testing else "%s"
-
+        p = _get_placeholder()
         cursor = db.cursor()
         try:
             sql = f'INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES ({p}, {p}, {p})'
-            params = (conexion_id, g.user['id'], sanitized_content)
-            cursor.execute(sql, params)
+            cursor.execute(sql, (conexion_id, g.user['id'], sanitized_content))
             db.commit()
         finally:
             cursor.close()
 
-        log_action('AGREGAR_COMENTARIO', g.user['id'], 'conexiones', conexion_id, f"Comentario añadido a conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.")
-        _notify_users(db, conexion_id, f"{g.user['nombre_completo']} ha comentado en la conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.", "#comentarios", ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
+        log_action('AGREGAR_COMENTARIO', g.user['id'], 'conexiones', conexion_id, f"Comentario añadido.")
+        _notify_users(db, conexion_id, f"{g.user['nombre_completo']} ha comentado.", "#comentarios", ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
         flash('Comentario añadido.', 'success')
     else:
         flash('El comentario no puede estar vacío.', 'warning')
@@ -695,22 +613,16 @@ def agregar_comentario(conexion_id):
 @roles_required('ADMINISTRADOR')
 def eliminar_comentario(conexion_id, comentario_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     cursor = db.cursor()
     try:
-        cursor.execute(f'SELECT * FROM comentarios WHERE id = {p} AND conexion_id = {p}', (comentario_id, conexion_id))
-        comentario = cursor.fetchone()
-
-        if comentario:
-            cursor.execute(f'DELETE FROM comentarios WHERE id = {p}', (comentario_id,))
-            db.commit()
-            log_action('ELIMINAR_COMENTARIO', g.user['id'], 'comentarios', comentario_id,
-                       f"Comentario (ID: {comentario_id}) eliminado de conexión '{_get_conexion(conexion_id)['codigo_conexion']}'.")
-            flash('Comentario eliminado.', 'success')
-        else:
-            flash('El comentario no existe.', 'danger')
+        sql = f'DELETE FROM comentarios WHERE id = {p} AND conexion_id = {p}'
+        cursor.execute(sql, (comentario_id, conexion_id))
+        db.commit()
+        log_action('ELIMINAR_COMENTARIO', g.user['id'], 'comentarios', comentario_id, f"Comentario (ID: {comentario_id}) eliminado.")
+        flash('Comentario eliminado.', 'success')
+    except Exception as e:
+        flash('El comentario no existe o hubo un error.', 'danger')
     finally:
         cursor.close()
 
@@ -723,56 +635,48 @@ def computos_metricos(conexion_id):
     
     if request.method == 'POST':
         resultados, success_message, error_messages, perfiles = calculate_and_save_computos(conexion_id, request.form, g.user['id'])
-        if success_message:
-            flash(success_message, 'success')
+        if success_message: flash('Cómputos guardados con éxito.', 'success')
         if error_messages:
-            for error in error_messages:
-                flash(error, 'danger')
+            for error in error_messages: flash(error, 'danger')
+        return redirect(url_for('conexiones.computos_metricos', conexion_id=conexion_id))
 
-        conexion = _get_conexion(conexion_id)
-        _, detalles = get_computos_results(conexion)
-
-    else:
-        resultados, detalles = get_computos_results(conexion)
-        perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
+    resultados, detalles = get_computos_results(conexion)
+    perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
 
     return render_template('computos_metricos.html',
                            titulo="Cómputos Métricos",
-                           conexion=conexion,
-                           perfiles=perfiles,
-                           resultados=resultados,
-                           detalles=detalles)
+                           conexion=conexion, perfiles=perfiles,
+                           resultados=resultados, detalles=detalles)
 
 @conexiones_bp.route('/<int:conexion_id>/reporte_computos')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def reporte_computos(conexion_id):
     conexion = _get_conexion(conexion_id)
     resultados, _ = get_computos_results(conexion)
-    
-    log_action('GENERAR_REPORTE_COMPUTOS', g.user['id'], 'conexiones', conexion_id,
-               f"Reporte de cómputos generado para conexión '{conexion['codigo_conexion']}'.")
-
+    log_action('GENERAR_REPORTE_COMPUTOS', g.user['id'], 'conexiones', conexion_id, f"Reporte de cómputos generado.")
     return render_template('reporte_computos.html',
                            titulo=f"Reporte de Cómputos para {conexion['codigo_conexion']}",
-                           conexion=conexion,
-                           resultados=resultados)
+                           conexion=conexion, resultados=resultados)
 
 @conexiones_bp.route('/<int:conexion_id>/reporte')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def reporte_conexion(conexion_id):
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-    p = "?" if is_testing else "%s"
-
+    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     
     cursor = db.cursor()
     try:
-        cursor.execute(f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha ASC", (conexion_id,))
+        sql_historial = f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha ASC"
+        cursor.execute(sql_historial, (conexion_id,))
         historial = cursor.fetchall()
-        cursor.execute(f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion ASC", (conexion_id,))
+
+        sql_comentarios = f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion ASC"
+        cursor.execute(sql_comentarios, (conexion_id,))
         comentarios = cursor.fetchall()
-        cursor.execute(f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida ASC', (conexion_id,))
+
+        sql_archivos = f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida ASC'
+        cursor.execute(sql_archivos, (conexion_id,))
         archivos_raw = cursor.fetchall()
     finally:
         cursor.close()
@@ -783,13 +687,8 @@ def reporte_conexion(conexion_id):
 
     detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
     tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
-    log_action('GENERAR_REPORTE_CONEXION', g.user['id'], 'conexiones', conexion_id,
-               f"Reporte de conexión generado para '{conexion['codigo_conexion']}'.")
+    log_action('GENERAR_REPORTE_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Reporte de conexión generado.")
     return render_template('reporte_conexion.html',
-                           conexion=conexion,
-                           historial=historial,
-                           comentarios=comentarios,
-                           archivos_agrupados=archivos_agrupados,
-                           detalles=detalles,
-                           tipologia_config=tipologia_config,
-                           titulo=f"Reporte de Conexión: {conexion['codigo_conexion']}")
+                           conexion=conexion, historial=historial, comentarios=comentarios,
+                           archivos_agrupados=archivos_agrupados, detalles=detalles,
+                           tipologia_config=tipologia_config, titulo=f"Reporte de Conexión: {conexion['codigo_conexion']}")

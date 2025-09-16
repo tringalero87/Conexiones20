@@ -533,18 +533,16 @@
 {% endblock %} {# Cierra el bloque 'content' #}
 
 {% block extra_js %}
+{# Security Fix: Pass data to JS via data-attributes to prevent XSS. #}
+<div id="dashboard-data"
+     data-estados='{{ (dashboard_data.charts.estados or {})|tojson if dashboard_data.charts else "{}" }}'
+     data-meses='{{ (dashboard_data.charts.conexiones_mes or [])|tojson if dashboard_data.charts else "[]" }}'
+     data-user-prefs='{{ (dashboard_data.user_prefs or {})|tojson }}'
+     data-projects-summary='{{ (dashboard_data.my_projects_summary or [])|tojson }}'
+     data-performance-chart='{{ (dashboard_data.my_performance_chart or {})|tojson }}'
+     style="display: none;">
+</div>
 <script>
-    {#
-      Acceso a los datos para los gráficos y preferencias del usuario.
-      Se usa el operador 'or' de Jinja para proporcionar un valor por defecto
-      (un objeto JSON vacío o un array vacío) en caso de que la variable no exista.
-      Esto previene errores 'Undefined' durante la serialización a JSON,
-      especialmente en escenarios de prueba o para roles sin ciertos datos.
-    #}
-    const estadosData = {{ (dashboard_data.charts.estados or {})|tojson|safe }};
-    const mesesData = {{ (dashboard_data.charts.conexiones_mes or [])|tojson|safe }};
-    const userPreferences = {{ (dashboard_data.user_prefs or {})|tojson|safe }};
-    const myProjectsSummary = {{ (dashboard_data.my_projects_summary or [])|tojson|safe }};
-    const myPerformanceChartData = {{ (dashboard_data.my_performance_chart or {})|tojson|safe }};
+    // Data is now read from the #dashboard-data element in main.js
 </script>
 {% endblock %} {# Cierra el bloque 'extra_js' #}

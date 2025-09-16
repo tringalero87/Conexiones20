@@ -5,18 +5,19 @@ from flask import Blueprint, jsonify, request, g, current_app, session
 from datetime import datetime
 from db import get_db
 from . import roles_required
-from services.connection_service import _notify_users, process_connection_state_transition
+from services.connection_service import process_connection_state_transition
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+def _is_testing():
+    return current_app.config.get('TESTING', False)
+
+def _get_placeholder():
+    return "?" if _is_testing() else "%s"
 
 @api_bp.route('/tipologias')
 @roles_required('ADMINISTRADOR', 'SOLICITANTE', 'REALIZADOR')
 def get_tipologias():
-    """
-    API endpoint para obtener las tipologías de conexión basadas en el tipo y subtipo.
-    Es utilizado por el JavaScript de la página del catálogo para cargar dinámicamente
-    las opciones de conexión.
-    """
     tipo = request.args.get('tipo')
     subtipo = request.args.get('subtipo')
 
@@ -28,53 +29,45 @@ def get_tipologias():
         with open(json_path, 'r', encoding='utf-8') as f:
             estructura = json.load(f)
         
-        tipologias = estructura[tipo]['subtipos'][subtipo]['tipologias']
+        tipologias = estructura.get(tipo, {}).get('subtipos', {}).get(subtipo, {}).get('tipologias', [])
         return jsonify(tipologias)
-    except (KeyError, FileNotFoundError, json.JSONDecodeError) as e:
+    except (FileNotFoundError, json.JSONDecodeError) as e:
         current_app.logger.error(f"API Error: No se pudieron obtener las tipologías para tipo='{tipo}', subtipo='{subtipo}'. Error: {e}")
         return jsonify([])
 
 @api_bp.route('/perfiles')
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'SOLICITANTE')
 def get_perfiles():
-    """
-    API endpoint para obtener los perfiles y sus propiedades para los cálculos
-    de cómputos métricos.
-    """
     json_path = os.path.join(current_app.root_path, 'perfiles_propiedades.json')
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             perfiles = json.load(f)
         return jsonify(perfiles)
     except FileNotFoundError:
-        current_app.logger.error("API Error: No se encontró 'perfiles_propiedades.json'.")
-        return jsonify({"error": "Archivo de perfiles no encontrado"}), 404
+        return jsonify({"success": False, "error": "Archivo de perfiles no encontrado"}), 404
     except json.JSONDecodeError:
-        current_app.logger.error("API Error: Error de formato en 'perfiles_propiedades.json'.")
-        return jsonify({"error": "Error al leer el archivo de perfiles"}), 500
+        return jsonify({"success": False, "error": "Error al leer el archivo de perfiles"}), 500
 
 @api_bp.route('/perfiles/buscar')
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'SOLICITANTE', 'APROBADOR')
 def buscar_perfiles():
-    """
-    API endpoint para buscar perfiles por nombre o alias para la funcionalidad de autocompletado.
-    """
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify([])
 
     normalized_query = re.sub(r'[ -]', '', query).lower()
     db = get_db()
+    p = _get_placeholder()
     
     resultados = []
     added_profiles = set()
 
-    sql_query = """
+    sql_query = f"""
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
-            REPLACE(REPLACE(LOWER(nombre_perfil), ' ', ''), '-', '') LIKE ?
+            REPLACE(REPLACE(LOWER(nombre_perfil), ' ', ''), '-', '') LIKE {p}
             OR
-            REPLACE(REPLACE(LOWER(alias), ' ', ''), '-', '') LIKE ?
+            REPLACE(REPLACE(LOWER(alias), ' ', ''), '-', '') LIKE {p}
     """
     like_param = f'%{normalized_query}%'
 
@@ -96,7 +89,6 @@ def buscar_perfiles():
         for nombre_perfil_key in perfiles_props.keys():
             if nombre_perfil_key not in added_profiles:
                 normalized_key_for_search = re.sub(r'[ -]', '', nombre_perfil_key).lower()
-
                 if normalized_query in normalized_key_for_search:
                     resultados.append({'label': nombre_perfil_key, 'value': nombre_perfil_key})
                     added_profiles.add(nombre_perfil_key)
@@ -105,57 +97,46 @@ def buscar_perfiles():
 
     return jsonify(sorted(resultados, key=lambda x: x['label'])[:10])
 
-
 @api_bp.route('/set-theme', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def set_theme():
-    """
-    API endpoint para guardar la preferencia de tema (claro/oscuro) del usuario
-    en su sesión, permitiendo persistencia entre visitas.
-    """
     data = request.get_json()
-    if data and 'theme' in data:
-        theme = data['theme']
-        if theme in ['light', 'dark']:
-            session['theme'] = theme
-            return jsonify({'success': True, 'message': f'Tema establecido a {theme}'})
+    if data and 'theme' in data and data['theme'] in ['light', 'dark']:
+        session['theme'] = data['theme']
+        return jsonify({'success': True, 'message': f'Tema establecido a {data["theme"]}'})
     
-    return jsonify({'success': False, 'message': 'Datos de tema inválidos'}), 400
+    return jsonify({'success': False, 'error': 'Datos de tema inválidos'}), 400
 
 @api_bp.route('/notificaciones/marcar-leidas', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def marcar_notificaciones_leidas():
-    """
-    Endpoint de API para marcar todas las notificaciones de un usuario como leídas.
-    Se utiliza cuando el usuario hace clic en el ícono de la campana.
-    """
     db = get_db()
+    p = _get_placeholder()
+    sql = f'UPDATE notificaciones SET leida = 1 WHERE usuario_id = {p} AND leida = 0'
     try:
-        db.execute('UPDATE notificaciones SET leida = 1 WHERE usuario_id = ? AND leida = 0', (g.user['id'],))
+        db.execute(sql, (g.user['id'],))
         db.commit()
         return jsonify({'success': True})
     except Exception as e:
         current_app.logger.error(f"API Error: No se pudieron marcar las notificaciones como leídas para el usuario {g.user['id']}. Error: {e}")
-        return jsonify({'success': False, 'message': 'Error en la base de datos'}), 500
+        return jsonify({'success': False, 'error': 'Error en la base de datos'}), 500
 
 @api_bp.route('/conexiones/<int:conexion_id>/cambiar_estado_rapido', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'APROBADOR')
 def cambiar_estado_rapido(conexion_id):
-    """
-    Permite cambiar el estado de una conexión rápidamente vía AJAX.
-    Ideal para acciones desde el dashboard.
-    """
     db = get_db()
+    p = _get_placeholder()
 
-    conexion = db.execute('SELECT proyecto_id FROM conexiones WHERE id = ?', (conexion_id,)).fetchone()
+    conexion_sql = f"SELECT proyecto_id FROM conexiones WHERE id = {p}"
+    conexion = db.execute(conexion_sql, (conexion_id,)).fetchone()
     if not conexion:
-        return jsonify({'success': False, 'message': 'La conexión no existe.'}), 404
+        return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
 
     if 'ADMINISTRADOR' not in session.get('user_roles', []):
-        acceso = db.execute('SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?',
-                              (conexion['proyecto_id'], g.user['id'])).fetchone()
+        acceso_sql = f"SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = {p} AND usuario_id = {p}"
+        acceso = db.execute(acceso_sql, (conexion['proyecto_id'], g.user['id'])).fetchone()
         if not acceso:
-            return jsonify({'success': False, 'message': 'No tienes permiso para acceder a esta conexión.'}), 403
+            return jsonify({'success': False, 'error': 'No tienes permiso para acceder a esta conexión.'}), 403
 
     data = request.get_json()
     nuevo_estado = data.get('estado')
@@ -169,26 +150,28 @@ def cambiar_estado_rapido(conexion_id):
         return jsonify({'success': True, 'message': message})
     else:
         status_code = 400 if "Debes proporcionar un motivo" in message else 403
-        return jsonify({'success': False, 'message': message}), status_code
-
+        return jsonify({'success': False, 'error': message}), status_code
 
 @api_bp.route('/dashboard/save_preferences', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def save_dashboard_preferences():
-    """
-    Guarda las preferencias de personalización del dashboard del usuario.
-    """
     db = get_db()
+    p = _get_placeholder()
     data = request.get_json()
     widgets_config = json.dumps(data.get('widgets_config', {}))
     
+    if _is_testing():
+        sql = f'INSERT OR REPLACE INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES ({p}, {p})'
+    else:
+        sql = """
+            INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (%s, %s)
+            ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = EXCLUDED.widgets_config
+        """
+
     try:
-        db.execute(
-            'INSERT OR REPLACE INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (?, ?)',
-            (g.user['id'], widgets_config)
-        )
+        db.execute(sql, (g.user['id'], widgets_config))
         db.commit()
         return jsonify({'success': True, 'message': 'Preferencias del dashboard guardadas con éxito.'})
     except Exception as e:
         current_app.logger.error(f"Error al guardar preferencias de dashboard para usuario {g.user['id']}: {e}")
-        return jsonify({'success': False, 'message': 'Error al guardar preferencias del dashboard.'}), 500
+        return jsonify({'success': False, 'error': 'Error al guardar preferencias del dashboard.'}), 500

@@ -8,9 +8,11 @@
 // El evento 'DOMContentLoaded' asegura que el script se ejecute solo después de que
 // todo el contenido HTML de la página haya sido cargado y parseado por el navegador.
 // Este es el punto de entrada principal de nuestro JavaScript.
-document.addEventListener('DOMContentLoaded', function () {
-    initializeApp();
-});
+(function() {
+    document.addEventListener('DOMContentLoaded', function () {
+        initializeApp();
+    });
+})();
 
 /**
  * @function initializeApp
@@ -284,11 +286,14 @@ function initCatalogo() {
  * @description Orquesta la inicialización de todos los gráficos en el Dashboard (para Administradores).
  */
 function initDashboardCharts() {
-    // Las variables 'estadosData' y 'mesesData' son definidas en un script
-    // dentro de la plantilla dashboard.html para pasar los datos desde el backend.
+    const dataEl = document.getElementById('dashboard-data');
+    if (!dataEl) return;
     
+    const estadosData = JSON.parse(dataEl.dataset.estados);
+    const mesesData = JSON.parse(dataEl.dataset.meses);
+
     const ctx1 = document.getElementById('estadosChart');
-    if (ctx1 && typeof estadosData !== 'undefined') {
+    if (ctx1) {
         if (Object.keys(estadosData).length === 0) {
             ctx1.parentElement.innerHTML = '<div class="empty-state text-center p-5"><i class="bi bi-pie-chart" style="font-size: 2rem;"></i><p class="text-muted mt-2">No hay datos para mostrar el gráfico.</p></div>';
         } else {
@@ -345,8 +350,12 @@ function initDashboardCharts() {
  * @description Inicializa el gráfico de resumen de proyectos para el usuario.
  */
 function initMyProjectsChart() {
+    const dataEl = document.getElementById('dashboard-data');
+    if (!dataEl) return;
+    const myProjectsSummary = JSON.parse(dataEl.dataset.projectsSummary);
+
     const ctx = document.getElementById('myProjectsChart');
-    if (!ctx || typeof myProjectsSummary === 'undefined') return;
+    if (!ctx) return;
 
     if (myProjectsSummary.length === 0) {
         ctx.parentElement.innerHTML = '<div class="empty-state text-center p-5"><i class="bi bi-bar-chart-steps" style="font-size: 2rem;"></i><p class="text-muted mt-2">No tienes proyectos para mostrar en el gráfico.</p></div>';
@@ -503,8 +512,12 @@ function initMyProjectsChart() {
  * @description Inicializa el gráfico de rendimiento del usuario.
  */
 function initMyPerformanceChart() {
+    const dataEl = document.getElementById('dashboard-data');
+    if (!dataEl) return;
+    const myPerformanceChartData = JSON.parse(dataEl.dataset.performanceChart);
+
     const ctx = document.getElementById('myPerformanceChart');
-    if (!ctx || typeof myPerformanceChartData === 'undefined') return;
+    if (!ctx) return;
 
     if (!myPerformanceChartData.labels || myPerformanceChartData.labels.length === 0) {
         ctx.parentElement.innerHTML = '<div class="empty-state text-center p-4"><i class="bi bi-graph-up" style="font-size: 2rem;"></i><p class="text-muted mt-2">No hay datos de rendimiento para mostrar.</p></div>';
@@ -664,42 +677,33 @@ function initProfileAutocomplete() {
 function initDashboardCustomization() {
     const customizeBtn = document.getElementById('customize-dashboard-btn');
     const customizeModalEl = document.getElementById('customizeDashboardModal');
-    if (!customizeModalEl) return; // Salir si el modal no existe
+    const dataEl = document.getElementById('dashboard-data');
 
+    if (!customizeModalEl || !dataEl) return;
+
+    const userPreferences = JSON.parse(dataEl.dataset.userPrefs);
     const customizeModal = new bootstrap.Modal(customizeModalEl);
     const savePreferencesBtn = document.getElementById('saveDashboardPreferences');
     const toggleWidgets = customizeModalEl.querySelectorAll('[data-widget-id]');
 
-    // Función para aplicar las preferencias cargadas desde el backend
     function applyPreferences(prefs) {
         const widgetsConfig = prefs.widgets_config || {};
-        // Default visibility for widgets if not explicitly set by user (e.g., first login)
         const defaultVisibleWidgets = {
-            'my-summary-panel': true,
-            'my-performance-panel': true,
-            'my-projects-summary-panel': true,
-            'quick-actions-panel': true,
-            'tasks-panel': true,
-            'recent-activity-panel': true,
-            'admin-panel': true
+            'my-summary-panel': true, 'my-performance-panel': true,
+            'my-projects-summary-panel': true, 'quick-actions-panel': true,
+            'tasks-panel': true, 'recent-activity-panel': true, 'admin-panel': true
         };
 
         document.querySelectorAll('[id$="-panel"]').forEach(panel => {
             const panelId = panel.id;
             const isVisible = widgetsConfig.hasOwnProperty(panelId) ? widgetsConfig[panelId] : defaultVisibleWidgets[panelId];
-            panel.style.display = isVisible ? '' : 'none'; // Usar '' para display por defecto (block/flex etc)
+            panel.style.display = isVisible ? '' : 'none';
             const toggle = customizeModalEl.querySelector(`[data-widget-id="${panelId}"]`);
             if (toggle) toggle.checked = isVisible;
         });
     }
 
-    // Cargar preferencias iniciales al inicio
-    if (typeof userPreferences !== 'undefined') {
-        applyPreferences(userPreferences);
-    } else {
-        // Si userPreferences no está definido, aplica las preferencias por defecto
-        applyPreferences({});
-    }
+    applyPreferences(userPreferences);
 
     if (customizeBtn) {
         customizeBtn.addEventListener('click', () => {

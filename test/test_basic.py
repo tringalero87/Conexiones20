@@ -127,3 +127,37 @@ def test_connection_rejection_workflow(client, auth):
     # 3. Verificar que el estado vuelve a 'EN_PROCESO' y que 'detalles_rechazo' está poblado.
     # 4. Verificar que el realizador recibe una notificación.
     pass
+
+from db import log_action
+
+def test_audit_log(app):
+    """
+    Tests that the log_action function correctly inserts an audit record.
+    """
+    with app.app_context():
+        db = get_db()
+
+        # Get the admin user ID for the log action
+        admin_user = db.execute("SELECT id FROM usuarios WHERE username = 'admin'").fetchone()
+        assert admin_user is not None
+        admin_id = admin_user['id']
+
+        # Define action details
+        action = "TEST_ACTION"
+        obj_type = "TEST_OBJ"
+        obj_id = 999
+        details = "This is a test action."
+
+        # Call the function to be tested
+        log_action(action, admin_id, obj_type, obj_id, details)
+
+        # Verify the log was created
+        log_entry = db.execute(
+            "SELECT * FROM auditoria_acciones WHERE accion = ? AND usuario_id = ?",
+            (action, admin_id)
+        ).fetchone()
+
+        assert log_entry is not None
+        assert log_entry['tipo_objeto'] == obj_type
+        assert log_entry['objeto_id'] == obj_id
+        assert log_entry['detalles'] == details

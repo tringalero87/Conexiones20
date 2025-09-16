@@ -21,6 +21,12 @@ from . import roles_required
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
+def _is_testing():
+    return current_app.config.get('TESTING', False)
+
+def _get_placeholder():
+    return "?" if _is_testing() else "%s"
+
 def _generate_report_data_and_file(reporte_id, app_context):
     """
     Genera los datos del reporte y un archivo en memoria (BytesIO o StringIO)

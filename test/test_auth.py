@@ -9,15 +9,16 @@ def test_profile_update_rejects_duplicate_email(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        # Create user1 (will be logged in) and user2 (has the target email)
-        password_hash = generate_password_hash('password')
-        # user1 is created by the conftest auth fixture ('admin')
-        # user2
-        cursor = db.execute(
-            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
-            ('user2', password_hash, 'User Two', 'user2@example.com', 1)
-        )
-        db.commit()
+        with db.cursor() as cursor:
+            # Create user1 (will be logged in) and user2 (has the target email)
+            password_hash = generate_password_hash('password')
+            # user1 is created by the conftest auth fixture ('admin')
+            # user2
+            cursor.execute(
+                "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s)",
+                ('user2', password_hash, 'User Two', 'user2@example.com', 1)
+            )
+            db.commit()
 
     # Log in as the first user ('admin' from conftest)
     auth.login('admin', 'password')
@@ -43,8 +44,10 @@ def test_profile_update_rejects_duplicate_email(client, app, auth):
     # And check that the email was not actually updated
     with app.app_context():
         db = get_db()
-        user1 = db.execute("SELECT email FROM usuarios WHERE username = 'admin'").fetchone()
-        assert user1['email'] == 'admin@test.com'
+        with db.cursor() as cursor:
+            cursor.execute("SELECT email FROM usuarios WHERE username = 'admin'")
+            user1 = cursor.fetchone()
+            assert user1['email'] == 'admin@test.com'
 
 def test_profile_password_change_wrong_current_password(client, auth):
     """

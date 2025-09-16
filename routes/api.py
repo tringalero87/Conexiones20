@@ -9,12 +9,6 @@ from services.connection_service import process_connection_state_transition
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
-def _is_testing():
-    return current_app.config.get('TESTING', False)
-
-def _get_placeholder():
-    return "?" if _is_testing() else "%s"
-
 @api_bp.route('/tipologias')
 @roles_required('ADMINISTRADOR', 'SOLICITANTE', 'REALIZADOR')
 def get_tipologias():
@@ -57,19 +51,18 @@ def buscar_perfiles():
 
     normalized_query = re.sub(r'[ -]', '', query).lower()
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
     
     resultados = []
     added_profiles = set()
 
     # La función REPLACE es compatible con SQLite y PostgreSQL
-    sql_query = f"""
+    sql_query = """
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
-            REPLACE(REPLACE(LOWER(nombre_perfil), ' ', ''), '-', '') LIKE {p}
+            REPLACE(REPLACE(LOWER(nombre_perfil), ' ', ''), '-', '') LIKE %s
             OR
-            REPLACE(REPLACE(LOWER(alias), ' ', ''), '-', '') LIKE {p}
+            REPLACE(REPLACE(LOWER(alias), ' ', ''), '-', '') LIKE %s
     """
     like_param = f'%{normalized_query}%'
 
@@ -115,8 +108,7 @@ def set_theme():
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def marcar_notificaciones_leidas():
     db = get_db()
-    p = _get_placeholder()
-    sql = f'UPDATE notificaciones SET leida = 1 WHERE usuario_id = {p} AND leida = 0'
+    sql = 'UPDATE notificaciones SET leida = 1 WHERE usuario_id = %s AND leida = 0'
     cursor = db.cursor()
     try:
         cursor.execute(sql, (g.user['id'],))
@@ -139,11 +131,10 @@ def get_project_details_for_chart():
         return jsonify({'error': 'Parámetros incompletos'}), 400
 
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        sql = f"SELECT id, codigo_conexion, fecha_creacion FROM conexiones WHERE proyecto_id = {p} AND estado = {p} ORDER BY fecha_creacion DESC"
+        sql = "SELECT id, codigo_conexion, fecha_creacion FROM conexiones WHERE proyecto_id = %s AND estado = %s ORDER BY fecha_creacion DESC"
         cursor.execute(sql, (proyecto_id, estado))
         conexiones = cursor.fetchall()
 
@@ -160,18 +151,17 @@ def get_project_details_for_chart():
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'APROBADOR')
 def cambiar_estado_rapido(conexion_id):
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        conexion_sql = f"SELECT proyecto_id FROM conexiones WHERE id = {p}"
+        conexion_sql = "SELECT proyecto_id FROM conexiones WHERE id = %s"
         cursor.execute(conexion_sql, (conexion_id,))
         conexion = cursor.fetchone()
         if not conexion:
             return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
 
         if 'ADMINISTRADOR' not in session.get('user_roles', []):
-            acceso_sql = f"SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = {p} AND usuario_id = {p}"
+            acceso_sql = "SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = %s AND usuario_id = %s"
             cursor.execute(acceso_sql, (conexion['proyecto_id'], g.user['id']))
             acceso = cursor.fetchone()
             if not acceso:
@@ -200,10 +190,7 @@ def save_dashboard_preferences():
     data = request.get_json()
     widgets_config = json.dumps(data.get('widgets_config', {}))
     
-    if _is_testing():
-        sql = 'INSERT OR REPLACE INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (?, ?)'
-    else:
-        sql = "INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (%s, %s) ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = EXCLUDED.widgets_config"
+    sql = "INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (%s, %s) ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = EXCLUDED.widgets_config"
 
     cursor = db.cursor()
     try:

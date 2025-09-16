@@ -9,12 +9,6 @@ from forms import LoginForm, ProfileForm
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
-def _is_testing():
-    return current_app.config.get('TESTING', False)
-
-def _get_placeholder():
-    return "?" if _is_testing() else "%s"
-
 @auth_bp.route('/login', methods=('GET', 'POST'))
 def login():
     if g.user:
@@ -23,12 +17,11 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         db = get_db()
-        p = _get_placeholder()
         cursor = db.cursor()
         error = None
         
         try:
-            user_sql = f'SELECT * FROM usuarios WHERE username = {p}'
+            user_sql = 'SELECT * FROM usuarios WHERE username = %s'
             cursor.execute(user_sql, (form.username.data,))
             user = cursor.fetchone()
 
@@ -64,7 +57,6 @@ def logout():
 def perfil():
     form = ProfileForm()
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
@@ -73,7 +65,7 @@ def perfil():
             changes = {}
 
             # Actualizar datos del usuario
-            sql_update_user = f"UPDATE usuarios SET nombre_completo = {p}, email = {p} WHERE id = {p}"
+            sql_update_user = "UPDATE usuarios SET nombre_completo = %s, email = %s WHERE id = %s"
             cursor.execute(sql_update_user, (form.nombre_completo.data, form.email.data, g.user['id']))
             if form.nombre_completo.data != g.user['nombre_completo']: changes['nombre_completo'] = {'old': g.user['nombre_completo'], 'new': form.nombre_completo.data}
             if form.email.data != g.user['email']: changes['email'] = {'old': g.user['email'], 'new': form.email.data}
@@ -81,20 +73,17 @@ def perfil():
             # Actualizar contraseña si se proporcionó
             if form.new_password.data:
                 password_hash = generate_password_hash(form.new_password.data)
-                sql_update_pass = f"UPDATE usuarios SET password_hash = {p} WHERE id = {p}"
+                sql_update_pass = "UPDATE usuarios SET password_hash = %s WHERE id = %s"
                 cursor.execute(sql_update_pass, (password_hash, g.user['id']))
                 changes['password'] = 'changed'
 
             # Actualizar preferencias de notificación
-            sql_get_prefs = f"SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = {p}"
+            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = %s"
             cursor.execute(sql_get_prefs, (g.user['id'],))
             user_prefs = cursor.fetchone()
             initial_email_notif_estado = user_prefs['email_notif_estado'] if user_prefs else True
 
-            if _is_testing():
-                sql_upsert_prefs = f"INSERT OR REPLACE INTO preferencias_notificaciones (usuario_id, email_notif_estado) VALUES ({p}, {p})"
-            else:
-                sql_upsert_prefs = f"INSERT INTO preferencias_notificaciones (usuario_id, email_notif_estado) VALUES ({p}, {p}) ON CONFLICT (usuario_id) DO UPDATE SET email_notif_estado = EXCLUDED.email_notif_estado"
+            sql_upsert_prefs = "INSERT INTO preferencias_notificaciones (usuario_id, email_notif_estado) VALUES (%s, %s) ON CONFLICT (usuario_id) DO UPDATE SET email_notif_estado = EXCLUDED.email_notif_estado"
             cursor.execute(sql_upsert_prefs, (g.user['id'], form.email_notif_estado.data))
 
             if initial_email_notif_estado != form.email_notif_estado.data:
@@ -112,7 +101,7 @@ def perfil():
         elif request.method == 'GET':
             form.nombre_completo.data = g.user['nombre_completo']
             form.email.data = g.user['email']
-            sql_get_prefs = f"SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = {p}"
+            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = %s"
             cursor.execute(sql_get_prefs, (g.user['id'],))
             user_prefs = cursor.fetchone()
             form.email_notif_estado.data = user_prefs['email_notif_estado'] if user_prefs else True

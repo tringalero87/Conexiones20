@@ -11,27 +11,29 @@ def test_current_realizador_can_delete_files(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        # 1. Create two 'REALIZADOR' users and a project
-        password_hash = generate_password_hash('p')
-        cursor = db.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('realizador1', ?, 'Realizador One', 'r1@test.com', 1)", (password_hash,))
-        realizador1_id = cursor.lastrowid
-        cursor = db.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('realizador2', ?, 'Realizador Two', 'r2@test.com', 1)", (password_hash,))
-        realizador2_id = cursor.lastrowid
+        with db.cursor() as cursor:
+            # 1. Create two 'REALIZADOR' users and a project
+            password_hash = generate_password_hash('p')
+            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('realizador1', %s, 'Realizador One', 'r1@test.com', 1) RETURNING id", (password_hash,))
+            realizador1_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('realizador2', %s, 'Realizador Two', 'r2@test.com', 1) RETURNING id", (password_hash,))
+            realizador2_id = cursor.fetchone()['id']
 
-        realizador_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'").fetchone()['id']
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (realizador1_id, realizador_role_id))
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (realizador2_id, realizador_role_id))
+            cursor.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'")
+            realizador_role_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (realizador1_id, realizador_role_id))
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (realizador2_id, realizador_role_id))
 
-        cursor = db.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Test Project', 'Desc')")
-        project_id = cursor.lastrowid
+            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Test Project', 'Desc') RETURNING id")
+            project_id = cursor.fetchone()['id']
 
-        # 2. Create a connection and assign to realizador1
-        cursor = db.execute(
-            "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, realizador_id, estado) VALUES (?, ?, 'Test', 'Test', 'Test', ?, ?, 'EN_PROCESO')",
-            ('CONN-001', project_id, realizador1_id, realizador1_id)
-        )
-        connection_id = cursor.lastrowid
-        db.commit()
+            # 2. Create a connection and assign to realizador1
+            cursor.execute(
+                "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, realizador_id, estado) VALUES (%s, %s, 'Test', 'Test', 'Test', %s, %s, 'EN_PROCESO') RETURNING id",
+                ('CONN-001', project_id, realizador1_id, realizador1_id)
+            )
+            connection_id = cursor.fetchone()['id']
+            db.commit()
 
     # 3. Log in as realizador1 and upload a file
     auth.login('realizador1', 'p')
@@ -50,9 +52,11 @@ def test_current_realizador_can_delete_files(client, app, auth):
 
     with app.app_context():
         db = get_db()
-        file = db.execute("SELECT id FROM archivos WHERE conexion_id = ?", (connection_id,)).fetchone()
-        assert file is not None
-        file_id = file['id']
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM archivos WHERE conexion_id = %s", (connection_id,))
+            file = cursor.fetchone()
+            assert file is not None
+            file_id = file['id']
 
     auth.logout()
 
@@ -75,8 +79,10 @@ def test_current_realizador_can_delete_files(client, app, auth):
     # Verify the file is gone from the database
     with app.app_context():
         db = get_db()
-        file = db.execute("SELECT id FROM archivos WHERE id = ?", (file_id,)).fetchone()
-        assert file is None
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM archivos WHERE id = %s", (file_id,))
+            file = cursor.fetchone()
+            assert file is None
 
 
 def test_solicitante_cannot_edit_other_users_connection(client, app, auth):
@@ -86,33 +92,35 @@ def test_solicitante_cannot_edit_other_users_connection(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        password_hash = generate_password_hash('p')
+        with db.cursor() as cursor:
+            password_hash = generate_password_hash('p')
 
-        # Create two 'SOLICITANTE' users
-        cursor = db.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('solicitante1', ?, 'Solicitante One', 's1@test.com', 1)", (password_hash,))
-        solicitante1_id = cursor.lastrowid
-        cursor = db.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('solicitante2', ?, 'Solicitante Two', 's2@test.com', 1)", (password_hash,))
-        solicitante2_id = cursor.lastrowid
+            # Create two 'SOLICITANTE' users
+            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('solicitante1', %s, 'Solicitante One', 's1@test.com', 1) RETURNING id", (password_hash,))
+            solicitante1_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('solicitante2', %s, 'Solicitante Two', 's2@test.com', 1) RETURNING id", (password_hash,))
+            solicitante2_id = cursor.fetchone()['id']
 
-        solicitante_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'SOLICITANTE'").fetchone()['id']
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (solicitante1_id, solicitante_role_id))
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (solicitante2_id, solicitante_role_id))
+            cursor.execute("SELECT id FROM roles WHERE nombre = 'SOLICITANTE'")
+            solicitante_role_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (solicitante1_id, solicitante_role_id))
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (solicitante2_id, solicitante_role_id))
 
-        # Create a project
-        cursor = db.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Project Edit Test', 'Desc')")
-        project_id = cursor.lastrowid
+            # Create a project
+            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Project Edit Test', 'Desc') RETURNING id")
+            project_id = cursor.fetchone()['id']
 
-        # Create a connection by solicitante1
-        cursor = db.execute(
-            """
-            INSERT INTO conexiones
-            (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado, detalles_json)
-            VALUES (?, ?, 'MOMENTO', 'VIGA-COLUMNA (ALA)', 'T0', ?, 'SOLICITADO', '{"Perfil 1": "IPE300"}')
-            """,
-            ('CONN-EDIT-TEST', project_id, solicitante1_id)
-        )
-        connection_id = cursor.lastrowid
-        db.commit()
+            # Create a connection by solicitante1
+            cursor.execute(
+                """
+                INSERT INTO conexiones
+                (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado, detalles_json)
+                VALUES (%s, %s, 'MOMENTO', 'VIGA-COLUMNA (ALA)', 'T0', %s, 'SOLICITADO', %s) RETURNING id
+                """,
+                ('CONN-EDIT-TEST', project_id, solicitante1_id, '{"Perfil 1": "IPE300"}')
+            )
+            connection_id = cursor.fetchone()['id']
+            db.commit()
 
     # Log in as solicitante2
     auth.login('solicitante2', 'p')
@@ -138,8 +146,10 @@ def test_solicitante_cannot_edit_other_users_connection(client, app, auth):
     # Verify that the description was not changed
     with app.app_context():
         db = get_db()
-        conexion = db.execute("SELECT descripcion FROM conexiones WHERE id = ?", (connection_id,)).fetchone()
-        assert conexion['descripcion'] != 'Intento de edicion no autorizada'
+        with db.cursor() as cursor:
+            cursor.execute("SELECT descripcion FROM conexiones WHERE id = %s", (connection_id,))
+            conexion = cursor.fetchone()
+            assert conexion['descripcion'] != 'Intento de edicion no autorizada'
 
 
 def test_upload_dotfile_is_rejected(client, app, auth):
@@ -149,19 +159,21 @@ def test_upload_dotfile_is_rejected(client, app, auth):
     # Setup: Create a user and a connection
     with app.app_context():
         db = get_db()
-        password_hash = generate_password_hash('p')
-        cursor = db.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('uploader', ?, 'File Uploader', 'uploader@test.com', 1)", (password_hash,))
-        user_id = cursor.lastrowid
-        realizador_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'").fetchone()['id']
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (user_id, realizador_role_id))
-        cursor = db.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Dotfile Test Project', 'Desc')")
-        project_id = cursor.lastrowid
-        cursor = db.execute(
-            "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, realizador_id, estado) VALUES (?, ?, 'Test', 'Test', 'Test', ?, ?, 'EN_PROCESO')",
-            ('CONN-DOTFILE', project_id, user_id, user_id)
-        )
-        connection_id = cursor.lastrowid
-        db.commit()
+        with db.cursor() as cursor:
+            password_hash = generate_password_hash('p')
+            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES ('uploader', %s, 'File Uploader', 'uploader@test.com', 1) RETURNING id", (password_hash,))
+            user_id = cursor.fetchone()['id']
+            cursor.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'")
+            realizador_role_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (user_id, realizador_role_id))
+            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Dotfile Test Project', 'Desc') RETURNING id")
+            project_id = cursor.fetchone()['id']
+            cursor.execute(
+                "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, realizador_id, estado) VALUES (%s, %s, 'Test', 'Test', 'Test', %s, %s, 'EN_PROCESO') RETURNING id",
+                ('CONN-DOTFILE', project_id, user_id, user_id)
+            )
+            connection_id = cursor.fetchone()['id']
+            db.commit()
 
     # Log in as the uploader
     auth.login('uploader', 'p')
@@ -185,8 +197,10 @@ def test_upload_dotfile_is_rejected(client, app, auth):
     # Verify that no file was added to the database
     with app.app_context():
         db = get_db()
-        file = db.execute("SELECT id FROM archivos WHERE conexion_id = ?", (connection_id,)).fetchone()
-        assert file is None
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM archivos WHERE conexion_id = %s", (connection_id,))
+            file = cursor.fetchone()
+            assert file is None
 
 
 def test_computos_metricos_with_duplicate_profiles(client, app, auth):
@@ -198,26 +212,28 @@ def test_computos_metricos_with_duplicate_profiles(client, app, auth):
     connection_id = None
     with app.app_context():
         db = get_db()
-        # Use admin user created in conftest
-        admin_user = db.execute("SELECT id FROM usuarios WHERE username = 'admin'").fetchone()
+        with db.cursor() as cursor:
+            # Use admin user created in conftest
+            cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+            admin_user = cursor.fetchone()
 
-        # Create a project
-        cursor = db.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Computos Test Project', 'Desc')")
-        project_id = cursor.lastrowid
+            # Create a project
+            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Computos Test Project', 'Desc') RETURNING id")
+            project_id = cursor.fetchone()['id']
 
-        # Create a connection with two identical profiles
-        # Using MOMENTO -> VIGA-COLUMNA (ALA) -> T1 which requires 2 profiles
-        detalles_iniciales = {"Perfil 1": "IPE-300", "Perfil 2": "IPE-300"}
-        cursor = db.execute(
-            """
-            INSERT INTO conexiones
-            (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado, detalles_json)
-            VALUES (?, ?, 'MOMENTO', 'VIGA-COLUMNA (ALA)', 'T1', ?, 'SOLICITADO', ?)
-            """,
-            ('COMPUTOS-BUG-TEST', project_id, admin_user['id'], json.dumps(detalles_iniciales))
-        )
-        connection_id = cursor.lastrowid
-        db.commit()
+            # Create a connection with two identical profiles
+            # Using MOMENTO -> VIGA-COLUMNA (ALA) -> T1 which requires 2 profiles
+            detalles_iniciales = {"Perfil 1": "IPE-300", "Perfil 2": "IPE-300"}
+            cursor.execute(
+                """
+                INSERT INTO conexiones
+                (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado, detalles_json)
+                VALUES (%s, %s, 'MOMENTO', 'VIGA-COLUMNA (ALA)', 'T1', %s, 'SOLICITADO', %s) RETURNING id
+                """,
+                ('COMPUTOS-BUG-TEST', project_id, admin_user['id'], json.dumps(detalles_iniciales))
+            )
+            connection_id = cursor.fetchone()['id']
+            db.commit()
 
     assert connection_id is not None
     auth.login('admin', 'password')
@@ -235,16 +251,18 @@ def test_computos_metricos_with_duplicate_profiles(client, app, auth):
     # Verify that the lengths were stored correctly and not overwritten
     with app.app_context():
         db = get_db()
-        conexion = db.execute("SELECT detalles_json FROM conexiones WHERE id = ?", (connection_id,)).fetchone()
-        detalles_actualizados = json.loads(conexion['detalles_json'])
+        with db.cursor() as cursor:
+            cursor.execute("SELECT detalles_json FROM conexiones WHERE id = %s", (connection_id,))
+            conexion = cursor.fetchone()
+            detalles_actualizados = json.loads(conexion['detalles_json'])
 
-        # With the bug, this test will fail with a KeyError because the key
-        # 'Longitud Perfil 1 (mm)' will not exist. Instead, a key
-        # 'Longitud IPE-300 (mm)' will exist with the value 2000.0.
-        assert 'Longitud Perfil 1 (mm)' in detalles_actualizados
-        assert 'Longitud Perfil 2 (mm)' in detalles_actualizados
-        assert detalles_actualizados['Longitud Perfil 1 (mm)'] == 1000.0
-        assert detalles_actualizados['Longitud Perfil 2 (mm)'] == 2000.0
+            # With the bug, this test will fail with a KeyError because the key
+            # 'Longitud Perfil 1 (mm)' will not exist. Instead, a key
+            # 'Longitud IPE-300 (mm)' will exist with the value 2000.0.
+            assert 'Longitud Perfil 1 (mm)' in detalles_actualizados
+            assert 'Longitud Perfil 2 (mm)' in detalles_actualizados
+            assert detalles_actualizados['Longitud Perfil 1 (mm)'] == 1000.0
+            assert detalles_actualizados['Longitud Perfil 2 (mm)'] == 2000.0
 
 
 def test_reporte_computos_shows_correct_data(client, app, auth):
@@ -256,24 +274,26 @@ def test_reporte_computos_shows_correct_data(client, app, auth):
     connection_id = None
     with app.app_context():
         db = get_db()
-        admin_user = db.execute("SELECT id FROM usuarios WHERE username = 'admin'").fetchone()
-        cursor = db.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Reporte Computos Test', 'Desc')")
-        project_id = cursor.lastrowid
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+            admin_user = cursor.fetchone()
+            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Reporte Computos Test', 'Desc') RETURNING id")
+            project_id = cursor.fetchone()['id']
 
-        # Use two different profiles for clear weight distinction
-        # IPE-300: 42.2 kg/m
-        # IPE-200: 22.4 kg/m
-        detalles_iniciales = {"Perfil 1": "IPE-300", "Perfil 2": "IPE-200"}
-        cursor = db.execute(
-            """
-            INSERT INTO conexiones
-            (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado, detalles_json)
-            VALUES (?, ?, 'MOMENTO', 'VIGA-COLUMNA (ALA)', 'T1', ?, 'SOLICITADO', ?)
-            """,
-            ('REPORTE-COMPUTOS-TEST', project_id, admin_user['id'], json.dumps(detalles_iniciales))
-        )
-        connection_id = cursor.lastrowid
-        db.commit()
+            # Use two different profiles for clear weight distinction
+            # IPE-300: 42.2 kg/m
+            # IPE-200: 22.4 kg/m
+            detalles_iniciales = {"Perfil 1": "IPE-300", "Perfil 2": "IPE-200"}
+            cursor.execute(
+                """
+                INSERT INTO conexiones
+                (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado, detalles_json)
+                VALUES (%s, %s, 'MOMENTO', 'VIGA-COLUMNA (ALA)', 'T1', %s, 'SOLICITADO', %s) RETURNING id
+                """,
+                ('REPORTE-COMPUTOS-TEST', project_id, admin_user['id'], json.dumps(detalles_iniciales))
+            )
+            connection_id = cursor.fetchone()['id']
+            db.commit()
 
     assert connection_id is not None
     auth.login('admin', 'password')

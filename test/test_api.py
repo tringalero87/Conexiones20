@@ -9,17 +9,19 @@ def test_approver_can_access_profile_search_api(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        # Create a user with only the APROBADOR role
-        password_hash = generate_password_hash('password')
-        cursor = db.execute(
-            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
-            ('approver_only', password_hash, 'Approver Only', 'approver@test.com', 1)
-        )
-        approver_id = cursor.lastrowid
+        with db.cursor() as cursor:
+            # Create a user with only the APROBADOR role
+            password_hash = generate_password_hash('password')
+            cursor.execute(
+                "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                ('approver_only', password_hash, 'Approver Only', 'approver@test.com', 1)
+            )
+            approver_id = cursor.fetchone()['id']
 
-        approver_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'APROBADOR'").fetchone()['id']
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (approver_id, approver_role_id))
-        db.commit()
+            cursor.execute("SELECT id FROM roles WHERE nombre = 'APROBADOR'")
+            approver_role_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (approver_id, approver_role_id))
+            db.commit()
 
     # Log in as the approver
     auth.login('approver_only', 'password')
@@ -39,15 +41,16 @@ def test_profile_search_is_space_insensitive(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        db.execute(
-            "INSERT INTO alias_perfiles (nombre_perfil, alias) VALUES (?, ?)",
-            ('IPE 300', 'P300')
-        )
-        db.execute(
-            "INSERT INTO alias_perfiles (nombre_perfil, alias) VALUES (?, ?)",
-            ('W-12x26', 'W12')
-        )
-        db.commit()
+        with db.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO alias_perfiles (nombre_perfil, alias) VALUES (%s, %s)",
+                ('IPE 300', 'P300')
+            )
+            cursor.execute(
+                "INSERT INTO alias_perfiles (nombre_perfil, alias) VALUES (%s, %s)",
+                ('W-12x26', 'W12')
+            )
+            db.commit()
 
     auth.login()
 
@@ -71,33 +74,35 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
     import json
     with app.app_context():
         db = get_db()
-        realizador_role_id = db.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'").fetchone()['id']
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'")
+            realizador_role_id = cursor.fetchone()['id']
 
-        # 1. Create User A and Project A
-        cursor = db.execute("INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-                            ('realizador_a', 'Realizador A', 'ra@test.com', generate_password_hash('a'), 1))
-        user_a_id = cursor.lastrowid
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (user_a_id, realizador_role_id))
+            # 1. Create User A and Project A
+            cursor.execute("INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                                ('realizador_a', 'Realizador A', 'ra@test.com', generate_password_hash('a'), 1))
+            user_a_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (user_a_id, realizador_role_id))
 
-        cursor = db.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Proyecto A', 1))
-        project_a_id = cursor.lastrowid
-        db.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_a_id, user_a_id))
+            cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (%s, %s) RETURNING id", ('Proyecto A', 1))
+            project_a_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (project_a_id, user_a_id))
 
-        # 2. Create User B and Project B
-        cursor = db.execute("INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-                            ('realizador_b', 'Realizador B', 'rb@test.com', generate_password_hash('b'), 1))
-        user_b_id = cursor.lastrowid
-        db.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (user_b_id, realizador_role_id))
+            # 2. Create User B and Project B
+            cursor.execute("INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                                ('realizador_b', 'Realizador B', 'rb@test.com', generate_password_hash('b'), 1))
+            user_b_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (user_b_id, realizador_role_id))
 
-        cursor = db.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Proyecto B', 1))
-        project_b_id = cursor.lastrowid
-        db.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_b_id, user_b_id))
+            cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (%s, %s) RETURNING id", ('Proyecto B', 1))
+            project_b_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (project_b_id, user_b_id))
 
-        # 3. Create a connection in Project A
-        cursor = db.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id) VALUES (?, ?, ?, ?, ?, ?)",
-                            ('CONN-A-01', project_a_id, 'T', 'S', 'T1', 1))
-        connection_id = cursor.lastrowid
-        db.commit()
+            # 3. Create a connection in Project A
+            cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                                ('CONN-A-01', project_a_id, 'T', 'S', 'T1', 1))
+            connection_id = cursor.fetchone()['id']
+            db.commit()
 
     # 4. Log in as User B and try to take the connection in Project A
     auth.login('realizador_b', 'b')
@@ -112,9 +117,11 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
     # 5. Verify the connection state did NOT change
     with app.app_context():
         db = get_db()
-        conn = db.execute("SELECT estado, realizador_id FROM conexiones WHERE id = ?", (connection_id,)).fetchone()
-        assert conn['estado'] == 'SOLICITADO'
-        assert conn['realizador_id'] is None
+        with db.cursor() as cursor:
+            cursor.execute("SELECT estado, realizador_id FROM conexiones WHERE id = %s", (connection_id,))
+            conn = cursor.fetchone()
+            assert conn['estado'] == 'SOLICITADO'
+            assert conn['realizador_id'] is None
 
     # 6. Log in as User A and successfully take the connection
     auth.logout()
@@ -131,6 +138,8 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
     # 7. Verify the connection state DID change
     with app.app_context():
         db = get_db()
-        conn = db.execute("SELECT estado, realizador_id FROM conexiones WHERE id = ?", (connection_id,)).fetchone()
-        assert conn['estado'] == 'EN_PROCESO'
-        assert conn['realizador_id'] == user_a_id
+        with db.cursor() as cursor:
+            cursor.execute("SELECT estado, realizador_id FROM conexiones WHERE id = %s", (connection_id,))
+            conn = cursor.fetchone()
+            assert conn['estado'] == 'EN_PROCESO'
+            assert conn['realizador_id'] == user_a_id

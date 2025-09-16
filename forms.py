@@ -92,17 +92,35 @@ class UserForm(FlaskForm):
 
     def validate_username(self, username):
         from db import get_db
+        from flask import current_app
         db = get_db()
+
         if not self.original_username or username.data.lower() != self.original_username.lower():
-            user = db.execute('SELECT id FROM usuarios WHERE LOWER(username) = ?', (username.data.lower(),)).fetchone()
+            is_testing = current_app.config.get('TESTING', False)
+            sql = 'SELECT id FROM usuarios WHERE LOWER(username) = ?' if is_testing else 'SELECT id FROM usuarios WHERE LOWER(username) = %s'
+
+            cursor = db.cursor()
+            cursor.execute(sql, (username.data.lower(),))
+            user = cursor.fetchone()
+            cursor.close()
+
             if user:
                 raise ValidationError('Este nombre de usuario ya está en uso. Por favor, elige otro.')
 
     def validate_email(self, email):
         from db import get_db
+        from flask import current_app
         db = get_db()
+
         if not self.original_email or email.data.lower() != self.original_email.lower():
-            user = db.execute('SELECT id FROM usuarios WHERE LOWER(email) = ?', (email.data.lower(),)).fetchone()
+            is_testing = current_app.config.get('TESTING', False)
+            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = ?' if is_testing else 'SELECT id FROM usuarios WHERE LOWER(email) = %s'
+
+            cursor = db.cursor()
+            cursor.execute(sql, (email.data.lower(),))
+            user = cursor.fetchone()
+            cursor.close()
+
             if user:
                 raise ValidationError('Este correo electrónico ya está registrado. Por favor, elige otro.')
 
@@ -140,10 +158,17 @@ class ProfileForm(FlaskForm):
 
     def validate_email(self, email):
         from db import get_db
-        from flask import g
+        from flask import g, current_app
         db = get_db()
         if email.data.lower() != g.user['email'].lower():
-            user = db.execute('SELECT id FROM usuarios WHERE LOWER(email) = ?', (email.data.lower(),)).fetchone()
+            is_testing = current_app.config.get('TESTING', False)
+            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = ?' if is_testing else 'SELECT id FROM usuarios WHERE LOWER(email) = %s'
+
+            cursor = db.cursor()
+            cursor.execute(sql, (email.data.lower(),))
+            user = cursor.fetchone()
+            cursor.close()
+
             if user:
                 raise ValidationError('Este correo electrónico ya está registrado. Por favor, elige otro.')
 

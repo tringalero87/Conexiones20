@@ -9,6 +9,12 @@ from . import roles_required
 
 main_bp = Blueprint('main', __name__)
 
+def _is_testing():
+    return current_app.config.get('TESTING', False)
+
+def _get_placeholder():
+    return "?" if _is_testing() else "%s"
+
 def _get_my_summary_data(db, user_id):
     """Obtiene los datos para el widget 'Mi Resumen de Actividad'."""
     is_testing = current_app.config.get('TESTING', False)
@@ -331,7 +337,8 @@ def buscar():
     query = request.args.get('q', '')
     resultados = []
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
+    p = _get_placeholder()
+    is_testing = _is_testing()
 
     if query:
         sanitized_query = re.sub(r'[\\\'\"()\[\]{}*?^:.]', ' ', query).strip()
@@ -340,7 +347,6 @@ def buscar():
         if words:
             if is_testing:
                 # Fallback simple para SQLite usado en tests
-                p = "?"
                 # Construir una consulta LIKE para cada palabra
                 like_clauses = " AND ".join([f"(c.descripcion LIKE {p} OR c.codigo_conexion LIKE {p})" for _ in words])
                 params = [f'%{word}%' for word in words] * 2 # Duplicar para ambas columnas
@@ -362,13 +368,13 @@ def buscar():
                 # Búsqueda FTS mejorada para PostgreSQL
                 # Usa plainto_tsquery para manejar mejor el input del usuario y el operador OR ('|')
                 fts_query = " | ".join(words)
-                sql = """
+                sql = f"""
                     SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
-                           ts_rank(c.fts_document, plainto_tsquery('simple', %s)) as rank
+                           ts_rank(c.fts_document, plainto_tsquery('simple', {p})) as rank
                     FROM conexiones c
                     JOIN proyectos p ON c.proyecto_id = p.id
                     LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-                    WHERE c.fts_document @@ plainto_tsquery('simple', %s)
+                    WHERE c.fts_document @@ plainto_tsquery('simple', {p})
                     ORDER BY rank DESC
                 """
                 cursor = db.cursor()

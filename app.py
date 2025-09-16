@@ -138,12 +138,14 @@ def create_app(test_config=None):
                             return redirect(url_for('auth.login'))
                         return
 
-                    g.user = user_data
+                    g.user = dict(user_data)
                     
                     # Obtener roles del usuario
                     cursor.execute(sql_roles, (g.user['id'],))
                     roles_data = cursor.fetchall()
-                    session['user_roles'] = [row['nombre'] for row in roles_data]
+                    user_roles_list = [row['nombre'] for row in roles_data]
+                    session['user_roles'] = user_roles_list
+                    g.user['roles'] = user_roles_list
 
                     # Obtener notificaciones
                     cursor.execute(sql_notif, (g.user['id'],))

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es" data-bs-theme="dark">
+<html lang="es" data-bs-theme="{{ theme or 'dark' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ (titulo + ' | ' if titulo else '') ~ "Hepta-Conexiones" }}</title>
+    <title>{{ (titulo + ' | ' if titulo else '') ~ g.app_name|e }}</title>
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
     
     <!-- Estilos y Fuentes -->

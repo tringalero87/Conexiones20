@@ -143,50 +143,12 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    // Se definen los datos para los gráficos como variables globales de JavaScript.
-    // El filtro |tojson|safe asegura que se genere un objeto JavaScript válido y seguro.
-    const timeByStateData = {{ charts_data.time_by_state|tojson|safe }};
-    const completedByUserData = {{ charts_data.completed_by_user|tojson|safe }};
-
-    document.addEventListener('DOMContentLoaded', function() {
-        // Gráfico 1: Tiempo Promedio por Estado
-        const ctx1 = document.getElementById('tiempoPorEstadoChart');
-        if (ctx1 && Object.keys(timeByStateData).length > 0) {
-            new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: Object.keys(timeByStateData),
-                    datasets: [{
-                        label: 'Horas Promedio',
-                        data: Object.values(timeByStateData),
-                        backgroundColor: ['rgba(255, 159, 64, 0.5)', 'rgba(54, 162, 235, 0.5)', 'rgba(75, 192, 192, 0.5)'],
-                        borderColor: ['rgba(255, 159, 64, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)'],
-                        borderWidth: 1
-                    }]
-                },
-                options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
-            });
-        }
-
-        // Gráfico 2: Conexiones por Realizador
-        const ctx2 = document.getElementById('conexionesPorRealizadorChart');
-        if (ctx2 && completedByUserData.length > 0) {
-            new Chart(ctx2, {
-                type: 'bar',
-                data: {
-                    labels: completedByUserData.map(row => row.user),
-                    datasets: [{
-                        label: 'Conexiones Completadas',
-                        data: completedByUserData.map(row => row.total),
-                        backgroundColor: 'rgba(111, 66, 193, 0.5)',
-                        borderColor: 'rgba(111, 66, 193, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: { responsive: true, plugins: { legend: { display: false } } }
-            });
-        }
-    });
-</script>
+{# REFACTOR: Los datos para los gráficos ahora se pasan a través de atributos de datos
+   para ser leídos por el script principal (main.js), eliminando la necesidad de
+   variables globales y código de inicialización de gráficos en la plantilla. #}
+<div id="eficiencia-chart-data"
+     data-time-by-state='{{ charts_data.time_by_state|tojson }}'
+     data-completed-by-user='{{ charts_data.completed_by_user|tojson }}'
+     style="display: none;">
+</div>
 {% endblock %}

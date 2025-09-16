@@ -101,15 +101,32 @@ def create_app(test_config=None):
             db_conn = db.get_db()
             if 'user_id' in session:
                 is_testing = current_app.config.get('TESTING', False)
-
-                # Crear cursor. En modo de prueba, la row_factory ya está configurada en la conexión.
                 cursor = db_conn.cursor()
                 
-                # Determinar el estilo del placeholder
-                placeholder = "?" if is_testing else "%s"
+                if is_testing:
+                    sql_user = "SELECT * FROM usuarios WHERE id = ?"
+                    sql_roles = """
+                        SELECT r.nombre FROM roles r
+                        JOIN usuario_roles ur ON r.id = ur.rol_id
+                        WHERE ur.usuario_id = ?
+                    """
+                    sql_notif = """
+                        SELECT id, mensaje, url, fecha_creacion FROM notificaciones
+                        WHERE usuario_id = ? AND leida = FALSE ORDER BY fecha_creacion DESC
+                    """
+                else:
+                    sql_user = "SELECT * FROM usuarios WHERE id = %s"
+                    sql_roles = """
+                        SELECT r.nombre FROM roles r
+                        JOIN usuario_roles ur ON r.id = ur.rol_id
+                        WHERE ur.usuario_id = %s
+                    """
+                    sql_notif = """
+                        SELECT id, mensaje, url, fecha_creacion FROM notificaciones
+                        WHERE usuario_id = %s AND leida = FALSE ORDER BY fecha_creacion DESC
+                    """
 
                 # Obtener datos del usuario
-                sql_user = f"SELECT * FROM usuarios WHERE id = {placeholder}"
                 cursor.execute(sql_user, (session['user_id'],))
                 user_data = cursor.fetchone()
 
@@ -124,20 +141,11 @@ def create_app(test_config=None):
                     g.user = user_data
                     
                     # Obtener roles del usuario
-                    sql_roles = f"""
-                        SELECT r.nombre FROM roles r
-                        JOIN usuario_roles ur ON r.id = ur.rol_id
-                        WHERE ur.usuario_id = {placeholder}
-                    """
                     cursor.execute(sql_roles, (g.user['id'],))
                     roles_data = cursor.fetchall()
                     session['user_roles'] = [row['nombre'] for row in roles_data]
 
                     # Obtener notificaciones
-                    sql_notif = f"""
-                        SELECT id, mensaje, url, fecha_creacion FROM notificaciones
-                        WHERE usuario_id = {placeholder} AND leida = FALSE ORDER BY fecha_creacion DESC
-                    """
                     cursor.execute(sql_notif, (g.user['id'],))
                     g.notifications = cursor.fetchall()
                 else:

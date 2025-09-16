@@ -6,6 +6,7 @@ import psycopg2
 from psycopg2.extras import DictCursor
 import sqlite3
 import datetime
+import re
 
 # --- Adaptadores y Conversores para SQLite ---
 # Soluciona DeprecationWarning en Python 3.12+ para timestamps.
@@ -28,19 +29,23 @@ def get_db():
     De lo contrario, se conecta a PostgreSQL usando DATABASE_URL.
     """
     if 'db' not in g:
-        if current_app.config.get('TESTING'):
-            # Conexión a la base de datos de prueba (SQLite)
+        database_url = current_app.config.get('DATABASE_URL')
+        if database_url:
+            # Priorizar DATABASE_URL si está disponible (para pruebas en PostgreSQL)
+            g.db = psycopg2.connect(database_url, cursor_factory=DictCursor)
+        elif current_app.config.get('TESTING'):
+            # Fallback a SQLite si TESTING es True pero no hay DATABASE_URL
             db_path = current_app.config.get('DATABASE')
             if not db_path:
-                raise RuntimeError("La configuración 'DATABASE' es necesaria para las pruebas.")
+                raise RuntimeError("La configuración 'DATABASE' es necesaria para las pruebas con SQLite.")
             g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
             g.db.row_factory = sqlite3.Row
         else:
-            # Conexión a la base de datos de producción (PostgreSQL)
-            database_url = os.environ.get('DATABASE_URL')
-            if not database_url:
-                raise RuntimeError("DATABASE_URL no está configurada. La aplicación no puede continuar.")
-            g.db = psycopg2.connect(database_url, cursor_factory=DictCursor)
+            # Conexión de producción
+            prod_db_url = os.environ.get('DATABASE_URL')
+            if not prod_db_url:
+                raise RuntimeError("DATABASE_URL no está configurada para producción.")
+            g.db = psycopg2.connect(prod_db_url, cursor_factory=DictCursor)
     
     return g.db
 
@@ -74,11 +79,13 @@ def init_db():
     else:
         # Conexión PostgreSQL (usada en producción)
         with db.cursor() as cursor:
-            # PostgreSQL no maneja bien múltiples sentencias en un solo execute,
-            # especialmente con algunos comandos DDL. Iterar es más seguro.
-            for statement in sql_script.split(';'):
-                if statement.strip():
-                    cursor.execute(statement)
+            # Limpiar comentarios y dividir el script en sentencias
+            # Eliminar comentarios de línea (-- ...)
+            clean_script = re.sub(r'--.*$', '', sql_script, flags=re.MULTILINE)
+            statements = [statement.strip() for statement in clean_script.split(';') if statement.strip()]
+
+            for statement in statements:
+                cursor.execute(statement)
         db.commit()
 
 @click.command('init-db')
@@ -106,21 +113,11 @@ def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
     Registra una acción de auditoría en la base de datos.
     """
     db = get_db()
-    is_testing = current_app.config.get('TESTING', False)
-
-    if is_testing:
-        # Sintaxis para SQLite
-        sql = """
-            INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-            VALUES (?, ?, ?, ?, ?)
-        """
-    else:
-        # Sintaxis para PostgreSQL
-        sql = """
-            INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-            VALUES (%s, %s, %s, %s, %s)
-        """
-
+    # Asumimos que si estamos usando esta función, la BD soporta %s
+    sql = """
+        INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
+        VALUES (%s, %s, %s, %s, %s)
+    """
     params = (usuario_id, accion, tipo_objeto, objeto_id, detalles)
 
     try:

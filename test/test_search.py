@@ -9,22 +9,25 @@ def test_search_word_order_independent(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        solicitante_row = db.execute("SELECT id FROM usuarios WHERE username = 'solicitante'").fetchone()
-        assert solicitante_row is not None
-        solicitante_id = solicitante_row['id']
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM usuarios WHERE username = 'solicitante'")
+            solicitante_row = cursor.fetchone()
+            assert solicitante_row is not None
+            solicitante_id = solicitante_row['id']
 
-        project_row = db.execute("SELECT id FROM proyectos WHERE nombre = 'Proyecto Test'").fetchone()
-        assert project_row is not None
-        project_id = project_row['id']
+            cursor.execute("SELECT id FROM proyectos WHERE nombre = 'Proyecto Test'")
+            project_row = cursor.fetchone()
+            assert project_row is not None
+            project_id = project_row['id']
 
-        db.execute(
-            """
-            INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, solicitante_id, estado)
-            VALUES (?, ?, 'Test', 'Subtipo Test', 'Tipologia Test', 'viga de acero', ?, 'SOLICITADO')
-            """,
-            ('ORD-TEST-01', project_id, solicitante_id)
-        )
-        db.commit()
+            cursor.execute(
+                """
+                INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, solicitante_id, estado)
+                VALUES (%s, %s, 'Test', 'Subtipo Test', 'Tipologia Test', 'viga de acero', %s, 'SOLICITADO')
+                """,
+                ('ORD-TEST-01', project_id, solicitante_id)
+            )
+            db.commit()
 
     auth.login()
     # Search for "acero viga". The current implementation will fail this.
@@ -39,23 +42,26 @@ def test_search_prefix_and_word_order(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        solicitante_row = db.execute("SELECT id FROM usuarios WHERE username = 'solicitante'").fetchone()
-        assert solicitante_row is not None
-        solicitante_id = solicitante_row['id']
+        with db.cursor() as cursor:
+            cursor.execute("SELECT id FROM usuarios WHERE username = 'solicitante'")
+            solicitante_row = cursor.fetchone()
+            assert solicitante_row is not None
+            solicitante_id = solicitante_row['id']
 
-        project_row = db.execute("SELECT id FROM proyectos WHERE nombre = 'Proyecto Test'").fetchone()
-        assert project_row is not None
-        project_id = project_row['id']
+            cursor.execute("SELECT id FROM proyectos WHERE nombre = 'Proyecto Test'")
+            project_row = cursor.fetchone()
+            assert project_row is not None
+            project_id = project_row['id']
 
-        # Use a different connection code to avoid conflict with the other test
-        db.execute(
-            """
-            INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, solicitante_id, estado)
-            VALUES (?, ?, 'Test', 'Subtipo Test', 'Tipologia Test', 'viga de acero', ?, 'SOLICITADO')
-            """,
-            ('ORD-PREFIX-TEST-01', project_id, solicitante_id)
-        )
-        db.commit()
+            # Use a different connection code to avoid conflict with the other test
+            cursor.execute(
+                """
+                INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, solicitante_id, estado)
+                VALUES (%s, %s, 'Test', 'Subtipo Test', 'Tipologia Test', 'viga de acero', %s, 'SOLICITADO')
+                """,
+                ('ORD-PREFIX-TEST-01', project_id, solicitante_id)
+            )
+            db.commit()
 
     auth.login()
     # Search for "acer vig". The current implementation will fail this.

@@ -36,19 +36,15 @@ def get_computos_results(conexion):
             })
     return resultados, detalles
 
-from flask import current_app
-from services.connection_service import _get_placeholder, _is_testing
-
 def calculate_and_save_computos(conexion_id, form_data, user_id):
     """
     Calculates and saves the metric computations for a connection.
     """
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        cursor.execute(f'SELECT * FROM conexiones WHERE id = {p}', (conexion_id,))
+        cursor.execute('SELECT * FROM conexiones WHERE id = %s', (conexion_id,))
         conexion = cursor.fetchone()
 
         if not conexion:
@@ -83,8 +79,8 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
                 resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
 
         if not has_error:
-            timestamp_expr = "CURRENT_TIMESTAMP" if not _is_testing() else "datetime('now')"
-            sql = f'UPDATE conexiones SET detalles_json = {p}, fecha_modificacion = {timestamp_expr} WHERE id = {p}'
+            timestamp_expr = "CURRENT_TIMESTAMP"
+            sql = f'UPDATE conexiones SET detalles_json = %s, fecha_modificacion = {timestamp_expr} WHERE id = %s'
             params = (json.dumps(updated_detalles), conexion_id)
             cursor.execute(sql, params)
             db.commit()

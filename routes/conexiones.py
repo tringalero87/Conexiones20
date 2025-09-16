@@ -105,13 +105,6 @@ def allowed_file(filename):
 
     return extension in ALLOWED_EXTENSIONS
 
-
-def _is_testing():
-    return current_app.config.get('TESTING', False)
-
-def _get_placeholder():
-    return "?" if _is_testing() else "%s"
-
 @conexiones_bp.route('/crear', methods=['GET'])
 @roles_required('ADMINISTRADOR', 'SOLICITANTE')
 def crear_conexion_form():
@@ -126,11 +119,10 @@ def crear_conexion_form():
         return redirect(url_for('main.catalogo'))
 
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        sql_get_proyecto = f'SELECT * FROM proyectos WHERE id = {p}'
+        sql_get_proyecto = 'SELECT * FROM proyectos WHERE id = %s'
         cursor.execute(sql_get_proyecto, (proyecto_id,))
         proyecto = cursor.fetchone()
         if not proyecto:
@@ -159,7 +151,6 @@ def crear_conexion_form():
 def procesar_creacion_conexion():
     """Procesa el formulario y crea una nueva conexión de forma segura y portable."""
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
@@ -177,7 +168,7 @@ def procesar_creacion_conexion():
         # Validar perfiles
         num_perfiles = tipologia_config.get('perfiles', 0)
         perfiles_para_plantilla, perfiles_para_detalles = {}, {}
-        sql_get_alias = f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}'
+        sql_get_alias = 'SELECT alias FROM alias_perfiles WHERE nombre_perfil = %s'
 
         for i in range(1, num_perfiles + 1):
             nombre_campo = f'perfil_{i}'
@@ -195,7 +186,7 @@ def procesar_creacion_conexion():
         codigo_conexion_base = tipologia_config.get('plantilla', '').format(**perfiles_para_plantilla)
         codigo_conexion_final = codigo_conexion_base
         contador = 1
-        sql_check_code = f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p}'
+        sql_check_code = 'SELECT 1 FROM conexiones WHERE codigo_conexion = %s'
         while True:
             cursor.execute(sql_check_code, (codigo_conexion_final,))
             if not cursor.fetchone():
@@ -205,17 +196,15 @@ def procesar_creacion_conexion():
 
         # Insertar conexión
         detalles_json = json.dumps(perfiles_para_detalles)
-        sql_insert_conexion = f"INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})"
-        if not _is_testing():
-            sql_insert_conexion += " RETURNING id"
+        sql_insert_conexion = "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id"
         
         params_conexion = (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion, detalles_json, g.user['id'])
         cursor.execute(sql_insert_conexion, params_conexion)
 
-        new_conexion_id = cursor.lastrowid if _is_testing() else cursor.fetchone()['id']
+        new_conexion_id = cursor.fetchone()['id']
 
         # Insertar historial
-        sql_insert_historial = f"INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES ({p}, {p}, {p})"
+        sql_insert_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES (%s, %s, %s)"
         cursor.execute(sql_insert_historial, (new_conexion_id, g.user['id'], 'SOLICITADO'))
 
         db.commit()
@@ -231,20 +220,19 @@ def procesar_creacion_conexion():
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def detalle_conexion(conexion_id):
     db = get_db()
-    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     
     cursor = db.cursor()
     try:
-        sql_archivos = f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida DESC'
+        sql_archivos = 'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = %s ORDER BY a.fecha_subida DESC'
         cursor.execute(sql_archivos, (conexion_id,))
         archivos_raw = cursor.fetchall()
 
-        sql_comentarios = f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion DESC"
+        sql_comentarios = "SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = %s ORDER BY c.fecha_creacion DESC"
         cursor.execute(sql_comentarios, (conexion_id,))
         comentarios = cursor.fetchall()
 
-        sql_historial = f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha DESC"
+        sql_historial = "SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = %s ORDER BY h.fecha DESC"
         cursor.execute(sql_historial, (conexion_id,))
         historial = cursor.fetchall()
     finally:
@@ -271,7 +259,6 @@ def detalle_conexion(conexion_id):
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'SOLICITANTE')
 def editar_conexion(conexion_id):
     db = get_db()
-    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
     user_roles = session.get('user_roles', [])
     user_id = g.user['id']
@@ -301,7 +288,7 @@ def editar_conexion(conexion_id):
             # --- Lógica de regeneración de código ---
             perfiles_nuevos_dict_alias = {}
             perfiles_nuevos_dict_full_name = {}
-            sql_get_alias = f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}'
+            sql_get_alias = 'SELECT alias FROM alias_perfiles WHERE nombre_perfil = %s'
             for i in range(1, num_perfiles + 1):
                 nombre_completo_perfil_nuevo = getattr(form, f'perfil_{i}').data.strip()
                 cursor.execute(sql_get_alias, (nombre_completo_perfil_nuevo,))
@@ -316,7 +303,7 @@ def editar_conexion(conexion_id):
             if not conexion['codigo_conexion'].startswith(nuevo_codigo_base):
                 codigo_a_guardar = nuevo_codigo_base
                 contador = 1
-                sql_check_code = f'SELECT 1 FROM conexiones WHERE codigo_conexion = {p}'
+                sql_check_code = 'SELECT 1 FROM conexiones WHERE codigo_conexion = %s'
                 while True:
                     cursor.execute(sql_check_code, (codigo_a_guardar,))
                     if not cursor.fetchone():
@@ -327,11 +314,11 @@ def editar_conexion(conexion_id):
 
             # --- Actualización en la base de datos ---
             nuevos_detalles_json = json.dumps(perfiles_nuevos_dict_full_name)
-            timestamp_expr = "CURRENT_TIMESTAMP" if not _is_testing() else "datetime('now')"
+            timestamp_expr = "CURRENT_TIMESTAMP"
 
-            sql_update = f"""UPDATE conexiones SET codigo_conexion = {p}, descripcion = {p},
-                             detalles_json = {p}, fecha_modificacion = {timestamp_expr}
-                             WHERE id = {p}"""
+            sql_update = f"""UPDATE conexiones SET codigo_conexion = %s, descripcion = %s,
+                             detalles_json = %s, fecha_modificacion = {timestamp_expr}
+                             WHERE id = %s"""
             params_update = (codigo_a_guardar, form.descripcion.data, nuevos_detalles_json, conexion_id)
             cursor.execute(sql_update, params_update)
             db.commit()
@@ -358,10 +345,9 @@ def editar_conexion(conexion_id):
 def eliminar_conexion(conexion_id):
     conexion = _get_conexion(conexion_id)
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
     try:
-        cursor.execute(f'DELETE FROM conexiones WHERE id = {p}', (conexion_id,))
+        cursor.execute('DELETE FROM conexiones WHERE id = %s', (conexion_id,))
         db.commit()
     finally:
         cursor.close()
@@ -376,10 +362,9 @@ from services.import_service import importar_conexiones_from_file
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def importar_conexiones(proyecto_id):
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
     try:
-        cursor.execute(f'SELECT * FROM proyectos WHERE id = {p}', (proyecto_id,))
+        cursor.execute('SELECT * FROM proyectos WHERE id = %s', (proyecto_id,))
         proyecto = cursor.fetchone()
     finally:
         cursor.close()
@@ -438,7 +423,6 @@ def cambiar_estado(conexion_id):
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def asignar_realizador(conexion_id):
     db = get_db()
-    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
 
     user_roles = session.get('user_roles', [])
@@ -464,7 +448,7 @@ def asignar_realizador(conexion_id):
     cursor = db.cursor()
 
     try:
-        sql_get_user = f'SELECT id, nombre_completo FROM usuarios WHERE username = {p} AND activo = TRUE'
+        sql_get_user = 'SELECT id, nombre_completo FROM usuarios WHERE username = %s AND activo = TRUE'
         cursor.execute(sql_get_user, (username_a_asignar_limpio,))
         usuario_a_asignar = cursor.fetchone()
 
@@ -472,19 +456,19 @@ def asignar_realizador(conexion_id):
             flash(f"Usuario '{username_a_asignar}' no encontrado o inactivo.", 'danger')
             return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
-        timestamp_expr = "CURRENT_TIMESTAMP" if not _is_testing() else "datetime('now')"
+        timestamp_expr = "CURRENT_TIMESTAMP"
         if conexion['estado'] == 'SOLICITADO':
             nuevo_estado = 'EN_PROCESO'
-            sql_update = f'UPDATE conexiones SET realizador_id = {p}, estado = {p}, fecha_modificacion = {timestamp_expr} WHERE id = {p}'
+            sql_update = f'UPDATE conexiones SET realizador_id = %s, estado = %s, fecha_modificacion = {timestamp_expr} WHERE id = %s'
             cursor.execute(sql_update, (usuario_a_asignar['id'], nuevo_estado, conexion_id))
 
-            sql_insert = f'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES ({p}, {p}, {p}, {p})'
+            sql_insert = 'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (%s, %s, %s, %s)'
             cursor.execute(sql_insert, (conexion_id, g.user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}"))
 
             _notify_users(db, conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido asignada.", "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
             flash(f"Conexión asignada a {usuario_a_asignar['nombre_completo']}.", 'success')
         else:
-            sql_update = f'UPDATE conexiones SET realizador_id = {p}, fecha_modificacion = {timestamp_expr} WHERE id = {p}'
+            sql_update = f'UPDATE conexiones SET realizador_id = %s, fecha_modificacion = {timestamp_expr} WHERE id = %s'
             cursor.execute(sql_update, (usuario_a_asignar['id'], conexion_id))
             log_action('REASIGNAR_CONEXION', g.user['id'], 'conexiones', conexion_id, f"Conexión reasignada a '{usuario_a_asignar['nombre_completo']}'.")
             _notify_users(db, conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido reasignada.", "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
@@ -501,7 +485,6 @@ def asignar_realizador(conexion_id):
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def subir_archivo(conexion_id):
     db = get_db()
-    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
 
     if 'archivo' not in request.files or not request.files['archivo'].filename:
@@ -517,7 +500,7 @@ def subir_archivo(conexion_id):
         os.makedirs(upload_path, exist_ok=True)
         file.save(os.path.join(upload_path, filename))
 
-        sql = f'INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES ({p}, {p}, {p}, {p})'
+        sql = 'INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES (%s, %s, %s, %s)'
         params = (conexion_id, g.user['id'], tipo_archivo, filename)
 
         cursor = db.cursor()
@@ -540,8 +523,7 @@ def subir_archivo(conexion_id):
 def descargar_archivo(conexion_id, filename):
     directory = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
     db = get_db()
-    p = _get_placeholder()
-    sql = f'SELECT id FROM archivos WHERE conexion_id = {p} AND nombre_archivo = {p}'
+    sql = 'SELECT id FROM archivos WHERE conexion_id = %s AND nombre_archivo = %s'
 
     cursor = db.cursor()
     try:
@@ -561,10 +543,9 @@ def descargar_archivo(conexion_id, filename):
 @roles_required('ADMINISTRADOR', 'REALIZADOR')
 def eliminar_archivo(conexion_id, archivo_id):
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
     try:
-        sql_get_archivo = f'SELECT * FROM archivos WHERE id = {p} AND conexion_id = {p}'
+        sql_get_archivo = 'SELECT * FROM archivos WHERE id = %s AND conexion_id = %s'
         cursor.execute(sql_get_archivo, (archivo_id, conexion_id))
         archivo = cursor.fetchone()
 
@@ -578,7 +559,7 @@ def eliminar_archivo(conexion_id, archivo_id):
                 flash('No tienes permiso para eliminar este archivo.', 'danger')
                 return redirect(url_for('conexiones.detalle_conexion', conexion_id=conexion_id))
 
-            sql_delete = f'DELETE FROM archivos WHERE id = {p}'
+            sql_delete = 'DELETE FROM archivos WHERE id = %s'
             cursor.execute(sql_delete, (archivo_id,))
             db.commit()
 
@@ -601,10 +582,9 @@ def agregar_comentario(conexion_id):
     if contenido:
         sanitized_content = bleach.clean(contenido, tags=bleach.sanitizer.ALLOWED_TAGS + ['p', 'br'], strip=True)
         db = get_db()
-        p = _get_placeholder()
         cursor = db.cursor()
         try:
-            sql = f'INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES ({p}, {p}, {p})'
+            sql = 'INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES (%s, %s, %s)'
             cursor.execute(sql, (conexion_id, g.user['id'], sanitized_content))
             db.commit()
         finally:
@@ -623,10 +603,9 @@ def agregar_comentario(conexion_id):
 @roles_required('ADMINISTRADOR')
 def eliminar_comentario(conexion_id, comentario_id):
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
     try:
-        sql = f'DELETE FROM comentarios WHERE id = {p} AND conexion_id = {p}'
+        sql = 'DELETE FROM comentarios WHERE id = %s AND conexion_id = %s'
         cursor.execute(sql, (comentario_id, conexion_id))
         db.commit()
         log_action('ELIMINAR_COMENTARIO', g.user['id'], 'comentarios', comentario_id, f"Comentario (ID: {comentario_id}) eliminado.")
@@ -677,31 +656,30 @@ def reporte_computos(conexion_id):
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def reporte_conexion(conexion_id):
     db = get_db()
-    p = _get_placeholder()
     conexion = _get_conexion(conexion_id)
 
     cursor = db.cursor()
     try:
-        sql_historial = f"""
+        sql_historial = """
             SELECT h.*, u.nombre_completo FROM historial_estados h
             JOIN usuarios u ON h.usuario_id = u.id
-            WHERE h.conexion_id = {p} ORDER BY h.fecha ASC
+            WHERE h.conexion_id = %s ORDER BY h.fecha ASC
         """
         cursor.execute(sql_historial, (conexion_id,))
         historial = cursor.fetchall()
 
-        sql_comentarios = f"""
+        sql_comentarios = """
             SELECT c.*, u.nombre_completo FROM comentarios c
             JOIN usuarios u ON c.usuario_id = u.id
-            WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion ASC
+            WHERE c.conexion_id = %s ORDER BY c.fecha_creacion ASC
         """
         cursor.execute(sql_comentarios, (conexion_id,))
         comentarios = cursor.fetchall()
 
-        sql_archivos = f"""
+        sql_archivos = """
             SELECT a.*, u.nombre_completo as subido_por FROM archivos a
             JOIN usuarios u ON a.usuario_id = u.id
-            WHERE a.conexion_id = {p} ORDER BY a.fecha_subida ASC
+            WHERE a.conexion_id = %s ORDER BY a.fecha_subida ASC
         """
         cursor.execute(sql_archivos, (conexion_id,))
         archivos_raw = cursor.fetchall()

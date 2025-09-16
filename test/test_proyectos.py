@@ -27,5 +27,7 @@ def test_project_name_is_case_insensitive_unique(client, app, auth):
     # 3. Verify that only one project was actually created
     with app.app_context():
         db = get_db()
-        count = db.execute("SELECT COUNT(id) FROM proyectos WHERE LOWER(nombre) = 'proyecto de prueba'").fetchone()[0]
-        assert count == 1
+        with db.cursor() as cursor:
+            cursor.execute("SELECT COUNT(id) FROM proyectos WHERE LOWER(nombre) = 'proyecto de prueba'")
+            count = cursor.fetchone()[0]
+            assert count == 1

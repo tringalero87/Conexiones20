@@ -32,14 +32,6 @@ from . import roles_required
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
-def _is_testing():
-    return current_app.config.get('TESTING', False)
-
-
-def _get_placeholder():
-    return "?" if _is_testing() else "%s"
-
-
 def _generate_report_data_and_file(reporte_id, app_context):
     """
     Genera los datos del reporte y un archivo en memoria (BytesIO o StringIO)
@@ -49,7 +41,7 @@ def _generate_report_data_and_file(reporte_id, app_context):
     with app_context:
         db = get_db()
         reporte = db.execute(
-            'SELECT * FROM reportes WHERE id = ?', (reporte_id,)).fetchone()
+            'SELECT * FROM reportes WHERE id = %s', (reporte_id,)).fetchone()
         if not reporte:
             current_app.logger.error(
                 f"Reporte ID {reporte_id} no encontrado para generación programada.")
@@ -75,19 +67,19 @@ def _generate_report_data_and_file(reporte_id, app_context):
         params = []
 
         if filtros.get('proyecto_id') and filtros['proyecto_id'] != 0:
-            query_base += " AND proyecto_id = ?"
+            query_base += " AND proyecto_id = %s"
             params.append(filtros['proyecto_id'])
         if filtros.get('estado'):
-            query_base += " AND estado = ?"
+            query_base += " AND estado = %s"
             params.append(filtros['estado'])
         if filtros.get('realizador_id') and filtros['realizador_id'] != 0:
-            query_base += " AND realizador_id = ?"
+            query_base += " AND realizador_id = %s"
             params.append(filtros['realizador_id'])
         if filtros.get('fecha_inicio'):
-            query_base += " AND date(fecha_creacion) >= ?"
+            query_base += " AND date(fecha_creacion) >= %s"
             params.append(filtros['fecha_inicio'])
         if filtros.get('fecha_fin'):
-            query_base += " AND date(fecha_creacion) <= ?"
+            query_base += " AND date(fecha_creacion) <= %s"
             params.append(filtros['fecha_fin'])
 
         resultados_raw = db.execute(query_base, tuple(params)).fetchall()
@@ -144,7 +136,7 @@ def _generate_report_data_and_file(reporte_id, app_context):
                 filename = f"{filename_base}.pdf"
 
             db.execute(
-                'UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = ?',
+                'UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = %s',
                 (reporte_id,
                  ))
             db.commit()
@@ -166,7 +158,7 @@ def scheduled_report_job(reporte_id):
     with current_app.app_context():
         db = get_db()
         reporte = db.execute(
-            'SELECT * FROM reportes WHERE id = ?', (reporte_id,)).fetchone()
+            'SELECT * FROM reportes WHERE id = %s', (reporte_id,)).fetchone()
         if not reporte or not reporte['programado'] or not reporte['destinatarios']:
             current_app.logger.warning(
                 (f"Tarea programada para reporte ID {reporte_id} no ejecutada: "
@@ -224,30 +216,17 @@ def listar_usuarios():
     """Muestra una lista completa de todos los usuarios registrados en el sistema, incluyendo sus roles."""
     db = get_db()
 
-    if _is_testing():
-        # SQLite version
-        sql = """
-            SELECT
-                u.id, u.username, u.nombre_completo, u.email, u.activo,
-                GROUP_CONCAT(r.nombre, ', ') as roles
-            FROM usuarios u
-            LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
-            LEFT JOIN roles r ON ur.rol_id = r.id
-            GROUP BY u.id
-            ORDER BY u.nombre_completo
-        """
-    else:
-        # PostgreSQL version
-        sql = """
-            SELECT
-                u.id, u.username, u.nombre_completo, u.email, u.activo,
-                STRING_AGG(r.nombre, ', ') as roles
-            FROM usuarios u
-            LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
-            LEFT JOIN roles r ON ur.rol_id = r.id
-            GROUP BY u.id
-            ORDER BY u.nombre_completo
-        """
+    # PostgreSQL version
+    sql = """
+        SELECT
+            u.id, u.username, u.nombre_completo, u.email, u.activo,
+            STRING_AGG(r.nombre, ', ') as roles
+        FROM usuarios u
+        LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
+        LEFT JOIN roles r ON ur.rol_id = r.id
+        GROUP BY u.id
+        ORDER BY u.nombre_completo
+    """
 
     cursor = db.cursor()
     cursor.execute(sql)
@@ -282,27 +261,19 @@ def nuevo_usuario():
         if form.validate_on_submit():
             password_hash = generate_password_hash(form.password.data)
 
-            if _is_testing():
-                sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)'
-                sql_get_rol = 'SELECT id FROM roles WHERE nombre = ?'
-                sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)'
-            else:
-                sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id'
-                sql_get_rol = 'SELECT id FROM roles WHERE nombre = %s'
-                sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)'
+            sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id'
+            sql_get_rol = 'SELECT id FROM roles WHERE nombre = %s'
+            sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)'
 
             params_user = (
                 form.username.data,
                 form.nombre_completo.data,
                 form.email.data,
                 password_hash,
-                form.activo.data)
+                int(form.activo.data))
             cursor.execute(sql_insert_user, params_user)
 
-            if _is_testing():
-                new_user_id = cursor.lastrowid
-            else:
-                new_user_id = cursor.fetchone()['id']
+            new_user_id = cursor.fetchone()['id']
 
             for rol_nombre in form.roles.data:
                 cursor.execute(sql_get_rol, (rol_nombre,))
@@ -332,18 +303,17 @@ def editar_usuario(usuario_id):
     """Gestiona la edición de un usuario existente."""
     db = get_db()
     cursor = db.cursor()
-    p = _get_placeholder()
 
     try:
         # Definir consultas seguras y portables
-        sql_get_user = f"SELECT * FROM usuarios WHERE id = {p}"
+        sql_get_user = "SELECT * FROM usuarios WHERE id = %s"
         sql_get_all_roles = "SELECT nombre FROM roles ORDER BY nombre"
-        sql_update_user = f"UPDATE usuarios SET username = {p}, nombre_completo = {p}, email = {p}, activo = {p} WHERE id = {p}"
-        sql_update_pass = f"UPDATE usuarios SET password_hash = {p} WHERE id = {p}"
-        sql_get_user_roles = f"SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = {p}"
-        sql_delete_user_roles = f"DELETE FROM usuario_roles WHERE usuario_id = {p}"
-        sql_get_rol_id = f"SELECT id FROM roles WHERE nombre = {p}"
-        sql_insert_user_role = f"INSERT INTO usuario_roles (usuario_id, rol_id) VALUES ({p}, {p})"
+        sql_update_user = "UPDATE usuarios SET username = %s, nombre_completo = %s, email = %s, activo = %s WHERE id = %s"
+        sql_update_pass = "UPDATE usuarios SET password_hash = %s WHERE id = %s"
+        sql_get_user_roles = "SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = %s"
+        sql_delete_user_roles = "DELETE FROM usuario_roles WHERE usuario_id = %s"
+        sql_get_rol_id = "SELECT id FROM roles WHERE nombre = %s"
+        sql_insert_user_role = "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)"
 
         cursor.execute(sql_get_user, (usuario_id,))
         usuario = cursor.fetchone()
@@ -367,7 +337,7 @@ def editar_usuario(usuario_id):
                 (form.username.data,
                  form.nombre_completo.data,
                  form.email.data,
-                 form.activo.data,
+                 int(form.activo.data),
                  usuario_id))
 
             changes = {k: {'old': old_data[k],
@@ -437,17 +407,16 @@ def toggle_activo(usuario_id):
         return redirect(url_for('admin.listar_usuarios'))
 
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
         cursor.execute(
-            f'SELECT activo, username FROM usuarios WHERE id = {p}', (usuario_id,))
+            'SELECT activo, username FROM usuarios WHERE id = %s', (usuario_id,))
         usuario = cursor.fetchone()
         if usuario:
             nuevo_estado = not usuario['activo']
             cursor.execute(
-                f'UPDATE usuarios SET activo = {p} WHERE id = {p}',
+                'UPDATE usuarios SET activo = %s WHERE id = %s',
                 (nuevo_estado,
                  usuario_id))
             db.commit()
@@ -470,7 +439,6 @@ def toggle_activo(usuario_id):
 def eliminar_usuario(usuario_id):
     """Elimina un usuario (solo para administradores)."""
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
@@ -479,7 +447,7 @@ def eliminar_usuario(usuario_id):
             return redirect(url_for('admin.listar_usuarios'))
 
         # Comprobar si el usuario es administrador
-        sql_is_admin = f"SELECT 1 FROM usuario_roles ur JOIN roles r ON ur.rol_id = r.id WHERE ur.usuario_id = {p} AND r.nombre = 'ADMINISTRADOR'"
+        sql_is_admin = "SELECT 1 FROM usuario_roles ur JOIN roles r ON ur.rol_id = r.id WHERE ur.usuario_id = %s AND r.nombre = 'ADMINISTRADOR'"
         cursor.execute(sql_is_admin, (usuario_id,))
         is_admin_query = cursor.fetchone()
 
@@ -494,7 +462,7 @@ def eliminar_usuario(usuario_id):
                 return redirect(url_for('admin.listar_usuarios'))
 
         # Comprobar si está asignado a proyectos
-        sql_proyectos = f"SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = {p}"
+        sql_proyectos = "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = %s"
         cursor.execute(sql_proyectos, (usuario_id,))
         proyectos_asignados = cursor.fetchone()
         if proyectos_asignados and proyectos_asignados['count'] > 0:
@@ -505,7 +473,7 @@ def eliminar_usuario(usuario_id):
             return redirect(url_for('admin.listar_usuarios'))
 
         # Comprobar si tiene conexiones activas
-        sql_conexiones = f"SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = {p} AND estado IN ('EN_PROCESO', 'REALIZADO')"
+        sql_conexiones = "SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = %s AND estado IN ('EN_PROCESO', 'REALIZADO')"
         cursor.execute(sql_conexiones, (usuario_id,))
         conexiones_activas = cursor.fetchone()
         if conexiones_activas and conexiones_activas['count'] > 0:
@@ -516,11 +484,11 @@ def eliminar_usuario(usuario_id):
             return redirect(url_for('admin.listar_usuarios'))
 
         # Eliminar el usuario
-        sql_get_user = f'SELECT username FROM usuarios WHERE id = {p}'
+        sql_get_user = 'SELECT username FROM usuarios WHERE id = %s'
         cursor.execute(sql_get_user, (usuario_id,))
         usuario = cursor.fetchone()
         if usuario:
-            sql_delete_user = f'DELETE FROM usuarios WHERE id = {p}'
+            sql_delete_user = 'DELETE FROM usuarios WHERE id = %s'
             cursor.execute(sql_delete_user, (usuario_id,))
             db.commit()
             log_action('ELIMINAR_USUARIO', g.user['id'], 'usuarios',
@@ -541,11 +509,10 @@ def eliminar_usuario(usuario_id):
 def gestionar_permisos_proyecto(proyecto_id):
     """Gestiona qué usuarios tienen acceso a un proyecto específico."""
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        sql_get_proyecto = f'SELECT * FROM proyectos WHERE id = {p}'
+        sql_get_proyecto = 'SELECT * FROM proyectos WHERE id = %s'
         cursor.execute(sql_get_proyecto, (proyecto_id,))
         proyecto = cursor.fetchone()
         if not proyecto:
@@ -556,16 +523,16 @@ def gestionar_permisos_proyecto(proyecto_id):
         if form.validate_on_submit():
             usuarios_asignados = request.form.getlist('usuarios_asignados')
 
-            sql_get_assigned = f'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = {p}'
+            sql_get_assigned = 'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = %s'
             cursor.execute(sql_get_assigned, (proyecto_id,))
             current_assigned_users_ids = {
                 row['usuario_id'] for row in cursor.fetchall()}
             new_assigned_users_ids = {int(uid) for uid in usuarios_asignados}
 
-            sql_delete_perm = f'DELETE FROM proyecto_usuarios WHERE proyecto_id = {p}'
+            sql_delete_perm = 'DELETE FROM proyecto_usuarios WHERE proyecto_id = %s'
             cursor.execute(sql_delete_perm, (proyecto_id,))
 
-            sql_insert_perm = f'INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES ({p}, {p})'
+            sql_insert_perm = 'INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)'
             for user_id in usuarios_asignados:
                 cursor.execute(sql_insert_perm, (proyecto_id, int(user_id)))
             db.commit()
@@ -588,7 +555,7 @@ def gestionar_permisos_proyecto(proyecto_id):
         cursor.execute(sql_get_all_users)
         todos_usuarios = cursor.fetchall()
 
-        sql_get_access = f'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = {p}'
+        sql_get_access = 'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = %s'
         cursor.execute(sql_get_access, (proyecto_id,))
         usuarios_con_acceso = {row['usuario_id']
                                for row in cursor.fetchall()}
@@ -612,7 +579,6 @@ def gestionar_alias():
     """Gestiona la creación y listado de alias para perfiles."""
     form = AliasForm()
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
@@ -621,18 +587,17 @@ def gestionar_alias():
             alias = form.alias.data
             norma = form.norma.data
 
-            sql_check = f'SELECT id FROM alias_perfiles WHERE nombre_perfil = {p} OR alias = {p}'
+            sql_check = 'SELECT id FROM alias_perfiles WHERE nombre_perfil = %s OR alias = %s'
             cursor.execute(sql_check, (nombre_perfil, alias))
             existe = cursor.fetchone()
 
             if existe:
                 flash('El nombre del perfil o el alias ya existen.', 'danger')
             else:
-                sql_insert = f'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES ({p}, {p}, {p})'
+                sql_insert = 'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (%s, %s, %s) RETURNING id'
                 cursor.execute(sql_insert, (nombre_perfil, alias, norma))
 
-                new_alias_id = cursor.lastrowid if hasattr(
-                    cursor, 'lastrowid') else db.execute('SELECT LASTVAL()').fetchone()[0]
+                new_alias_id = cursor.fetchone()['id']
                 db.commit()
                 log_action(
                     'CREAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', new_alias_id,
@@ -662,15 +627,14 @@ def editar_alias(alias_id):
     alias = request.form.get('alias')
     norma = request.form.get('norma')
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        sql_get_old = f'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = {p}'
+        sql_get_old = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = %s'
         cursor.execute(sql_get_old, (alias_id,))
         old_alias_data = cursor.fetchone()
 
-        sql_check = f'SELECT id FROM alias_perfiles WHERE (nombre_perfil = {p} OR alias = {p}) AND id != {p}'
+        sql_check = 'SELECT id FROM alias_perfiles WHERE (nombre_perfil = %s OR alias = %s) AND id != %s'
         cursor.execute(sql_check, (nombre_perfil, alias, alias_id))
         existe = cursor.fetchone()
 
@@ -679,7 +643,7 @@ def editar_alias(alias_id):
                 'El nombre del perfil o el alias ya están en uso por otro registro.',
                 'danger')
         else:
-            sql_update = f'UPDATE alias_perfiles SET nombre_perfil = {p}, alias = {p}, norma = {p} WHERE id = {p}'
+            sql_update = 'UPDATE alias_perfiles SET nombre_perfil = %s, alias = %s, norma = %s WHERE id = %s'
             cursor.execute(sql_update, (nombre_perfil, alias, norma, alias_id))
             db.commit()
 
@@ -702,16 +666,15 @@ def editar_alias(alias_id):
 def eliminar_alias(alias_id):
     """Elimina un alias de perfil existente."""
     db = get_db()
-    p = _get_placeholder()
     cursor = db.cursor()
 
     try:
-        sql_get = f'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = {p}'
+        sql_get = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = %s'
         cursor.execute(sql_get, (alias_id,))
         alias_data = cursor.fetchone()
 
         if alias_data:
-            sql_delete = f'DELETE FROM alias_perfiles WHERE id = {p}'
+            sql_delete = 'DELETE FROM alias_perfiles WHERE id = %s'
             cursor.execute(sql_delete, (alias_id,))
             db.commit()
             log_action('ELIMINAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', alias_id,
@@ -734,7 +697,6 @@ def importar_alias():
     """
     if request.method == 'POST':
         db = get_db()
-        p = _get_placeholder()
         cursor = db.cursor()
 
         try:
@@ -768,9 +730,9 @@ def importar_alias():
                 return redirect(request.url)
 
             # Definir SQL fuera del bucle
-            sql_check = f'SELECT id FROM alias_perfiles WHERE nombre_perfil = {p}'
-            sql_update = f'UPDATE alias_perfiles SET alias = {p}, norma = {p} WHERE id = {p}'
-            sql_insert = f'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES ({p}, {p}, {p})'
+            sql_check = 'SELECT id FROM alias_perfiles WHERE nombre_perfil = %s'
+            sql_update = 'UPDATE alias_perfiles SET alias = %s, norma = %s WHERE id = %s'
+            sql_insert = 'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (%s, %s, %s)'
 
             for index, row in df.iterrows():
                 try:
@@ -1002,15 +964,15 @@ def ver_auditoria():
     params = []
 
     if filtro_usuario_id:
-        query += " AND a.usuario_id = ?"
-        count_query += " AND a.usuario_id = ?"
+        query += " AND a.usuario_id = %s"
+        count_query += " AND a.usuario_id = %s"
         params.append(filtro_usuario_id)
     if filtro_accion:
-        query += " AND a.accion = ?"
-        count_query += " AND a.accion = ?"
+        query += " AND a.accion = %s"
+        count_query += " AND a.accion = %s"
         params.append(filtro_accion)
 
-    query += " ORDER BY a.fecha DESC LIMIT ? OFFSET ?"
+    query += " ORDER BY a.fecha DESC LIMIT %s OFFSET %s"
 
     params_count = params[:]
 
@@ -1158,13 +1120,13 @@ def reporte_computos():
         query = "SELECT c.detalles_json, p.nombre as proyecto_nombre FROM conexiones c JOIN proyectos p ON c.proyecto_id = p.id WHERE c.detalles_json IS NOT NULL AND c.detalles_json != ''"
         params = []
         if proyecto_id != 0:
-            query += " AND c.proyecto_id = ?"
+            query += " AND c.proyecto_id = %s"
             params.append(proyecto_id)
         if fecha_inicio:
-            query += " AND date(c.fecha_creacion) >= ?"
+            query += " AND date(c.fecha_creacion) >= %s"
             params.append(fecha_inicio.strftime('%Y-%m-%d'))
         if fecha_fin:
-            query += " AND date(c.fecha_creacion) <= ?"
+            query += " AND date(c.fecha_creacion) <= %s"
             params.append(fecha_fin.strftime('%Y-%m-%d'))
 
         conexiones = db.execute(query, tuple(params)).fetchall()
@@ -1228,7 +1190,7 @@ def reporte_computos():
         proyecto_nombre_filtro = "Todos los Proyectos"
         if proyecto_id != 0:
             p = db.execute(
-                'SELECT nombre FROM proyectos WHERE id = ?',
+                'SELECT nombre FROM proyectos WHERE id = %s',
                 (proyecto_id,
                  )).fetchone()
             if p:
@@ -1323,7 +1285,7 @@ def nuevo_reporte():
         filtros_json = json.dumps(filtros)
 
         cursor = db.execute(
-            "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (form.nombre.data,
              form.descripcion.data,
              g.user['id'],
@@ -1331,7 +1293,7 @@ def nuevo_reporte():
                 form.programado.data,
                 form.frecuencia.data,
                 form.destinatarios.data))
-        new_report_id = cursor.lastrowid
+        new_report_id = cursor.fetchone()['id']
         db.commit()
 
         if form.programado.data:
@@ -1381,7 +1343,7 @@ def editar_reporte(reporte_id):
     """
     db = get_db()
     reporte = db.execute(
-        'SELECT * FROM reportes WHERE id = ?',
+        'SELECT * FROM reportes WHERE id = %s',
         (reporte_id,
          )).fetchone()
     if not reporte:
@@ -1434,7 +1396,7 @@ def editar_reporte(reporte_id):
         filtros_json = json.dumps(filtros)
 
         db.execute(
-            "UPDATE reportes SET nombre = ?, descripcion = ?, filtros = ?, programado = ?, frecuencia = ?, destinatarios = ? WHERE id = ?",
+            "UPDATE reportes SET nombre = %s, descripcion = %s, filtros = %s, programado = %s, frecuencia = %s, destinatarios = %s WHERE id = %s",
             (form.nombre.data,
              form.descripcion.data,
              filtros_json,
@@ -1499,7 +1461,7 @@ def eliminar_reporte(reporte_id):
     """Elimina un reporte guardado."""
     db = get_db()
     reporte = db.execute(
-        'SELECT * FROM reportes WHERE id = ?',
+        'SELECT * FROM reportes WHERE id = %s',
         (reporte_id,
          )).fetchone()
     if reporte:
@@ -1513,7 +1475,7 @@ def eliminar_reporte(reporte_id):
                 current_app.logger.error(
                     f"Error al desprogramar el job '{job_id}': {e}", exc_info=True)
 
-        db.execute('DELETE FROM reportes WHERE id = ?', (reporte_id,))
+        db.execute('DELETE FROM reportes WHERE id = %s', (reporte_id,))
         db.commit()
         log_action('ELIMINAR_REPORTE', g.user['id'], 'reportes', reporte_id,
                    f"El reporte '{reporte['nombre']}' ha sido eliminado.")
@@ -1535,7 +1497,7 @@ def ejecutar_reporte(reporte_id):
     """
     db = get_db()
     reporte = db.execute(
-        'SELECT * FROM reportes WHERE id = ?',
+        'SELECT * FROM reportes WHERE id = %s',
         (reporte_id,
          )).fetchone()
     if not reporte:
@@ -1573,10 +1535,10 @@ def configuracion():
             "SELECT valor FROM configuracion WHERE clave = 'MAINTENANCE_MODE'").fetchone()
 
         db.execute(
-            "INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)", ('PER_PAGE', str(
+            "INSERT INTO configuracion (clave, valor) VALUES (%s, %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", ('PER_PAGE', str(
                 form.per_page.data)))
         db.execute(
-            "INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)",
+            "INSERT INTO configuracion (clave, valor) VALUES (%s, %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor",
             ('MAINTENANCE_MODE',
              '1' if form.maintenance_mode.data else '0'))
         db.commit()

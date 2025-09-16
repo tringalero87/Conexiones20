@@ -75,12 +75,12 @@ def create_app(test_config=None):
         # Usar un jobstore de SQLAlchemy apuntando a la base de datos de prueba (SQLite en memoria)
         # Esto asegura que el scheduler funcione en un entorno aislado durante
         # las pruebas.
-        db_path = app.config.get('DATABASE')
-        if db_path:
+        db_url = app.config.get('DATABASE_URL')
+        if db_url:
             app.config.update(
                 SCHEDULER_JOBSTORES={
                     'default': SQLAlchemyJobStore(
-                        url=f"sqlite:///{db_path}")},
+                        url=db_url)},
                 SCHEDULER_EXECUTORS={
                     'default': {
                         'type': 'threadpool',
@@ -126,28 +126,17 @@ def create_app(test_config=None):
                 is_testing = current_app.config.get('TESTING', False)
                 cursor = db_conn.cursor()
 
-                if is_testing:
-                    sql_user = "SELECT * FROM usuarios WHERE id = ?"
-                    sql_roles = """
-                        SELECT r.nombre FROM roles r
-                        JOIN usuario_roles ur ON r.id = ur.rol_id
-                        WHERE ur.usuario_id = ?
-                    """
-                    sql_notif = """
-                        SELECT id, mensaje, url, fecha_creacion FROM notificaciones
-                        WHERE usuario_id = ? AND leida = FALSE ORDER BY fecha_creacion DESC
-                    """
-                else:
-                    sql_user = "SELECT * FROM usuarios WHERE id = %s"
-                    sql_roles = """
-                        SELECT r.nombre FROM roles r
-                        JOIN usuario_roles ur ON r.id = ur.rol_id
-                        WHERE ur.usuario_id = %s
-                    """
-                    sql_notif = """
-                        SELECT id, mensaje, url, fecha_creacion FROM notificaciones
-                        WHERE usuario_id = %s AND leida = FALSE ORDER BY fecha_creacion DESC
-                    """
+                # Estandarizar a %s ya que las pruebas correrán sobre PostgreSQL
+                sql_user = "SELECT * FROM usuarios WHERE id = %s"
+                sql_roles = """
+                    SELECT r.nombre FROM roles r
+                    JOIN usuario_roles ur ON r.id = ur.rol_id
+                    WHERE ur.usuario_id = %s
+                """
+                sql_notif = """
+                    SELECT id, mensaje, url, fecha_creacion FROM notificaciones
+                    WHERE usuario_id = %s AND leida = 0 ORDER BY fecha_creacion DESC
+                """
 
                 # Obtener datos del usuario
                 cursor.execute(sql_user, (session['user_id'],))

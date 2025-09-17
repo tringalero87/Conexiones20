@@ -92,9 +92,7 @@ def _generate_report_data_and_file(reporte_id, app_context):
 
         resultados_dicts = [dict(row) for row in resultados_raw]
 
-        filename_base = f"reporte_{
-            reporte['nombre'].replace(
-                ' ', '_').lower()}"
+        filename_base = f"reporte_{reporte['nombre'].replace(' ', '_').lower()}"
         file_content = None
         mimetype = None
         filename = None
@@ -187,9 +185,7 @@ def scheduled_report_job(reporte_id):
 
         if file_content:
             try:
-                subject = f"Reporte Programado: {
-                    reporte['nombre']} ({
-                    datetime.now().strftime('%Y-%m-%d')})"
+                subject = f"Reporte Programado: {reporte['nombre']} ({datetime.now().strftime('%Y-%m-%d')})"
                 msg = Message(subject, recipients=recipients)
 
                 msg.html = render_template(
@@ -204,12 +200,10 @@ def scheduled_report_job(reporte_id):
 
                 mail.send(msg)
                 current_app.logger.info(
-                    f"Reporte programado '{
-                        reporte['nombre']}' ({reporte_id}) enviado a {recipients}.")
+                    f"Reporte programado '{reporte['nombre']}' ({reporte_id}) enviado a {recipients}.")
             except Exception as e:
                 current_app.logger.error(
-                    f"Error al enviar reporte programado '{
-                        reporte['nombre']}' ({reporte_id}): {e}",
+                    f"Error al enviar reporte programado '{reporte['nombre']}' ({reporte_id}): {e}",
                     exc_info=True)
         else:
             current_app.logger.error(
@@ -472,8 +466,7 @@ def eliminar_usuario(usuario_id):
         proyectos_asignados = cursor.fetchone()
         if proyectos_asignados and proyectos_asignados['count'] > 0:
             flash(
-                f"No se puede eliminar al usuario porque está asignado a {
-                    proyectos_asignados['count']} proyecto(s).",
+                f"No se puede eliminar al usuario porque está asignado a {proyectos_asignados['count']} proyecto(s).",
                 'danger')
             return redirect(url_for('admin.listar_usuarios'))
 
@@ -483,8 +476,7 @@ def eliminar_usuario(usuario_id):
         conexiones_activas = cursor.fetchone()
         if conexiones_activas and conexiones_activas['count'] > 0:
             flash(
-                f"No se puede eliminar al usuario porque tiene {
-                    conexiones_activas['count']} conexión(es) activa(s) asignada(s).",
+                f"No se puede eliminar al usuario porque tiene {conexiones_activas['count']} conexión(es) activa(s) asignada(s).",
                 'danger')
             return redirect(url_for('admin.listar_usuarios'))
 
@@ -749,9 +741,7 @@ def importar_alias():
 
                     if not nombre_perfil or not alias:
                         error_rows.append(
-                            f"Fila {
-                                index +
-                                2}: NOMBRE_PERFIL y ALIAS son obligatorios.")
+                            f"Fila {index + 2}: NOMBRE_PERFIL y ALIAS son obligatorios.")
                         continue
 
                     cursor.execute(sql_check, (nombre_perfil,))
@@ -1339,12 +1329,10 @@ def nuevo_reporte():
                         replace_existing=True
                     )
                     current_app.logger.info(
-                        f"Reporte '{
-                            form.nombre.data}' (ID: {new_report_id}) programado con éxito.")
+                        f"Reporte '{form.nombre.data}' (ID: {new_report_id}) programado con éxito.")
                 except Exception as e:
                     current_app.logger.error(
-                        f"Error al programar el reporte '{
-                            form.nombre.data}': {e}", exc_info=True)
+                        f"Error al programar el reporte '{form.nombre.data}': {e}", exc_info=True)
                     flash(
                         f"Error al programar el reporte: {e}. El reporte se guardó pero no se pudo programar.",
                         "warning")
@@ -1453,12 +1441,10 @@ def editar_reporte(reporte_id):
                         replace_existing=True
                     )
                     current_app.logger.info(
-                        f"Reporte '{
-                            form.nombre.data}' (ID: {reporte_id}) reprogramado con éxito.")
+                        f"Reporte '{form.nombre.data}' (ID: {reporte_id}) reprogramado con éxito.")
                 except Exception as e:
                     current_app.logger.error(
-                        f"Error al reprogramar el reporte '{
-                            form.nombre.data}': {e}", exc_info=True)
+                        f"Error al reprogramar el reporte '{form.nombre.data}': {e}", exc_info=True)
                     flash(
                         f"Error al reprogramar el reporte: {e}. El reporte se guardó pero no se pudo programar.",
                         "warning")
@@ -1480,8 +1466,7 @@ def editar_reporte(reporte_id):
     return render_template(
         'admin/reporte_form.html',
         form=form,
-        titulo=f"Editar Reporte: {
-            reporte['nombre']}")
+        titulo=f"Editar Reporte: {reporte['nombre']}")
 
 
 @admin_bp.route('/reportes/<int:reporte_id>/eliminar', methods=['POST'])
@@ -1511,8 +1496,7 @@ def eliminar_reporte(reporte_id):
         log_action('ELIMINAR_REPORTE', g.user['id'], 'reportes', reporte_id,
                    f"El reporte '{reporte['nombre']}' ha sido eliminado.")
         flash(
-            f"El reporte '{
-                reporte['nombre']}' ha sido eliminado.",
+            f"El reporte '{reporte['nombre']}' ha sido eliminado.",
             'success')
     else:
         flash("El reporte no fue encontrado.", 'danger')

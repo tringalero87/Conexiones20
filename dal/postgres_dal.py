@@ -81,11 +81,11 @@ class PostgresDAL(BaseDAL):
         params = (query, query)
         sql = """
             SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
-                   ts_rank(c.fts_document, to_tsquery('simple', %s)) as rank
+                   ts_rank(c.fts_document, to_tsquery('spanish', %s)) as rank
             FROM conexiones c
             JOIN proyectos p ON c.proyecto_id = p.id
             LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-            WHERE c.fts_document @@ to_tsquery('simple', %s)
+            WHERE c.fts_document @@ to_tsquery('spanish', %s)
             ORDER BY rank DESC
         """
         with db.cursor() as cursor:

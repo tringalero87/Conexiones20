@@ -72,24 +72,25 @@ def create_app(test_config=None):
     else:
         # Cargar configuración de prueba
         app.config.from_mapping(test_config)
-        # Usar un jobstore de SQLAlchemy apuntando a la base de datos de prueba (SQLite en memoria)
-        # Esto asegura que el scheduler funcione en un entorno aislado durante
-        # las pruebas.
-        db_url = app.config.get('DATABASE_URL')
-        if db_url:
-            app.config.update(
-                SCHEDULER_JOBSTORES={
-                    'default': SQLAlchemyJobStore(
-                        url=db_url)},
-                SCHEDULER_EXECUTORS={
-                    'default': {
-                        'type': 'threadpool',
-                        'max_workers': 1}},
-                SCHEDULER_JOB_DEFAULTS={'coalesce': True, 'max_instances': 1},
-                # Deshabilitar el envío de correos en pruebas para evitar
-                # errores y efectos secundarios
-                MAIL_SUPPRESS_SEND=True
-            )
+
+        # Forzar el uso de la base de datos de prueba de PostgreSQL
+        test_db_url = os.environ.get('TEST_DATABASE_URL')
+        if not test_db_url:
+            raise RuntimeError("TEST_DATABASE_URL no está configurada. No se pueden ejecutar las pruebas.")
+
+        app.config.update(
+            DATABASE_URL=test_db_url,
+            SCHEDULER_JOBSTORES={
+                'default': SQLAlchemyJobStore(url=test_db_url)
+            },
+            SCHEDULER_EXECUTORS={
+                'default': {'type': 'threadpool', 'max_workers': 1}
+            },
+            SCHEDULER_JOB_DEFAULTS={'coalesce': True, 'max_instances': 1},
+            # Deshabilitar el envío de correos en pruebas
+            MAIL_SUPPRESS_SEND=True,
+            TESTING=True,
+        )
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)

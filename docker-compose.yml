@@ -17,6 +17,7 @@ services:
       - .env
     depends_on:
       - db
+      - db_test
 
   db:
     image: postgres:13
@@ -30,7 +31,20 @@ services:
     ports:
       - "5432:5432"
 
+  db_test:
+    image: postgres:13
+    container_name: heptaconexiones_db_test
+    environment:
+      POSTGRES_USER: user_test
+      POSTGRES_PASSWORD: password_test
+      POSTGRES_DB: heptaconexiones_test
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
 volumes:
   postgres_data:
+  postgres_test_data:
   uploads_data:
   logs_data:

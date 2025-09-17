@@ -14,7 +14,7 @@ from db import get_db, init_db
 def app():
     app = create_app({
         "TESTING": True,
-        "DATABASE_URL": "postgresql://user:password@localhost:5432/test_db",
+        # "DATABASE_URL" is now set from TEST_DATABASE_URL in app.py for tests
         "WTF_CSRF_ENABLED": False,
         "SERVER_NAME": "localhost.localdomain"
     })

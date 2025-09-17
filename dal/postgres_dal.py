@@ -1,17 +1,12 @@
 from db import get_db
 from .base_dal import BaseDAL
 import json
-from flask import current_app
 
 class PostgresDAL(BaseDAL):
 
-    def _get_placeholder(self):
-        return "?" if current_app.config.get('TESTING', False) else "%s"
-
     def get_conexion(self, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f"""
+        sql = """
             SELECT c.*, p.nombre as proyecto_nombre,
                    sol.nombre_completo as solicitante_nombre,
                    real.nombre_completo as realizador_nombre,
@@ -21,34 +16,26 @@ class PostgresDAL(BaseDAL):
             LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
             LEFT JOIN usuarios real ON c.realizador_id = real.id
             LEFT JOIN usuarios aprob ON c.aprobador_id = aprob.id
-            WHERE c.id = {p}
+            WHERE c.id = %s
         """
-
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id,))
             return cursor.fetchone()
 
     def get_conexiones_by_proyecto(self, proyecto_id):
-        # This method was not implemented. I will implement it now.
         db = get_db()
-        p = self._get_placeholder()
-        sql = f"SELECT * FROM conexiones WHERE proyecto_id = {p} ORDER BY fecha_creacion DESC"
+        sql = "SELECT * FROM conexiones WHERE proyecto_id = %s ORDER BY fecha_creacion DESC"
         with db.cursor() as cursor:
             cursor.execute(sql, (proyecto_id,))
             return cursor.fetchall()
 
     def create_conexion(self, conexion_data):
         db = get_db()
-        p = self._get_placeholder()
-        is_testing = current_app.config.get('TESTING', False)
-
-        sql = f"""
+        sql = """
             INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id)
-            VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         """
-        if not is_testing:
-            sql += " RETURNING id"
-
         with db.cursor() as cursor:
             cursor.execute(sql, (
                 conexion_data['codigo_conexion'],
@@ -60,22 +47,17 @@ class PostgresDAL(BaseDAL):
                 json.dumps(conexion_data['detalles_json']),
                 conexion_data['solicitante_id']
             ))
-            new_id = cursor.lastrowid if is_testing else cursor.fetchone()['id']
+            new_id = cursor.fetchone()['id']
             db.commit()
             return new_id
 
     def update_conexion(self, conexion_id, conexion_data):
         db = get_db()
-        p = self._get_placeholder()
-        is_testing = current_app.config.get('TESTING', False)
-        timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
-
-        sql = f"""
+        sql = """
             UPDATE conexiones
-            SET codigo_conexion = {p}, descripcion = {p}, detalles_json = {p}, fecha_modificacion = {timestamp_sql}
-            WHERE id = {p}
+            SET codigo_conexion = %s, descripcion = %s, detalles_json = %s, fecha_modificacion = CURRENT_TIMESTAMP
+            WHERE id = %s
         """
-
         with db.cursor() as cursor:
             cursor.execute(sql, (
                 conexion_data['codigo_conexion'],
@@ -87,70 +69,53 @@ class PostgresDAL(BaseDAL):
 
     def delete_conexion(self, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'DELETE FROM conexiones WHERE id = {p}'
+        sql = 'DELETE FROM conexiones WHERE id = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id,))
         db.commit()
 
     def search_conexiones(self, query):
         db = get_db()
-        is_testing = current_app.config.get('TESTING', False)
-        p = self._get_placeholder()
-
-        if is_testing:
-            like_query = f'%{query}%'
-            sql = f"""
-                SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre
-                FROM conexiones c
-                JOIN proyectos p ON c.proyecto_id = p.id
-                LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-                WHERE c.codigo_conexion LIKE {p} OR c.descripcion LIKE {p}
-            """
-            params = (like_query, like_query)
-        else:
-            sql = f"""
-                SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
-                       ts_rank(c.fts_document, to_tsquery('simple', {p})) as rank
-                FROM conexiones c
-                JOIN proyectos p ON c.proyecto_id = p.id
-                LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-                WHERE c.fts_document @@ to_tsquery('simple', {p})
-                ORDER BY rank DESC
-            """
-            params = (query, query)
-
+        # El parámetro 'query' se pasa dos veces, uno para to_tsquery y otro para el highlighting (si se usara) o rank.
+        # Aquí, el segundo es para el WHERE clause.
+        params = (query, query)
+        sql = """
+            SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre,
+                   ts_rank(c.fts_document, to_tsquery('simple', %s)) as rank
+            FROM conexiones c
+            JOIN proyectos p ON c.proyecto_id = p.id
+            LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
+            WHERE c.fts_document @@ to_tsquery('simple', %s)
+            ORDER BY rank DESC
+        """
         with db.cursor() as cursor:
             cursor.execute(sql, params)
             return cursor.fetchall()
 
     def get_proyectos_for_user(self, user_id, is_admin):
         db = get_db()
-        p = self._get_placeholder()
         with db.cursor() as cursor:
             if is_admin:
                 cursor.execute("SELECT id, nombre FROM proyectos ORDER BY nombre")
             else:
-                sql = f"""
+                sql = """
                     SELECT p.id, p.nombre FROM proyectos p
                     JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
-                    WHERE pu.usuario_id = {p} ORDER BY p.nombre
+                    WHERE pu.usuario_id = %s ORDER BY p.nombre
                 """
                 cursor.execute(sql, (user_id,))
             return cursor.fetchall()
 
     def get_proyecto(self, proyecto_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'SELECT * FROM proyectos WHERE id = {p}'
+        sql = 'SELECT * FROM proyectos WHERE id = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (proyecto_id,))
             return cursor.fetchone()
 
     def get_alias(self, nombre_perfil):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'SELECT alias FROM alias_perfiles WHERE nombre_perfil = {p}'
+        sql = 'SELECT alias FROM alias_perfiles WHERE nombre_perfil = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (nombre_perfil,))
             return cursor.fetchone()
@@ -169,111 +134,96 @@ class PostgresDAL(BaseDAL):
 
     def get_archivos_by_conexion(self, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = {p} ORDER BY a.fecha_subida DESC'
+        sql = 'SELECT a.*, u.nombre_completo as subido_por FROM archivos a JOIN usuarios u ON a.usuario_id = u.id WHERE a.conexion_id = %s ORDER BY a.fecha_subida DESC'
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id,))
             return cursor.fetchall()
 
     def get_comentarios_by_conexion(self, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f"SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = {p} ORDER BY c.fecha_creacion DESC"
+        sql = "SELECT c.*, u.nombre_completo FROM comentarios c JOIN usuarios u ON c.usuario_id = u.id WHERE c.conexion_id = %s ORDER BY c.fecha_creacion DESC"
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id,))
             return cursor.fetchall()
 
     def get_historial_by_conexion(self, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f"SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = {p} ORDER BY h.fecha DESC"
+        sql = "SELECT h.*, u.nombre_completo FROM historial_estados h JOIN usuarios u ON h.usuario_id = u.id WHERE h.conexion_id = %s ORDER BY h.fecha DESC"
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id,))
             return cursor.fetchall()
 
     def get_usuario_a_asignar(self, username):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'SELECT id, nombre_completo FROM usuarios WHERE username = {p} AND activo = TRUE'
+        sql = 'SELECT id, nombre_completo FROM usuarios WHERE username = %s AND activo = TRUE'
         with db.cursor() as cursor:
             cursor.execute(sql, (username,))
             return cursor.fetchone()
 
     def update_conexion_realizador(self, conexion_id, realizador_id, nuevo_estado=None):
         db = get_db()
-        p = self._get_placeholder()
-        is_testing = current_app.config.get('TESTING', False)
-        timestamp_sql = "datetime('now')" if is_testing else "CURRENT_TIMESTAMP"
         with db.cursor() as cursor:
             if nuevo_estado:
-                sql = f'UPDATE conexiones SET realizador_id = {p}, estado = {p}, fecha_modificacion = {timestamp_sql} WHERE id = {p}'
+                sql = 'UPDATE conexiones SET realizador_id = %s, estado = %s, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = %s'
                 cursor.execute(sql, (realizador_id, nuevo_estado, conexion_id))
             else:
-                sql = f'UPDATE conexiones SET realizador_id = {p}, fecha_modificacion = {timestamp_sql} WHERE id = {p}'
+                sql = 'UPDATE conexiones SET realizador_id = %s, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = %s'
                 cursor.execute(sql, (realizador_id, conexion_id))
         db.commit()
 
     def add_historial_estado(self, conexion_id, usuario_id, estado, detalles=None):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES ({p}, {p}, {p}, {p})'
+        sql = 'INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (%s, %s, %s, %s)'
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id, usuario_id, estado, detalles))
         db.commit()
 
     def create_archivo(self, conexion_id, usuario_id, tipo_archivo, filename):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES ({p}, {p}, {p}, {p})'
+        sql = 'INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES (%s, %s, %s, %s)'
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id, usuario_id, tipo_archivo, filename))
         db.commit()
 
     def get_archivo(self, archivo_id, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'SELECT * FROM archivos WHERE id = {p} AND conexion_id = {p}'
+        sql = 'SELECT * FROM archivos WHERE id = %s AND conexion_id = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (archivo_id, conexion_id))
             return cursor.fetchone()
 
     def delete_archivo(self, archivo_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'DELETE FROM archivos WHERE id = {p}'
+        sql = 'DELETE FROM archivos WHERE id = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (archivo_id,))
         db.commit()
 
     def create_comentario(self, conexion_id, usuario_id, contenido):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES ({p}, {p}, {p})'
+        sql = 'INSERT INTO comentarios (conexion_id, usuario_id, contenido) VALUES (%s, %s, %s)'
         with db.cursor() as cursor:
             cursor.execute(sql, (conexion_id, usuario_id, contenido))
         db.commit()
 
     def get_comentario(self, comentario_id, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'SELECT * FROM comentarios WHERE id = {p} AND conexion_id = {p}'
+        sql = 'SELECT * FROM comentarios WHERE id = %s AND conexion_id = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (comentario_id, conexion_id))
             return cursor.fetchone()
 
     def delete_comentario(self, comentario_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'DELETE FROM comentarios WHERE id = {p}'
+        sql = 'DELETE FROM comentarios WHERE id = %s'
         with db.cursor() as cursor:
             cursor.execute(sql, (comentario_id,))
         db.commit()
 
     def get_users_for_notification(self, proyecto_id, roles_to_notify):
         db = get_db()
-        p = self._get_placeholder()
         # The IN clause needs special handling for parameters
-        placeholders = ', '.join([p] * len(roles_to_notify))
+        placeholders = ', '.join(['%s'] * len(roles_to_notify))
         sql = f"""
             SELECT DISTINCT u.id, u.email, u.nombre_completo, COALESCE(pn.email_notif_estado, TRUE) as email_notif_estado
             FROM usuarios u
@@ -281,7 +231,7 @@ class PostgresDAL(BaseDAL):
             JOIN usuario_roles ur ON u.id = ur.usuario_id
             JOIN roles r ON ur.rol_id = r.id
             LEFT JOIN preferencias_notificaciones pn ON u.id = pn.usuario_id
-            WHERE pu.proyecto_id = {p} AND r.nombre IN ({placeholders}) AND u.activo = TRUE
+            WHERE pu.proyecto_id = %s AND r.nombre IN ({placeholders}) AND u.activo = TRUE
         """
 
         params = [proyecto_id] + roles_to_notify
@@ -291,8 +241,7 @@ class PostgresDAL(BaseDAL):
 
     def create_notification(self, usuario_id, mensaje, url, conexion_id):
         db = get_db()
-        p = self._get_placeholder()
-        sql = f'INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES ({p}, {p}, {p}, {p})'
+        sql = 'INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES (%s, %s, %s, %s)'
         with db.cursor() as cursor:
             cursor.execute(sql, (usuario_id, mensaje, url, conexion_id))
         db.commit()

@@ -62,8 +62,8 @@ def _generate_report_data_and_file(reporte_id, app_context):
                 f"Reporte ID {reporte_id} no tiene columnas seleccionadas.")
             return None, None, None, None
 
-        query_base = f"SELECT {
-            ', '.join(columnas_seleccionadas)} FROM conexiones_view WHERE 1=1"
+        query_base = f"""SELECT {
+            ', '.join(columnas_seleccionadas)} FROM conexiones_view WHERE 1=1"""
         params = []
 
         if filtros.get('proyecto_id') and filtros['proyecto_id'] != 0:

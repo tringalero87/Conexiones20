@@ -124,7 +124,6 @@ def create_app(test_config=None):
         try:
             db_conn = db.get_db()
             if 'user_id' in session:
-                is_testing = current_app.config.get('TESTING', False)
                 cursor = db_conn.cursor()
 
                 # Estandarizar a %s ya que las pruebas correrán sobre PostgreSQL
@@ -149,9 +148,7 @@ def create_app(test_config=None):
                             "Tu cuenta ha sido desactivada. Por favor, contacta a un administrador.",
                             "warning")
                         session.clear()
-                        if not is_testing:  # Evitar error de contexto de solicitud en pruebas
-                            return redirect(url_for('auth.login'))
-                        return
+                        return redirect(url_for('auth.login'))
 
                     g.user = dict(user_data)
 

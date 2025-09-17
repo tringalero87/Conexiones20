@@ -56,15 +56,15 @@ def buscar_perfiles():
     resultados = []
     added_profiles = set()
 
-    # La función REPLACE es compatible con SQLite y PostgreSQL
+    # Usar ILIKE para búsqueda case-insensitive y simplificar la normalización
     sql_query = """
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
-            REPLACE(REPLACE(LOWER(nombre_perfil), ' ', ''), '-', '') LIKE %s
+            nombre_perfil ILIKE %s
             OR
-            REPLACE(REPLACE(LOWER(alias), ' ', ''), '-', '') LIKE %s
+            alias ILIKE %s
     """
-    like_param = f'%{normalized_query}%'
+    like_param = f'%{query}%'
 
     cursor.execute(sql_query, (like_param, like_param))
     aliases = cursor.fetchall()

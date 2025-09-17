@@ -253,8 +253,9 @@ def create_app(test_config=None):
     return app
 
 
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
     if os.environ.get(
             'WERKZEUG_RUN_MAIN') == 'true' and app.scheduler and not app.scheduler.running:
         app.scheduler.start()

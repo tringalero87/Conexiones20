@@ -56,15 +56,15 @@ def buscar_perfiles():
     resultados = []
     added_profiles = set()
 
-    # Usar ILIKE para búsqueda case-insensitive y simplificar la normalización
+    # Usar ILIKE para búsqueda case-insensitive y normalizar en la consulta
     sql_query = """
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
-            nombre_perfil ILIKE %s
+            REPLACE(REPLACE(nombre_perfil, ' ', ''), '-', '') ILIKE %s
             OR
-            alias ILIKE %s
+            REPLACE(REPLACE(alias, ' ', ''), '-', '') ILIKE %s
     """
-    like_param = f'%{query}%'
+    like_param = f'%{normalized_query}%'
 
     cursor.execute(sql_query, (like_param, like_param))
     aliases = cursor.fetchall()

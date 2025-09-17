@@ -448,7 +448,7 @@ def asignar_realizador(conexion_id):
     cursor = db.cursor()
 
     try:
-        sql_get_user = 'SELECT id, nombre_completo FROM usuarios WHERE username = %s AND activo = TRUE'
+        sql_get_user = 'SELECT id, nombre_completo FROM usuarios WHERE username = %s AND activo = 1'
         cursor.execute(sql_get_user, (username_a_asignar_limpio,))
         usuario_a_asignar = cursor.fetchone()
 

@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS conexiones (
   fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   fecha_modificacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   detalles_rechazo TEXT,
-  fts_document TEXT -- Columna para FTS. En PG se usará con to_tsvector, en SQLite con LIKE.
+  fts_document TSVECTOR -- Columna para FTS. Se actualizará con un trigger.
 );
 
 -- -----------------------------------------------------
@@ -243,6 +243,29 @@ CREATE INDEX IF NOT EXISTS idx_conexiones_aprobador_id ON conexiones (aprobador_
 CREATE INDEX IF NOT EXISTS idx_conexiones_fecha_creacion ON conexiones (fecha_creacion);
 CREATE INDEX IF NOT EXISTS idx_conexiones_fecha_modificacion ON conexiones (fecha_modificacion);
 CREATE INDEX IF NOT EXISTS idx_conexiones_estado_realizador ON conexiones (estado, realizador_id);
+
+-- -----------------------------------------------------
+-- Funciones y Triggers para Full-Text Search (FTS)
+-- -----------------------------------------------------
+
+-- 1. Crear la función que actualizará la columna fts_document
+CREATE OR REPLACE FUNCTION fts_conexiones_trigger() RETURNS trigger AS $$
+BEGIN
+  NEW.fts_document :=
+    setweight(to_tsvector('spanish', coalesce(NEW.codigo_conexion, '')), 'A') ||
+    setweight(to_tsvector('spanish', coalesce(NEW.tipo, '')), 'B') ||
+    setweight(to_tsvector('spanish', coalesce(NEW.subtipo, '')), 'B') ||
+    setweight(to_tsvector('spanish', coalesce(NEW.tipologia, '')), 'C') ||
+    setweight(to_tsvector('spanish', coalesce(NEW.descripcion, '')), 'D');
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+-- 2. Crear el trigger que se ejecuta en cada INSERT o UPDATE
+DROP TRIGGER IF EXISTS fts_conexiones_update ON conexiones;
+CREATE TRIGGER fts_conexiones_update
+BEFORE INSERT OR UPDATE ON conexiones
+FOR EACH ROW EXECUTE FUNCTION fts_conexiones_trigger();
 
 -- -----------------------------------------------------
 -- Fin del esquema

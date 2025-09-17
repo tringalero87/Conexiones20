@@ -14,11 +14,27 @@ pool = None
 def get_db():
     """
     Obtiene una conexión a la base de datos PostgreSQL del pool para la solicitud actual.
+    Crea el pool de forma perezosa si no existe, asegurando que sea seguro para forking.
     """
+    global pool
+    if pool is None:
+        try:
+            database_url = current_app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL')
+            if not database_url:
+                raise RuntimeError("DATABASE_URL no está configurada.")
+
+            # Inicializar el pool con un mínimo de 1 y un máximo de 15 conexiones.
+            pool = SimpleConnectionPool(1, 15, dsn=database_url)
+            # Registrar una función para cerrar el pool cuando el proceso del worker termine
+            atexit.register(close_pool)
+            current_app.logger.info(f"Pool de conexiones a PostgreSQL inicializado en el proceso {os.getpid()}.")
+        except psycopg2.OperationalError as e:
+            current_app.logger.error(f"Fallo al inicializar el pool de conexiones en get_db: {e}")
+            pool = None # Permitir reintentos en futuras llamadas a get_db
+            raise  # Re-lanzar la excepción para que la solicitud falle correctamente
+
     if 'db' not in g:
-        if not pool:
-            raise RuntimeError("El pool de conexiones de la base de datos no está inicializado. "
-                               "Asegúrese de que la variable de entorno DATABASE_URL esté configurada.")
+        # Obtener una conexión del pool para la solicitud actual
         g.db = pool.getconn()
     return g.db
 
@@ -61,26 +77,8 @@ def init_db_command():
 def init_app(app):
     """
     Registra las funciones de la base de datos con la instancia de la aplicación Flask.
-    Inicializa el pool de conexiones para PostgreSQL.
+    La inicialización del pool se maneja de forma perezosa en get_db para compatibilidad con Gunicorn.
     """
-    global pool
-    # Usa la configuración de la app primero, luego la variable de entorno
-    database_url = app.config.get('DATABASE_URL') or os.environ.get('DATABASE_URL')
-
-    if database_url:
-        try:
-            # Inicializar el pool con un mínimo de 1 y un máximo de 15 conexiones.
-            pool = SimpleConnectionPool(1, 15, dsn=database_url)
-            # Registrar una función para cerrar el pool cuando la app termine
-            atexit.register(close_pool)
-            app.logger.info("Pool de conexiones a PostgreSQL inicializado.")
-        except psycopg2.OperationalError as e:
-            app.logger.error(f"No se pudo conectar a la base de datos y crear el pool: {e}")
-            pool = None
-    else:
-        # En el nuevo setup, DATABASE_URL es obligatorio.
-        app.logger.warning("DATABASE_URL no está configurada. La conexión a la base de datos no funcionará.")
-
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
 

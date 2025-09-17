@@ -1,11 +1,11 @@
 -- ===================================================================================
 -- Hepta-Conexiones - Esquema de Base de Datos
 -- Versión: 9.0
--- Creador: Yimmy Moreno (Adaptado por Jules para compatibilidad con SQLite y PostgreSQL)
+-- Creador: Yimmy Moreno
 --
--- Este script define la estructura de la base de datos.
--- Usa INTEGER PRIMARY KEY AUTOINCREMENT para compatibilidad con SQLite en pruebas.
--- PostgreSQL también interpreta esto correctamente para crear un ID auto-incremental.
+-- Este script define la estructura de la base de datos para PostgreSQL.
+-- Utiliza SERIAL PRIMARY KEY para campos de ID auto-incrementales, que es el
+-- tipo de dato estándar en PostgreSQL para esta funcionalidad.
 -- ===================================================================================
 
 -- -----------------------------------------------------
@@ -245,4 +245,4 @@ CREATE INDEX IF NOT EXISTS idx_conexiones_fecha_modificacion ON conexiones (fech
 CREATE INDEX IF NOT EXISTS idx_conexiones_estado_realizador ON conexiones (estado, realizador_id);
 
 -- -----------------------------------------------------
--- Búsqueda de Texto Completo (Full-Text Search) no es compatible con SQLite en este schema.
+-- Fin del esquema

@@ -16,6 +16,7 @@ from flask import (
     current_app,
     make_response)
 from werkzeug.security import generate_password_hash
+from psycopg2.extras import DictCursor
 from db import get_db, log_action
 from forms import UserForm, ConfigurationForm, ReportForm, AliasForm, ComputosReportForm
 from flask_wtf import FlaskForm
@@ -40,8 +41,10 @@ def _generate_report_data_and_file(reporte_id, app_context):
     """
     with app_context:
         db = get_db()
-        reporte = db.execute(
-            'SELECT * FROM reportes WHERE id = %s', (reporte_id,)).fetchone()
+        cursor = db.cursor(cursor_factory=DictCursor)
+        cursor.execute(
+            'SELECT * FROM reportes WHERE id = %s', (reporte_id,))
+        reporte = cursor.fetchone()
         if not reporte:
             current_app.logger.error(
                 f"Reporte ID {reporte_id} no encontrado para generación programada.")
@@ -82,7 +85,8 @@ def _generate_report_data_and_file(reporte_id, app_context):
             query_base += " AND date(fecha_creacion) <= %s"
             params.append(filtros['fecha_fin'])
 
-        resultados_raw = db.execute(query_base, tuple(params)).fetchall()
+        cursor.execute(query_base, tuple(params))
+        resultados_raw = cursor.fetchall()
 
         preview_results = [dict(row) for row in resultados_raw[:10]]
 
@@ -135,7 +139,7 @@ def _generate_report_data_and_file(reporte_id, app_context):
                 mimetype = "application/pdf"
                 filename = f"{filename_base}.pdf"
 
-            db.execute(
+            cursor.execute(
                 'UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = %s',
                 (reporte_id,
                  ))
@@ -157,8 +161,10 @@ def scheduled_report_job(reporte_id):
     """
     with current_app.app_context():
         db = get_db()
-        reporte = db.execute(
-            'SELECT * FROM reportes WHERE id = %s', (reporte_id,)).fetchone()
+        cursor = db.cursor(cursor_factory=DictCursor)
+        cursor.execute(
+            'SELECT * FROM reportes WHERE id = %s', (reporte_id,))
+        reporte = cursor.fetchone()
         if not reporte or not reporte['programado'] or not reporte['destinatarios']:
             current_app.logger.warning(
                 (f"Tarea programada para reporte ID {reporte_id} no ejecutada: "
@@ -215,7 +221,7 @@ def scheduled_report_job(reporte_id):
 def listar_usuarios():
     """Muestra una lista completa de todos los usuarios registrados en el sistema, incluyendo sus roles."""
     db = get_db()
-
+    cursor = db.cursor(cursor_factory=DictCursor)
     # PostgreSQL version
     sql = """
         SELECT
@@ -228,7 +234,6 @@ def listar_usuarios():
         ORDER BY u.nombre_completo
     """
 
-    cursor = db.cursor()
     cursor.execute(sql)
     usuarios = cursor.fetchall()
     cursor.close()
@@ -251,7 +256,7 @@ def nuevo_usuario():
     """Gestiona la creación de un nuevo usuario usando un formulario seguro de Flask-WTF."""
     form = UserForm()
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         cursor.execute('SELECT nombre FROM roles ORDER BY nombre')
@@ -302,7 +307,7 @@ def nuevo_usuario():
 def editar_usuario(usuario_id):
     """Gestiona la edición de un usuario existente."""
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         # Definir consultas seguras y portables
@@ -407,7 +412,7 @@ def toggle_activo(usuario_id):
         return redirect(url_for('admin.listar_usuarios'))
 
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         cursor.execute(
@@ -439,7 +444,7 @@ def toggle_activo(usuario_id):
 def eliminar_usuario(usuario_id):
     """Elimina un usuario (solo para administradores)."""
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         if usuario_id == g.user['id']:
@@ -509,7 +514,7 @@ def eliminar_usuario(usuario_id):
 def gestionar_permisos_proyecto(proyecto_id):
     """Gestiona qué usuarios tienen acceso a un proyecto específico."""
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         sql_get_proyecto = 'SELECT * FROM proyectos WHERE id = %s'
@@ -579,7 +584,7 @@ def gestionar_alias():
     """Gestiona la creación y listado de alias para perfiles."""
     form = AliasForm()
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         if form.validate_on_submit():
@@ -627,7 +632,7 @@ def editar_alias(alias_id):
     alias = request.form.get('alias')
     norma = request.form.get('norma')
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         sql_get_old = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = %s'
@@ -666,7 +671,7 @@ def editar_alias(alias_id):
 def eliminar_alias(alias_id):
     """Elimina un alias de perfil existente."""
     db = get_db()
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     try:
         sql_get = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = %s'
@@ -697,7 +702,7 @@ def importar_alias():
     """
     if request.method == 'POST':
         db = get_db()
-        cursor = db.cursor()
+        cursor = db.cursor(cursor_factory=DictCursor)
 
         try:
             if 'archivo_alias' not in request.files or not request.files['archivo_alias'].filename:
@@ -802,29 +807,33 @@ def importar_alias():
 def eficiencia():
     """Calcula y muestra métricas de rendimiento y KPIs para el proceso de conexiones."""
     db = get_db()
-
-    avg_time_query = db.execute("""
+    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor.execute("""
         SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
         FROM historial_estados h1
         JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
         WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'
-    """).fetchone()
+    """)
+    avg_time_query = cursor.fetchone()
     avg_approval_time = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
     if isinstance(avg_approval_time, (int, float)):
         avg_approval_time = f"{avg_approval_time:.1f} días"
     else:
         avg_approval_time = 'N/A'
 
-    processed_last_30d_row = db.execute(
-        "SELECT COUNT(id) as total FROM conexiones WHERE fecha_modificacion >= date('now', '-30 days') AND estado = 'APROBADO'").fetchone()
+    cursor.execute(
+        "SELECT COUNT(id) as total FROM conexiones WHERE fecha_modificacion >= date('now', '-30 days') AND estado = 'APROBADO'")
+    processed_last_30d_row = cursor.fetchone()
     processed_last_30d = processed_last_30d_row['total'] if processed_last_30d_row else 0
 
-    total_approved_row = db.execute(
-        "SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO'").fetchone()
+    cursor.execute(
+        "SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO'")
+    total_approved_row = cursor.fetchone()
     total_approved = total_approved_row['total'] if total_approved_row else 0
 
-    total_rejected_history_row = db.execute(
-        "SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO'").fetchone()
+    cursor.execute(
+        "SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO'")
+    total_rejected_history_row = cursor.fetchone()
     total_rejected_history = total_rejected_history_row['total'] if total_rejected_history_row else 0
 
     rejection_rate = (total_rejected_history /
@@ -844,8 +853,9 @@ def eficiencia():
     }
 
     time_by_state = {'Solicitado': 8.5, 'En Proceso': 48.2, 'Realizado': 24.0}
-    completed_by_user = db.execute(
-        "SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.realizador_id = u.id WHERE c.estado = 'APROBADO' AND c.fecha_modificacion >= date('now', '-30 days') GROUP BY u.id ORDER BY total DESC").fetchall()
+    cursor.execute(
+        "SELECT u.nombre_completo, COUNT(c.id) as total FROM conexiones c JOIN usuarios u ON c.realizador_id = u.id WHERE c.estado = 'APROBADO' AND c.fecha_modificacion >= date('now', '-30 days') GROUP BY u.id ORDER BY total DESC")
+    completed_by_user = cursor.fetchall()
 
     charts_data = {'time_by_state': time_by_state,
                    'completed_by_user': [{'user': row['nombre_completo'],
@@ -858,7 +868,7 @@ def eficiencia():
                 days=30)).strftime('%Y-%m-%d'),
         'end': datetime.now().strftime('%Y-%m-%d')}
 
-    slow_connections = db.execute("""
+    cursor.execute("""
         SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre,
                u.nombre_completo as realizador_nombre,
                (julianday('now') - julianday(c.fecha_modificacion)) as dias_en_proceso
@@ -868,7 +878,8 @@ def eficiencia():
         WHERE c.estado = 'EN_PROCESO'
         ORDER BY dias_en_proceso DESC
         LIMIT 5
-    """).fetchall()
+    """)
+    slow_connections = cursor.fetchall()
 
     log_action(
         'VER_EFICIENCIA',
@@ -952,6 +963,7 @@ def clear_logs():
 def ver_auditoria():
     """Muestra el historial de auditoría de acciones en el sistema."""
     db = get_db()
+    cursor = db.cursor(cursor_factory=DictCursor)
     page = request.args.get('page', 1, type=int)
     per_page = current_app.config['PER_PAGE']
     offset = (page - 1) * per_page
@@ -978,13 +990,17 @@ def ver_auditoria():
 
     params.extend([per_page, offset])
 
-    acciones = db.execute(query, tuple(params)).fetchall()
-    total_acciones = db.execute(count_query, tuple(params_count)).fetchone()[0]
+    cursor.execute(query, tuple(params))
+    acciones = cursor.fetchall()
+    cursor.execute(count_query, tuple(params_count))
+    total_acciones = cursor.fetchone()[0]
 
-    usuarios_para_filtro = db.execute(
-        'SELECT id, nombre_completo FROM usuarios ORDER BY nombre_completo').fetchall()
-    acciones_para_filtro = db.execute(
-        'SELECT DISTINCT accion FROM auditoria_acciones ORDER BY accion').fetchall()
+    cursor.execute(
+        'SELECT id, nombre_completo FROM usuarios ORDER BY nombre_completo')
+    usuarios_para_filtro = cursor.fetchall()
+    cursor.execute(
+        'SELECT DISTINCT accion FROM auditoria_acciones ORDER BY accion')
+    acciones_para_filtro = cursor.fetchall()
 
     log_action(
         'VER_AUDITORIA',
@@ -1106,8 +1122,10 @@ def reporte_computos():
     form = ComputosReportForm(form_data)
 
     db = get_db()
-    proyectos = db.execute(
-        'SELECT id, nombre FROM proyectos ORDER BY nombre').fetchall()
+    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor.execute(
+        'SELECT id, nombre FROM proyectos ORDER BY nombre')
+    proyectos = cursor.fetchall()
     form.proyecto_id.choices = [(0,
                                  'Todos los Proyectos')] + [(p['id'],
                                                              p['nombre']) for p in proyectos]
@@ -1129,7 +1147,8 @@ def reporte_computos():
             query += " AND date(c.fecha_creacion) <= %s"
             params.append(fecha_fin.strftime('%Y-%m-%d'))
 
-        conexiones = db.execute(query, tuple(params)).fetchall()
+        cursor.execute(query, tuple(params))
+        conexiones = cursor.fetchall()
 
         if not conexiones and request.method == 'POST':
             flash(
@@ -1189,10 +1208,11 @@ def reporte_computos():
 
         proyecto_nombre_filtro = "Todos los Proyectos"
         if proyecto_id != 0:
-            p = db.execute(
+            cursor.execute(
                 'SELECT nombre FROM proyectos WHERE id = %s',
                 (proyecto_id,
-                 )).fetchone()
+                 ))
+            p = cursor.fetchone()
             if p:
                 proyecto_nombre_filtro = p['nombre']
 
@@ -1241,8 +1261,10 @@ def reporte_computos():
 def listar_reportes():
     """Página para la gestión de reportes."""
     db = get_db()
-    reportes = db.execute(
-        "SELECT r.*, u.nombre_completo as creador_nombre FROM reportes r JOIN usuarios u ON r.creador_id = u.id ORDER BY r.nombre").fetchall()
+    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor.execute(
+        "SELECT r.*, u.nombre_completo as creador_nombre FROM reportes r JOIN usuarios u ON r.creador_id = u.id ORDER BY r.nombre")
+    reportes = cursor.fetchall()
     log_action(
         'VER_REPORTES',
         g.user['id'],
@@ -1260,15 +1282,18 @@ def nuevo_reporte():
     """Gestiona la creación de un nuevo reporte personalizado."""
     form = ReportForm()
     db = get_db()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
-    proyectos = db.execute(
-        'SELECT id, nombre FROM proyectos ORDER BY nombre').fetchall()
+    cursor.execute(
+        'SELECT id, nombre FROM proyectos ORDER BY nombre')
+    proyectos = cursor.fetchall()
     form.proyecto_id.choices = [(0,
                                  'Todos los Proyectos')] + [(p['id'],
                                                              p['nombre']) for p in proyectos]
 
-    realizadores = db.execute(
-        "SELECT u.id, u.nombre_completo FROM usuarios u JOIN usuario_roles ur ON u.id = ur.usuario_id JOIN roles r ON ur.rol_id = r.id WHERE r.nombre = 'REALIZADOR' ORDER BY u.nombre_completo").fetchall()
+    cursor.execute(
+        "SELECT u.id, u.nombre_completo FROM usuarios u JOIN usuario_roles ur ON u.id = ur.usuario_id JOIN roles r ON ur.rol_id = r.id WHERE r.nombre = 'REALIZADOR' ORDER BY u.nombre_completo")
+    realizadores = cursor.fetchall()
     form.realizador_id.choices = [(0,
                                    'Todos los Realizadores')] + [(r['id'],
                                                                   r['nombre_completo']) for r in realizadores]
@@ -1284,7 +1309,7 @@ def nuevo_reporte():
             'output_format': form.output_format.data}
         filtros_json = json.dumps(filtros)
 
-        cursor = db.execute(
+        cursor.execute(
             "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (form.nombre.data,
              form.descripcion.data,
@@ -1342,23 +1367,27 @@ def editar_reporte(reporte_id):
     Gestiona la edición de un reporte existente.
     """
     db = get_db()
-    reporte = db.execute(
+    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor.execute(
         'SELECT * FROM reportes WHERE id = %s',
         (reporte_id,
-         )).fetchone()
+         ))
+    reporte = cursor.fetchone()
     if not reporte:
         abort(404)
 
     form = ReportForm()
 
-    proyectos = db.execute(
-        'SELECT id, nombre FROM proyectos ORDER BY nombre').fetchall()
+    cursor.execute(
+        'SELECT id, nombre FROM proyectos ORDER BY nombre')
+    proyectos = cursor.fetchall()
     form.proyecto_id.choices = [(0,
                                  'Todos los Proyectos')] + [(p['id'],
                                                              p['nombre']) for p in proyectos]
 
-    realizadores = db.execute(
-        "SELECT u.id, u.nombre_completo FROM usuarios u JOIN usuario_roles ur ON u.id = ur.usuario_id JOIN roles r ON ur.rol_id = r.id WHERE r.nombre = 'REALIZADOR' ORDER BY u.nombre_completo").fetchall()
+    cursor.execute(
+        "SELECT u.id, u.nombre_completo FROM usuarios u JOIN usuario_roles ur ON u.id = ur.usuario_id JOIN roles r ON ur.rol_id = r.id WHERE r.nombre = 'REALIZADOR' ORDER BY u.nombre_completo")
+    realizadores = cursor.fetchall()
     form.realizador_id.choices = [(0,
                                    'Todos los Realizadores')] + [(r['id'],
                                                                   r['nombre_completo']) for r in realizadores]
@@ -1395,7 +1424,7 @@ def editar_reporte(reporte_id):
             'output_format': form.output_format.data}
         filtros_json = json.dumps(filtros)
 
-        db.execute(
+        cursor.execute(
             "UPDATE reportes SET nombre = %s, descripcion = %s, filtros = %s, programado = %s, frecuencia = %s, destinatarios = %s WHERE id = %s",
             (form.nombre.data,
              form.descripcion.data,
@@ -1460,10 +1489,12 @@ def editar_reporte(reporte_id):
 def eliminar_reporte(reporte_id):
     """Elimina un reporte guardado."""
     db = get_db()
-    reporte = db.execute(
+    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor.execute(
         'SELECT * FROM reportes WHERE id = %s',
         (reporte_id,
-         )).fetchone()
+         ))
+    reporte = cursor.fetchone()
     if reporte:
         job_id = f"report_{reporte_id}"
         if current_app.scheduler.get_job(job_id):
@@ -1475,7 +1506,7 @@ def eliminar_reporte(reporte_id):
                 current_app.logger.error(
                     f"Error al desprogramar el job '{job_id}': {e}", exc_info=True)
 
-        db.execute('DELETE FROM reportes WHERE id = %s', (reporte_id,))
+        cursor.execute('DELETE FROM reportes WHERE id = %s', (reporte_id,))
         db.commit()
         log_action('ELIMINAR_REPORTE', g.user['id'], 'reportes', reporte_id,
                    f"El reporte '{reporte['nombre']}' ha sido eliminado.")
@@ -1496,10 +1527,12 @@ def ejecutar_reporte(reporte_id):
     y lo envía al navegador para su descarga.
     """
     db = get_db()
-    reporte = db.execute(
+    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor.execute(
         'SELECT * FROM reportes WHERE id = %s',
         (reporte_id,
-         )).fetchone()
+         ))
+    reporte = cursor.fetchone()
     if not reporte:
         abort(404)
 
@@ -1527,17 +1560,20 @@ def configuracion():
     """Página para la configuración del sistema."""
     form = ConfigurationForm()
     db = get_db()
+    cursor = db.cursor(cursor_factory=DictCursor)
 
     if form.validate_on_submit():
-        old_per_page = db.execute(
-            "SELECT valor FROM configuracion WHERE clave = 'PER_PAGE'").fetchone()
-        old_maintenance = db.execute(
-            "SELECT valor FROM configuracion WHERE clave = 'MAINTENANCE_MODE'").fetchone()
+        cursor.execute(
+            "SELECT valor FROM configuracion WHERE clave = 'PER_PAGE'")
+        old_per_page = cursor.fetchone()
+        cursor.execute(
+            "SELECT valor FROM configuracion WHERE clave = 'MAINTENANCE_MODE'")
+        old_maintenance = cursor.fetchone()
 
-        db.execute(
+        cursor.execute(
             "INSERT INTO configuracion (clave, valor) VALUES (%s, %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", ('PER_PAGE', str(
                 form.per_page.data)))
-        db.execute(
+        cursor.execute(
             "INSERT INTO configuracion (clave, valor) VALUES (%s, %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor",
             ('MAINTENANCE_MODE',
              '1' if form.maintenance_mode.data else '0'))
@@ -1564,10 +1600,12 @@ def configuracion():
         return redirect(url_for('admin.configuracion'))
 
     elif request.method == 'GET':
-        per_page_row = db.execute(
-            "SELECT valor FROM configuracion WHERE clave = 'PER_PAGE'").fetchone()
-        maintenance_row = db.execute(
-            "SELECT valor FROM configuracion WHERE clave = 'MAINTENANCE_MODE'").fetchone()
+        cursor.execute(
+            "SELECT valor FROM configuracion WHERE clave = 'PER_PAGE'")
+        per_page_row = cursor.fetchone()
+        cursor.execute(
+            "SELECT valor FROM configuracion WHERE clave = 'MAINTENANCE_MODE'")
+        maintenance_row = cursor.fetchone()
 
         form.per_page.data = int(
             per_page_row['valor']) if per_page_row and per_page_row['valor'].isdigit() else current_app.config.get(

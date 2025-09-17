@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import pytest
+from psycopg2.extras import DictCursor
 from werkzeug.security import generate_password_hash
 
 # Add project root to the Python path
@@ -22,7 +23,7 @@ def app():
     with app.app_context():
         db = get_db()
         # Clean up the database before each test
-        with db.cursor() as cursor:
+        with db.cursor(cursor_factory=DictCursor) as cursor:
             # Drop all views
             cursor.execute("SELECT table_name FROM information_schema.views WHERE table_schema = 'public'")
             views = [view[0] for view in cursor.fetchall()]
@@ -37,7 +38,7 @@ def app():
         db.commit()
         init_db()
 
-        with db.cursor() as cursor:
+        with db.cursor(cursor_factory=DictCursor) as cursor:
             cursor.execute(
                 "INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                 ('admin', 'Admin User', 'admin@test.com', generate_password_hash('password'), 1)

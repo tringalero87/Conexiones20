@@ -24,7 +24,7 @@ def get_db():
                 raise RuntimeError("DATABASE_URL no está configurada.")
 
             # Inicializar el pool con un mínimo de 1 y un máximo de 15 conexiones.
-            pool = SimpleConnectionPool(1, 15, dsn=database_url)
+            pool = SimpleConnectionPool(1, 15, dsn=database_url, cursor_factory=DictCursor)
             # Registrar una función para cerrar el pool cuando el proceso del worker termine
             atexit.register(close_pool)
             current_app.logger.info(f"Pool de conexiones a PostgreSQL inicializado en el proceso {os.getpid()}.")
@@ -55,13 +55,11 @@ def init_db():
         with current_app.open_resource('schema.sql') as f:
             sql_script = f.read().decode('utf8')
 
-        with db.cursor(cursor_factory=DictCursor) as cursor:
-            # Limpiar comentarios y dividir en sentencias individuales
-            clean_script = re.sub(r'--.*$', '', sql_script, flags=re.MULTILINE)
-            statements = [statement.strip() for statement in clean_script.split(';') if statement.strip()]
-
-            for statement in statements:
-                cursor.execute(statement)
+        with db.cursor() as cursor:
+            # Ejecutar el script completo. Psycopg2 puede manejar múltiples sentencias
+            # si se ejecutan como una única cadena, lo cual es más seguro para
+            # sentencias complejas como CREATE FUNCTION o DO blocks.
+            cursor.execute(sql_script)
         db.commit()
     finally:
         # Devuelve la conexión al pool
@@ -102,7 +100,7 @@ def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
     params = (usuario_id, accion, tipo_objeto, objeto_id, detalles)
 
     try:
-        with db.cursor(cursor_factory=DictCursor) as cursor:
+        with db.cursor() as cursor:
             cursor.execute(sql, params)
         db.commit()
     except Exception as e:

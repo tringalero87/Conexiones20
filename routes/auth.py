@@ -25,10 +25,16 @@ def login():
             cursor.execute(user_sql, (form.username.data,))
             user = cursor.fetchone()
 
-            if user is None or not user['activo'] or not check_password_hash(user['password_hash'], form.password.data):
+            # Mitigación de enumeración de usuarios:
+            # Si el usuario no existe, se genera un hash falso y se compara.
+            # Esto asegura que el tiempo de procesamiento sea similar
+            # al de un usuario existente con contraseña incorrecta.
+            password_hash = user['password_hash'] if user else generate_password_hash("dummy_password_for_timing_attack_mitigation")
+
+            if user is None or not user['activo'] or not check_password_hash(password_hash, form.password.data):
                 error = 'Nombre de usuario o contraseña incorrectos.'
 
-            if error is None:
+            if error is None and user:
                 session.clear()
                 session['user_id'] = user['id']
                 log_action('INICIAR_SESION', user['id'], 'usuarios', user['id'], f"Inicio de sesión exitoso para el usuario '{form.username.data}'.")

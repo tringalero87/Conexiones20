@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import Flask, g, session, render_template, current_app, flash, redirect, url_for
 from dotenv import load_dotenv
 import json
+from concurrent.futures import ThreadPoolExecutor
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -110,6 +111,9 @@ def create_app(test_config=None):
     csrf.init_app(app)
     mail.init_app(app)
     db.init_app(app)
+
+    # Configurar un ThreadPoolExecutor para tareas asíncronas como el envío de correos
+    app.executor = ThreadPoolExecutor(max_workers=5)
 
     with app.app_context():
         db_conn = db.get_db()

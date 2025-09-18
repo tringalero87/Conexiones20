@@ -479,6 +479,16 @@ def eliminar_usuario(usuario_id):
                 'danger')
             return redirect(url_for('admin.listar_usuarios'))
 
+        # Comprobar si es solicitante de conexiones
+        sql_solicitudes = "SELECT COUNT(id) as count FROM conexiones WHERE solicitante_id = ?"
+        cursor.execute(sql_solicitudes, (usuario_id,))
+        conexiones_solicitadas = cursor.fetchone()
+        if conexiones_solicitadas and conexiones_solicitadas['count'] > 0:
+            flash(
+                f"No se puede eliminar al usuario porque ha solicitado {conexiones_solicitadas['count']} conexión(es).",
+                'danger')
+            return redirect(url_for('admin.listar_usuarios'))
+
         # Eliminar el usuario
         sql_get_user = 'SELECT username FROM usuarios WHERE id = ?'
         cursor.execute(sql_get_user, (usuario_id,))

@@ -1,6 +1,5 @@
 import os
 import json
-import threading
 from flask import current_app, render_template, url_for, g
 from flask_mail import Message
 from extensions import mail
@@ -73,8 +72,8 @@ def _send_email_notification(recipients, subject, template, **kwargs):
             except Exception as e:
                 app.logger.error(f"Error al enviar correo electrónico a {msg_obj.recipients}: {e}", exc_info=True)
 
-    thr = threading.Thread(target=send_async_email, args=[current_app._get_current_object(), msg])
-    thr.start()
+    # Usar el ThreadPoolExecutor de la aplicación para gestionar los hilos
+    current_app.executor.submit(send_async_email, current_app._get_current_object(), msg)
 
 def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
     """Crea notificaciones y envía correos electrónicos a usuarios con roles específicos."""

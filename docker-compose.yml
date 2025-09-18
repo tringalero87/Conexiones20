@@ -10,41 +10,15 @@ services:
       - .:/app
       - uploads_data:/app/uploads
       - logs_data:/app/logs
+      # El siguiente volumen asegura que la base de datos SQLite persista
+      # entre reinicios del contenedor.
+      - heptaconexiones_data:/app/instance
     environment:
       - GUNICORN_WORKERS=5
-      - DATABASE_URL=postgresql://user:password@db:5432/heptaconexiones
     env_file:
       - .env
-    depends_on:
-      - db
-      - db_test
-
-  db:
-    image: postgres:13
-    container_name: heptaconexiones_db
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: heptaconexiones
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  db_test:
-    image: postgres:13
-    container_name: heptaconexiones_db_test
-    environment:
-      POSTGRES_USER: user_test
-      POSTGRES_PASSWORD: password_test
-      POSTGRES_DB: heptaconexiones_test
-    volumes:
-      - postgres_test_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
 
 volumes:
-  postgres_data:
-  postgres_test_data:
+  heptaconexiones_data:
   uploads_data:
   logs_data:

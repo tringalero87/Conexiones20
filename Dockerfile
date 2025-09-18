@@ -8,13 +8,12 @@ WORKDIR /app
 # Esto ayuda a Docker a cachear capas y acelerar builds si requirements.txt no cambia
 COPY requirements.txt ./
 # Instala dependencias, incluyendo las necesarias para WeasyPrint
-# build-essential y libffi-dev para compilación, libpq-dev para PostgreSQL (si cambias de DB)
+# build-essential y libffi-dev para compilación
 # libglib2.0-0, libharfbuzz0b, libpango-1.0-0, libpangocairo-1.0-0, libgdk-pixbuf2.0-0, libcairo2
 # libjpeg-dev, zlib1g-dev para WeasyPrint (PDFs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
-    libpq-dev \
     libjpeg-dev \
     zlib1g-dev \
     libglib2.0-0 \

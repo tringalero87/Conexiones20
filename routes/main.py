@@ -39,25 +39,25 @@ def dashboard():
         'date_end', datetime.now().strftime('%Y-%m-%d'))
     filters = {'start': date_start_str, 'end': date_end_str}
 
-    date_func_30_days = "NOW() - interval '30 days'"
+    date_func_30_days = "date('now', '-30 days')"
 
     summary_query = f"""
         SELECT
-            SUM(CASE WHEN solicitante_id = %s THEN 1 ELSE 0 END) as total_conexiones_creadas,
-            SUM(CASE WHEN solicitante_id = %s AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END)
+            SUM(CASE WHEN solicitante_id = ? THEN 1 ELSE 0 END) as total_conexiones_creadas,
+            SUM(CASE WHEN solicitante_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END)
                 as conexiones_en_proceso_solicitadas,
-            SUM(CASE WHEN solicitante_id = %s AND estado = 'APROBADO' THEN 1 ELSE 0 END)
+            SUM(CASE WHEN solicitante_id = ? AND estado = 'APROBADO' THEN 1 ELSE 0 END)
                 as conexiones_aprobadas_solicitadas,
-            SUM(CASE WHEN realizador_id = %s AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END)
+            SUM(CASE WHEN realizador_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END)
                 as mis_tareas_en_proceso,
-            SUM(CASE WHEN realizador_id = %s AND estado = 'REALIZADO'
+            SUM(CASE WHEN realizador_id = ? AND estado = 'REALIZADO'
                 AND fecha_modificacion >= {date_func_30_days} THEN 1 ELSE 0 END)
                 as mis_tareas_realizadas_ult_30d,
-            SUM(CASE WHEN aprobador_id = %s AND estado = 'APROBADO'
+            SUM(CASE WHEN aprobador_id = ? AND estado = 'APROBADO'
                 AND fecha_modificacion >= {date_func_30_days} THEN 1 ELSE 0 END)
                 as aprobadas_por_mi_ult_30d
         FROM conexiones
-        WHERE solicitante_id = %s OR realizador_id = %s OR aprobador_id = %s
+        WHERE solicitante_id = ? OR realizador_id = ? OR aprobador_id = ?
     """
     params = [user_id] * 9
     cursor = db.cursor()
@@ -78,7 +78,7 @@ def dashboard():
     pendientes_query = """
         SELECT COUNT(c.id) as total FROM conexiones c
         JOIN proyecto_usuarios pu ON c.proyecto_id = pu.proyecto_id
-        WHERE c.estado = 'REALIZADO' AND pu.usuario_id = %s
+        WHERE c.estado = 'REALIZADO' AND pu.usuario_id = ?
     """
     cursor.execute(pendientes_query, (user_id,))
     pendientes_row = cursor.fetchone()
@@ -93,16 +93,16 @@ def dashboard():
             'tasks_completed_this_month': 0}
 
         avg_time_sql = (
-            "SELECT AVG(EXTRACT(EPOCH FROM (h2.fecha - h1.fecha))) / 86400.0 as avg_days "
+            "SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days "
             "FROM historial_estados h1 JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id "
-            "WHERE h1.usuario_id = %s AND h1.estado = 'EN_PROCESO' AND h2.estado IN ('REALIZADO', 'APROBADO')"
+            "WHERE h1.usuario_id = ? AND h1.estado = 'EN_PROCESO' AND h2.estado IN ('REALIZADO', 'APROBADO')"
         )
         completed_sql = (
             "SELECT COUNT(id) as total FROM conexiones "
-            "WHERE (realizador_id = %s AND estado = 'REALIZADO' AND "
-            "TO_CHAR(fecha_modificacion, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM')) OR "
-            "(aprobador_id = %s AND estado = 'APROBADO' AND "
-            "TO_CHAR(fecha_modificacion, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM'))"
+            "WHERE (realizador_id = ? AND estado = 'REALIZADO' AND "
+            "strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now')) OR "
+            "(aprobador_id = ? AND estado = 'APROBADO' AND "
+            "strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now'))"
         )
 
         cursor.execute(avg_time_sql, (user_id,))
@@ -116,20 +116,19 @@ def dashboard():
 
         dashboard_data['my_performance'] = performance
 
-        date_format = "fecha_modificacion::DATE"
-        params = (user_id, user_id, datetime.now() - timedelta(days=30))
+        params = (user_id, user_id, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S'))
 
         sql = (
-            f"SELECT {date_format} as completion_date, COUNT(id) as total "
-            f"FROM conexiones WHERE ((realizador_id = %s AND estado = 'REALIZADO') "
-            f"OR (aprobador_id = %s AND estado = 'APROBADO')) "
-            f"AND fecha_modificacion >= %s "
+            f"SELECT date(fecha_modificacion) as completion_date, COUNT(id) as total "
+            f"FROM conexiones WHERE ((realizador_id = ? AND estado = 'REALIZADO') "
+            f"OR (aprobador_id = ? AND estado = 'APROBADO')) "
+            f"AND fecha_modificacion >= ? "
             f"GROUP BY completion_date ORDER BY completion_date"
         )
         cursor.execute(sql, params)
         completed_tasks_by_day = cursor.fetchall()
 
-        tasks_map = {row['completion_date'].strftime('%Y-%m-%d'): row['total'] for row in completed_tasks_by_day}
+        tasks_map = {row['completion_date']: row['total'] for row in completed_tasks_by_day}
 
         chart_data = {'labels': [], 'data': []}
         for i in range(29, -1, -1):
@@ -149,7 +148,7 @@ def dashboard():
         FROM proyectos p
         JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
         LEFT JOIN conexiones c ON p.id = c.proyecto_id
-        WHERE pu.usuario_id = %s
+        WHERE pu.usuario_id = ?
         GROUP BY p.id, p.nombre ORDER BY p.nombre
     """
     cursor.execute(query, (user_id,))
@@ -157,7 +156,7 @@ def dashboard():
     dashboard_data['my_projects_summary'] = [dict(row) for row in my_projects_summary]
 
     cursor.execute(
-        'SELECT widgets_config FROM user_dashboard_preferences WHERE usuario_id = %s',
+        'SELECT widgets_config FROM user_dashboard_preferences WHERE usuario_id = ?',
         (user_id,)
     )
     user_prefs_row = cursor.fetchone()
@@ -170,10 +169,10 @@ def dashboard():
 
         kpi_counts_query = (
             "SELECT SUM(CASE WHEN estado NOT IN ('APROBADO', 'RECHAZADO') THEN 1 ELSE 0 END) as total_activas, "
-            "SUM(CASE WHEN fecha_creacion::DATE = CURRENT_DATE THEN 1 ELSE 0 END) as creadas_hoy FROM conexiones"
+            "SUM(CASE WHEN date(fecha_creacion) = date('now') THEN 1 ELSE 0 END) as creadas_hoy FROM conexiones"
         )
         avg_time_sql = (
-            "SELECT AVG(EXTRACT(EPOCH FROM (h2.fecha - h1.fecha))) / 86400.0 as avg_time "
+            "SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_time "
             "FROM historial_estados h1 JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id "
             "WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'"
         )
@@ -204,7 +203,7 @@ def dashboard():
             "SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre, c.fecha_creacion, "
             "c.tipo, c.estado, c.realizador_id FROM conexiones c JOIN proyectos p ON "
             "c.proyecto_id = p.id JOIN proyecto_usuarios pu ON c.proyecto_id = pu.proyecto_id "
-            "WHERE c.estado = 'REALIZADO' AND pu.usuario_id = %s "
+            "WHERE c.estado = 'REALIZADO' AND pu.usuario_id = ? "
             "ORDER BY c.fecha_modificacion DESC LIMIT 5"
         )
         cursor.execute(query, (user_id,))
@@ -214,7 +213,7 @@ def dashboard():
         query = (
             "SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre, c.fecha_creacion, "
             "c.tipo, c.estado, c.realizador_id FROM conexiones c JOIN proyectos p ON "
-            "c.proyecto_id = p.id WHERE c.estado = 'EN_PROCESO' AND c.realizador_id = %s "
+            "c.proyecto_id = p.id WHERE c.estado = 'EN_PROCESO' AND c.realizador_id = ? "
             "ORDER BY c.fecha_modificacion DESC LIMIT 5"
         )
         cursor.execute(query, (user_id,))
@@ -232,7 +231,7 @@ def dashboard():
     if 'SOLICITANTE' in user_roles:
         query = (
             "SELECT id, codigo_conexion, estado, fecha_creacion, tipo FROM conexiones "
-            "WHERE solicitante_id = %s AND estado NOT IN ('APROBADO') "
+            "WHERE solicitante_id = ? AND estado NOT IN ('APROBADO') "
             "ORDER BY fecha_creacion DESC LIMIT 5"
         )
         cursor.execute(query, (user_id,))
@@ -291,7 +290,7 @@ def catalogo():
             cursor.execute("SELECT id, nombre FROM proyectos ORDER BY nombre")
         else:
             cursor.execute(
-                "SELECT p.id, p.nombre FROM proyectos p JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id WHERE pu.usuario_id = %s ORDER BY p.nombre",
+                "SELECT p.id, p.nombre FROM proyectos p JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id WHERE pu.usuario_id = ? ORDER BY p.nombre",
                 (g.user['id'],
                  ))
         proyectos = cursor.fetchall()
@@ -323,39 +322,16 @@ def buscar():
     resultados = []
 
     try:
-        # Actualizar fts_document para la consulta actual
-        update_sql = (
-            "UPDATE conexiones SET fts_document = to_tsvector('simple', codigo_conexion || ' ' || "
-            "COALESCE(descripcion, '')) WHERE id IN (SELECT id FROM conexiones WHERE fts_document IS NULL "
-            "OR codigo_conexion || ' ' || COALESCE(descripcion, '') != fts_document)"
-        )
-        # Esta línea anterior es una simplificación. En un sistema real, esto se manejaría con un trigger.
-        # Por ahora, la omitimos para no sobrecargar la búsqueda.
-
-        sane_query = re.sub(r'[^\w\s]', '', query)
-        search_terms = sane_query.strip().split()
-        if not search_terms:
-            return render_template(
-                'buscar.html',
-                resultados=[],
-                query=query,
-                titulo="Buscar")
-
-        fts_query = " & ".join(f"{term}:*" for term in search_terms)
+        term = f"%{query}%"
         sql = """
-            SELECT c.*, p.nombre as proyecto_nombre,
-                   sol.nombre_completo as solicitante_nombre,
-                   ts_rank(to_tsvector('simple', c.codigo_conexion || ' ' ||
-                           COALESCE(c.descripcion, '')),
-                           to_tsquery('simple', %s)) as rank
+            SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre
             FROM conexiones c
             JOIN proyectos p ON c.proyecto_id = p.id
             LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
-            WHERE to_tsvector('simple', c.codigo_conexion || ' ' ||
-                              COALESCE(c.descripcion, '')) @@ to_tsquery('simple', %s)
-            ORDER BY rank DESC
+            WHERE c.codigo_conexion LIKE ? OR c.descripcion LIKE ?
+            ORDER BY c.fecha_creacion DESC
         """
-        cursor.execute(sql, (fts_query, fts_query))
+        cursor.execute(sql, (term, term))
         resultados = cursor.fetchall()
     finally:
         cursor.close()

@@ -59,52 +59,52 @@ def test_full_connection_workflow(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # 1. Setup: Crear usuarios, proyecto y una conexión
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                           ('solicitante_full', generate_password_hash('password'), 'Solicitante Full', 'solicitante_full@test.com', 1))
-            solicitante_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, (SELECT id FROM roles WHERE nombre = 'SOLICITANTE'))", (solicitante_id,))
+        cursor = db.cursor()
+        # 1. Setup: Crear usuarios, proyecto y una conexión
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                       ('solicitante_full', generate_password_hash('password'), 'Solicitante Full', 'solicitante_full@test.com', 1))
+        solicitante_id = cursor.lastrowid
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'SOLICITANTE'))", (solicitante_id,))
 
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                           ('realizador_full', generate_password_hash('password'), 'Realizador Full', 'realizador_full@test.com', 1))
-            realizador_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, (SELECT id FROM roles WHERE nombre = 'REALIZADOR'))", (realizador_id,))
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                       ('realizador_full', generate_password_hash('password'), 'Realizador Full', 'realizador_full@test.com', 1))
+        realizador_id = cursor.lastrowid
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'REALIZADOR'))", (realizador_id,))
 
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                           ('aprobador_full', generate_password_hash('password'), 'Aprobador Full', 'aprobador_full@test.com', 1))
-            aprobador_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (aprobador_id,))
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                       ('aprobador_full', generate_password_hash('password'), 'Aprobador Full', 'aprobador_full@test.com', 1))
+        aprobador_id = cursor.lastrowid
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (aprobador_id,))
 
-            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto Full Workflow', 'Desc') RETURNING id")
-            proyecto_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (proyecto_id, solicitante_id))
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (proyecto_id, realizador_id))
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (proyecto_id, aprobador_id))
+        cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto Full Workflow', 'Desc')")
+        proyecto_id = cursor.lastrowid
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, solicitante_id))
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, realizador_id))
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, aprobador_id))
 
-            cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                           ('WORKFLOW-001', proyecto_id, 'Test', 'Test', 'T1', solicitante_id))
-            conexion_id = cursor.fetchone()['id']
-            db.commit()
+        cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id) VALUES (?, ?, ?, ?, ?, ?)",
+                       ('WORKFLOW-001', proyecto_id, 'Test', 'Test', 'T1', solicitante_id))
+        conexion_id = cursor.lastrowid
+        db.commit()
 
     # 2. Login como Realizador, tomar tarea. Verificar estado 'EN_PROCESO'.
     auth.login('realizador_full', 'password')
     response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'EN_PROCESO'})
     assert response.status_code == 302 # Should redirect
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute('SELECT estado FROM conexiones WHERE id = %s', (conexion_id,))
-            assert cursor.fetchone()['estado'] == 'EN_PROCESO'
-            cursor.execute('SELECT realizador_id FROM conexiones WHERE id = %s', (conexion_id,))
-            assert cursor.fetchone()['realizador_id'] == realizador_id
+        cursor = get_db().cursor()
+        cursor.execute('SELECT estado FROM conexiones WHERE id = ?', (conexion_id,))
+        assert cursor.fetchone()['estado'] == 'EN_PROCESO'
+        cursor.execute('SELECT realizador_id FROM conexiones WHERE id = ?', (conexion_id,))
+        assert cursor.fetchone()['realizador_id'] == realizador_id
 
     # 3. Marcar como realizada. Verificar estado 'REALIZADO'.
     response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'REALIZADO'})
     assert response.status_code == 302 # Should redirect
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute('SELECT estado FROM conexiones WHERE id = %s', (conexion_id,))
-            assert cursor.fetchone()['estado'] == 'REALIZADO'
+        cursor = get_db().cursor()
+        cursor.execute('SELECT estado FROM conexiones WHERE id = ?', (conexion_id,))
+        assert cursor.fetchone()['estado'] == 'REALIZADO'
     auth.logout()
 
     # 4. Login como Aprobador, aprobar. Verificar estado 'APROBADO'.
@@ -112,11 +112,11 @@ def test_full_connection_workflow(client, app, auth):
     response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'APROBADO'})
     assert response.status_code == 302 # Should redirect
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute('SELECT estado, aprobador_id FROM conexiones WHERE id = %s', (conexion_id,))
-            conexion = cursor.fetchone()
-            assert conexion['estado'] == 'APROBADO'
-            assert conexion['aprobador_id'] == aprobador_id
+        cursor = get_db().cursor()
+        cursor.execute('SELECT estado, aprobador_id FROM conexiones WHERE id = ?', (conexion_id,))
+        conexion = cursor.fetchone()
+        assert conexion['estado'] == 'APROBADO'
+        assert conexion['aprobador_id'] == aprobador_id
 
 @pytest.mark.skip(reason="Prueba no implementada")
 def test_file_upload_api(client, auth):
@@ -144,30 +144,30 @@ def test_audit_log(app):
     """
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # Get the admin user ID for the log action
-            cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
-            admin_user = cursor.fetchone()
-            assert admin_user is not None
-            admin_id = admin_user['id']
+        cursor = db.cursor()
+        # Get the admin user ID for the log action
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        admin_user = cursor.fetchone()
+        assert admin_user is not None
+        admin_id = admin_user['id']
 
-            # Define action details
-            action = "TEST_ACTION"
-            obj_type = "TEST_OBJ"
-            obj_id = 999
-            details = "This is a test action."
+        # Define action details
+        action = "TEST_ACTION"
+        obj_type = "TEST_OBJ"
+        obj_id = 999
+        details = "This is a test action."
 
-            # Call the function to be tested
-            log_action(action, admin_id, obj_type, obj_id, details)
+        # Call the function to be tested
+        log_action(action, admin_id, obj_type, obj_id, details)
 
-            # Verify the log was created
-            cursor.execute(
-                "SELECT * FROM auditoria_acciones WHERE accion = %s AND usuario_id = %s",
-                (action, admin_id)
-            )
-            log_entry = cursor.fetchone()
+        # Verify the log was created
+        cursor.execute(
+            "SELECT * FROM auditoria_acciones WHERE accion = ? AND usuario_id = ?",
+            (action, admin_id)
+        )
+        log_entry = cursor.fetchone()
 
-            assert log_entry is not None
-            assert log_entry['tipo_objeto'] == obj_type
-            assert log_entry['objeto_id'] == obj_id
-            assert log_entry['detalles'] == details
+        assert log_entry is not None
+        assert log_entry['tipo_objeto'] == obj_type
+        assert log_entry['objeto_id'] == obj_id
+        assert log_entry['detalles'] == details

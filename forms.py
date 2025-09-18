@@ -121,7 +121,7 @@ class UserForm(FlaskForm):
 
         if not self.original_username or username.data.lower(
         ) != self.original_username.lower():
-            sql = 'SELECT id FROM usuarios WHERE LOWER(username) = %s'
+            sql = 'SELECT id FROM usuarios WHERE LOWER(username) = ?'
             cursor = db.cursor()
             cursor.execute(sql, (username.data.lower(),))
             user = cursor.fetchone()
@@ -137,7 +137,7 @@ class UserForm(FlaskForm):
         db = get_db()
 
         if not self.original_email or email.data.lower() != self.original_email.lower():
-            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = %s'
+            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = ?'
             cursor = db.cursor()
             cursor.execute(sql, (email.data.lower(),))
             user = cursor.fetchone()
@@ -191,7 +191,7 @@ class ProfileForm(FlaskForm):
         from flask import g
         db = get_db()
         if email.data.lower() != g.user['email'].lower():
-            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = %s'
+            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = ?'
             cursor = db.cursor()
             cursor.execute(sql, (email.data.lower(),))
             user = cursor.fetchone()

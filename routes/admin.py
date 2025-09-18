@@ -16,7 +16,6 @@ from flask import (
     current_app,
     make_response)
 from werkzeug.security import generate_password_hash
-from psycopg2.extras import DictCursor
 from db import get_db, log_action
 from forms import UserForm, ConfigurationForm, ReportForm, AliasForm, ComputosReportForm
 from flask_wtf import FlaskForm
@@ -41,9 +40,9 @@ def _generate_report_data_and_file(reporte_id, app_context):
     """
     with app_context:
         db = get_db()
-        cursor = db.cursor(cursor_factory=DictCursor)
+        cursor = db.cursor()
         cursor.execute(
-            'SELECT * FROM reportes WHERE id = %s', (reporte_id,))
+            'SELECT * FROM reportes WHERE id = ?', (reporte_id,))
         reporte = cursor.fetchone()
         if not reporte:
             current_app.logger.error(
@@ -70,19 +69,19 @@ def _generate_report_data_and_file(reporte_id, app_context):
         params = []
 
         if filtros.get('proyecto_id') and filtros['proyecto_id'] != 0:
-            query_base += " AND proyecto_id = %s"
+            query_base += " AND proyecto_id = ?"
             params.append(filtros['proyecto_id'])
         if filtros.get('estado'):
-            query_base += " AND estado = %s"
+            query_base += " AND estado = ?"
             params.append(filtros['estado'])
         if filtros.get('realizador_id') and filtros['realizador_id'] != 0:
-            query_base += " AND realizador_id = %s"
+            query_base += " AND realizador_id = ?"
             params.append(filtros['realizador_id'])
         if filtros.get('fecha_inicio'):
-            query_base += " AND date(fecha_creacion) >= %s"
+            query_base += " AND date(fecha_creacion) >= ?"
             params.append(filtros['fecha_inicio'])
         if filtros.get('fecha_fin'):
-            query_base += " AND date(fecha_creacion) <= %s"
+            query_base += " AND date(fecha_creacion) <= ?"
             params.append(filtros['fecha_fin'])
 
         cursor.execute(query_base, tuple(params))
@@ -138,7 +137,7 @@ def _generate_report_data_and_file(reporte_id, app_context):
                 filename = f"{filename_base}.pdf"
 
             cursor.execute(
-                'UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = %s',
+                'UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = ?',
                 (reporte_id,
                  ))
             db.commit()
@@ -159,9 +158,9 @@ def scheduled_report_job(reporte_id):
     """
     with current_app.app_context():
         db = get_db()
-        cursor = db.cursor(cursor_factory=DictCursor)
+        cursor = db.cursor()
         cursor.execute(
-            'SELECT * FROM reportes WHERE id = %s', (reporte_id,))
+            'SELECT * FROM reportes WHERE id = ?', (reporte_id,))
         reporte = cursor.fetchone()
         if not reporte or not reporte['programado'] or not reporte['destinatarios']:
             current_app.logger.warning(
@@ -215,12 +214,12 @@ def scheduled_report_job(reporte_id):
 def listar_usuarios():
     """Muestra una lista completa de todos los usuarios registrados en el sistema, incluyendo sus roles."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
-    # PostgreSQL version
+    cursor = db.cursor()
+    # SQLite version
     sql = """
         SELECT
             u.id, u.username, u.nombre_completo, u.email, u.activo,
-            STRING_AGG(r.nombre, ', ') as roles
+            GROUP_CONCAT(r.nombre, ', ') as roles
         FROM usuarios u
         LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
         LEFT JOIN roles r ON ur.rol_id = r.id
@@ -250,7 +249,7 @@ def nuevo_usuario():
     """Gestiona la creación de un nuevo usuario usando un formulario seguro de Flask-WTF."""
     form = UserForm()
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
         cursor.execute('SELECT nombre FROM roles ORDER BY nombre')
@@ -260,9 +259,9 @@ def nuevo_usuario():
         if form.validate_on_submit():
             password_hash = generate_password_hash(form.password.data)
 
-            sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id'
-            sql_get_rol = 'SELECT id FROM roles WHERE nombre = %s'
-            sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)'
+            sql_insert_user = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)'
+            sql_get_rol = 'SELECT id FROM roles WHERE nombre = ?'
+            sql_insert_rol = 'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)'
 
             params_user = (
                 form.username.data,
@@ -272,7 +271,7 @@ def nuevo_usuario():
                 int(form.activo.data))
             cursor.execute(sql_insert_user, params_user)
 
-            new_user_id = cursor.fetchone()['id']
+            new_user_id = cursor.lastrowid
 
             for rol_nombre in form.roles.data:
                 cursor.execute(sql_get_rol, (rol_nombre,))
@@ -301,18 +300,18 @@ def nuevo_usuario():
 def editar_usuario(usuario_id):
     """Gestiona la edición de un usuario existente."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
         # Definir consultas seguras y portables
-        sql_get_user = "SELECT * FROM usuarios WHERE id = %s"
+        sql_get_user = "SELECT * FROM usuarios WHERE id = ?"
         sql_get_all_roles = "SELECT nombre FROM roles ORDER BY nombre"
-        sql_update_user = "UPDATE usuarios SET username = %s, nombre_completo = %s, email = %s, activo = %s WHERE id = %s"
-        sql_update_pass = "UPDATE usuarios SET password_hash = %s WHERE id = %s"
-        sql_get_user_roles = "SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = %s"
-        sql_delete_user_roles = "DELETE FROM usuario_roles WHERE usuario_id = %s"
-        sql_get_rol_id = "SELECT id FROM roles WHERE nombre = %s"
-        sql_insert_user_role = "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)"
+        sql_update_user = "UPDATE usuarios SET username = ?, nombre_completo = ?, email = ?, activo = ? WHERE id = ?"
+        sql_update_pass = "UPDATE usuarios SET password_hash = ? WHERE id = ?"
+        sql_get_user_roles = "SELECT r.nombre FROM roles r JOIN usuario_roles ur ON r.id = ur.rol_id WHERE ur.usuario_id = ?"
+        sql_delete_user_roles = "DELETE FROM usuario_roles WHERE usuario_id = ?"
+        sql_get_rol_id = "SELECT id FROM roles WHERE nombre = ?"
+        sql_insert_user_role = "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)"
 
         cursor.execute(sql_get_user, (usuario_id,))
         usuario = cursor.fetchone()
@@ -406,16 +405,16 @@ def toggle_activo(usuario_id):
         return redirect(url_for('admin.listar_usuarios'))
 
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
         cursor.execute(
-            'SELECT activo, username FROM usuarios WHERE id = %s', (usuario_id,))
+            'SELECT activo, username FROM usuarios WHERE id = ?', (usuario_id,))
         usuario = cursor.fetchone()
         if usuario:
             nuevo_estado = not usuario['activo']
             cursor.execute(
-                'UPDATE usuarios SET activo = %s WHERE id = %s',
+                'UPDATE usuarios SET activo = ? WHERE id = ?',
                 (nuevo_estado,
                  usuario_id))
             db.commit()
@@ -438,7 +437,7 @@ def toggle_activo(usuario_id):
 def eliminar_usuario(usuario_id):
     """Elimina un usuario (solo para administradores)."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
         if usuario_id == g.user['id']:
@@ -446,7 +445,7 @@ def eliminar_usuario(usuario_id):
             return redirect(url_for('admin.listar_usuarios'))
 
         # Comprobar si el usuario es administrador
-        sql_is_admin = "SELECT 1 FROM usuario_roles ur JOIN roles r ON ur.rol_id = r.id WHERE ur.usuario_id = %s AND r.nombre = 'ADMINISTRADOR'"
+        sql_is_admin = "SELECT 1 FROM usuario_roles ur JOIN roles r ON ur.rol_id = r.id WHERE ur.usuario_id = ? AND r.nombre = 'ADMINISTRADOR'"
         cursor.execute(sql_is_admin, (usuario_id,))
         is_admin_query = cursor.fetchone()
 
@@ -461,7 +460,7 @@ def eliminar_usuario(usuario_id):
                 return redirect(url_for('admin.listar_usuarios'))
 
         # Comprobar si está asignado a proyectos
-        sql_proyectos = "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = %s"
+        sql_proyectos = "SELECT COUNT(proyecto_id) as count FROM proyecto_usuarios WHERE usuario_id = ?"
         cursor.execute(sql_proyectos, (usuario_id,))
         proyectos_asignados = cursor.fetchone()
         if proyectos_asignados and proyectos_asignados['count'] > 0:
@@ -471,7 +470,7 @@ def eliminar_usuario(usuario_id):
             return redirect(url_for('admin.listar_usuarios'))
 
         # Comprobar si tiene conexiones activas
-        sql_conexiones = "SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = %s AND estado IN ('EN_PROCESO', 'REALIZADO')"
+        sql_conexiones = "SELECT COUNT(id) as count FROM conexiones WHERE realizador_id = ? AND estado IN ('EN_PROCESO', 'REALIZADO')"
         cursor.execute(sql_conexiones, (usuario_id,))
         conexiones_activas = cursor.fetchone()
         if conexiones_activas and conexiones_activas['count'] > 0:
@@ -481,11 +480,11 @@ def eliminar_usuario(usuario_id):
             return redirect(url_for('admin.listar_usuarios'))
 
         # Eliminar el usuario
-        sql_get_user = 'SELECT username FROM usuarios WHERE id = %s'
+        sql_get_user = 'SELECT username FROM usuarios WHERE id = ?'
         cursor.execute(sql_get_user, (usuario_id,))
         usuario = cursor.fetchone()
         if usuario:
-            sql_delete_user = 'DELETE FROM usuarios WHERE id = %s'
+            sql_delete_user = 'DELETE FROM usuarios WHERE id = ?'
             cursor.execute(sql_delete_user, (usuario_id,))
             db.commit()
             log_action('ELIMINAR_USUARIO', g.user['id'], 'usuarios',
@@ -506,10 +505,10 @@ def eliminar_usuario(usuario_id):
 def gestionar_permisos_proyecto(proyecto_id):
     """Gestiona qué usuarios tienen acceso a un proyecto específico."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
-        sql_get_proyecto = 'SELECT * FROM proyectos WHERE id = %s'
+        sql_get_proyecto = 'SELECT * FROM proyectos WHERE id = ?'
         cursor.execute(sql_get_proyecto, (proyecto_id,))
         proyecto = cursor.fetchone()
         if not proyecto:
@@ -520,16 +519,16 @@ def gestionar_permisos_proyecto(proyecto_id):
         if form.validate_on_submit():
             usuarios_asignados = request.form.getlist('usuarios_asignados')
 
-            sql_get_assigned = 'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = %s'
+            sql_get_assigned = 'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?'
             cursor.execute(sql_get_assigned, (proyecto_id,))
             current_assigned_users_ids = {
                 row['usuario_id'] for row in cursor.fetchall()}
             new_assigned_users_ids = {int(uid) for uid in usuarios_asignados}
 
-            sql_delete_perm = 'DELETE FROM proyecto_usuarios WHERE proyecto_id = %s'
+            sql_delete_perm = 'DELETE FROM proyecto_usuarios WHERE proyecto_id = ?'
             cursor.execute(sql_delete_perm, (proyecto_id,))
 
-            sql_insert_perm = 'INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)'
+            sql_insert_perm = 'INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)'
             for user_id in usuarios_asignados:
                 cursor.execute(sql_insert_perm, (proyecto_id, int(user_id)))
             db.commit()
@@ -552,7 +551,7 @@ def gestionar_permisos_proyecto(proyecto_id):
         cursor.execute(sql_get_all_users)
         todos_usuarios = cursor.fetchall()
 
-        sql_get_access = 'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = %s'
+        sql_get_access = 'SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?'
         cursor.execute(sql_get_access, (proyecto_id,))
         usuarios_con_acceso = {row['usuario_id']
                                for row in cursor.fetchall()}
@@ -576,7 +575,7 @@ def gestionar_alias():
     """Gestiona la creación y listado de alias para perfiles."""
     form = AliasForm()
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
         if form.validate_on_submit():
@@ -584,17 +583,17 @@ def gestionar_alias():
             alias = form.alias.data
             norma = form.norma.data
 
-            sql_check = 'SELECT id FROM alias_perfiles WHERE nombre_perfil = %s OR alias = %s'
+            sql_check = 'SELECT id FROM alias_perfiles WHERE nombre_perfil = ? OR alias = ?'
             cursor.execute(sql_check, (nombre_perfil, alias))
             existe = cursor.fetchone()
 
             if existe:
                 flash('El nombre del perfil o el alias ya existen.', 'danger')
             else:
-                sql_insert = 'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (%s, %s, %s) RETURNING id'
+                sql_insert = 'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)'
                 cursor.execute(sql_insert, (nombre_perfil, alias, norma))
 
-                new_alias_id = cursor.fetchone()['id']
+                new_alias_id = cursor.lastrowid
                 db.commit()
                 log_action(
                     'CREAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', new_alias_id,
@@ -624,14 +623,14 @@ def editar_alias(alias_id):
     alias = request.form.get('alias')
     norma = request.form.get('norma')
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
-        sql_get_old = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = %s'
+        sql_get_old = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = ?'
         cursor.execute(sql_get_old, (alias_id,))
         old_alias_data = cursor.fetchone()
 
-        sql_check = 'SELECT id FROM alias_perfiles WHERE (nombre_perfil = %s OR alias = %s) AND id != %s'
+        sql_check = 'SELECT id FROM alias_perfiles WHERE (nombre_perfil = ? OR alias = ?) AND id != ?'
         cursor.execute(sql_check, (nombre_perfil, alias, alias_id))
         existe = cursor.fetchone()
 
@@ -640,7 +639,7 @@ def editar_alias(alias_id):
                 'El nombre del perfil o el alias ya están en uso por otro registro.',
                 'danger')
         else:
-            sql_update = 'UPDATE alias_perfiles SET nombre_perfil = %s, alias = %s, norma = %s WHERE id = %s'
+            sql_update = 'UPDATE alias_perfiles SET nombre_perfil = ?, alias = ?, norma = ? WHERE id = ?'
             cursor.execute(sql_update, (nombre_perfil, alias, norma, alias_id))
             db.commit()
 
@@ -663,15 +662,15 @@ def editar_alias(alias_id):
 def eliminar_alias(alias_id):
     """Elimina un alias de perfil existente."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     try:
-        sql_get = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = %s'
+        sql_get = 'SELECT nombre_perfil, alias, norma FROM alias_perfiles WHERE id = ?'
         cursor.execute(sql_get, (alias_id,))
         alias_data = cursor.fetchone()
 
         if alias_data:
-            sql_delete = 'DELETE FROM alias_perfiles WHERE id = %s'
+            sql_delete = 'DELETE FROM alias_perfiles WHERE id = ?'
             cursor.execute(sql_delete, (alias_id,))
             db.commit()
             log_action('ELIMINAR_ALIAS_PERFIL', g.user['id'], 'alias_perfiles', alias_id,
@@ -694,7 +693,7 @@ def importar_alias():
     """
     if request.method == 'POST':
         db = get_db()
-        cursor = db.cursor(cursor_factory=DictCursor)
+        cursor = db.cursor()
 
         try:
             if 'archivo_alias' not in request.files or not request.files['archivo_alias'].filename:
@@ -727,9 +726,9 @@ def importar_alias():
                 return redirect(request.url)
 
             # Definir SQL fuera del bucle
-            sql_check = 'SELECT id FROM alias_perfiles WHERE nombre_perfil = %s'
-            sql_update = 'UPDATE alias_perfiles SET alias = %s, norma = %s WHERE id = %s'
-            sql_insert = 'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (%s, %s, %s)'
+            sql_check = 'SELECT id FROM alias_perfiles WHERE nombre_perfil = ?'
+            sql_update = 'UPDATE alias_perfiles SET alias = ?, norma = ? WHERE id = ?'
+            sql_insert = 'INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)'
 
             for index, row in df.iterrows():
                 try:
@@ -797,7 +796,7 @@ def importar_alias():
 def eficiencia():
     """Calcula y muestra métricas de rendimiento y KPIs para el proceso de conexiones."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     cursor.execute("""
         SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
         FROM historial_estados h1
@@ -953,7 +952,7 @@ def clear_logs():
 def ver_auditoria():
     """Muestra el historial de auditoría de acciones en el sistema."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     page = request.args.get('page', 1, type=int)
     per_page = current_app.config['PER_PAGE']
     offset = (page - 1) * per_page
@@ -966,15 +965,15 @@ def ver_auditoria():
     params = []
 
     if filtro_usuario_id:
-        query += " AND a.usuario_id = %s"
-        count_query += " AND a.usuario_id = %s"
+        query += " AND a.usuario_id = ?"
+        count_query += " AND a.usuario_id = ?"
         params.append(filtro_usuario_id)
     if filtro_accion:
-        query += " AND a.accion = %s"
-        count_query += " AND a.accion = %s"
+        query += " AND a.accion = ?"
+        count_query += " AND a.accion = ?"
         params.append(filtro_accion)
 
-    query += " ORDER BY a.fecha DESC LIMIT %s OFFSET %s"
+    query += " ORDER BY a.fecha DESC LIMIT ? OFFSET ?"
 
     params_count = params[:]
 
@@ -1112,7 +1111,7 @@ def reporte_computos():
     form = ComputosReportForm(form_data)
 
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     cursor.execute(
         'SELECT id, nombre FROM proyectos ORDER BY nombre')
     proyectos = cursor.fetchall()
@@ -1128,13 +1127,13 @@ def reporte_computos():
         query = "SELECT c.detalles_json, p.nombre as proyecto_nombre FROM conexiones c JOIN proyectos p ON c.proyecto_id = p.id WHERE c.detalles_json IS NOT NULL AND c.detalles_json != ''"
         params = []
         if proyecto_id != 0:
-            query += " AND c.proyecto_id = %s"
+            query += " AND c.proyecto_id = ?"
             params.append(proyecto_id)
         if fecha_inicio:
-            query += " AND date(c.fecha_creacion) >= %s"
+            query += " AND date(c.fecha_creacion) >= ?"
             params.append(fecha_inicio.strftime('%Y-%m-%d'))
         if fecha_fin:
-            query += " AND date(c.fecha_creacion) <= %s"
+            query += " AND date(c.fecha_creacion) <= ?"
             params.append(fecha_fin.strftime('%Y-%m-%d'))
 
         cursor.execute(query, tuple(params))
@@ -1199,7 +1198,7 @@ def reporte_computos():
         proyecto_nombre_filtro = "Todos los Proyectos"
         if proyecto_id != 0:
             cursor.execute(
-                'SELECT nombre FROM proyectos WHERE id = %s',
+                'SELECT nombre FROM proyectos WHERE id = ?',
                 (proyecto_id,
                  ))
             p = cursor.fetchone()
@@ -1251,7 +1250,7 @@ def reporte_computos():
 def listar_reportes():
     """Página para la gestión de reportes."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     cursor.execute(
         "SELECT r.*, u.nombre_completo as creador_nombre FROM reportes r JOIN usuarios u ON r.creador_id = u.id ORDER BY r.nombre")
     reportes = cursor.fetchall()
@@ -1272,7 +1271,7 @@ def nuevo_reporte():
     """Gestiona la creación de un nuevo reporte personalizado."""
     form = ReportForm()
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     cursor.execute(
         'SELECT id, nombre FROM proyectos ORDER BY nombre')
@@ -1300,7 +1299,7 @@ def nuevo_reporte():
         filtros_json = json.dumps(filtros)
 
         cursor.execute(
-            "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (form.nombre.data,
              form.descripcion.data,
              g.user['id'],
@@ -1308,7 +1307,7 @@ def nuevo_reporte():
                 form.programado.data,
                 form.frecuencia.data,
                 form.destinatarios.data))
-        new_report_id = cursor.fetchone()['id']
+        new_report_id = cursor.lastrowid
         db.commit()
 
         if form.programado.data:
@@ -1355,9 +1354,9 @@ def editar_reporte(reporte_id):
     Gestiona la edición de un reporte existente.
     """
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     cursor.execute(
-        'SELECT * FROM reportes WHERE id = %s',
+        'SELECT * FROM reportes WHERE id = ?',
         (reporte_id,
          ))
     reporte = cursor.fetchone()
@@ -1413,7 +1412,7 @@ def editar_reporte(reporte_id):
         filtros_json = json.dumps(filtros)
 
         cursor.execute(
-            "UPDATE reportes SET nombre = %s, descripcion = %s, filtros = %s, programado = %s, frecuencia = %s, destinatarios = %s WHERE id = %s",
+            "UPDATE reportes SET nombre = ?, descripcion = ?, filtros = ?, programado = ?, frecuencia = ?, destinatarios = ? WHERE id = ?",
             (form.nombre.data,
              form.descripcion.data,
              filtros_json,
@@ -1474,9 +1473,9 @@ def editar_reporte(reporte_id):
 def eliminar_reporte(reporte_id):
     """Elimina un reporte guardado."""
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     cursor.execute(
-        'SELECT * FROM reportes WHERE id = %s',
+        'SELECT * FROM reportes WHERE id = ?',
         (reporte_id,
          ))
     reporte = cursor.fetchone()
@@ -1491,7 +1490,7 @@ def eliminar_reporte(reporte_id):
                 current_app.logger.error(
                     f"Error al desprogramar el job '{job_id}': {e}", exc_info=True)
 
-        cursor.execute('DELETE FROM reportes WHERE id = %s', (reporte_id,))
+        cursor.execute('DELETE FROM reportes WHERE id = ?', (reporte_id,))
         db.commit()
         log_action('ELIMINAR_REPORTE', g.user['id'], 'reportes', reporte_id,
                    f"El reporte '{reporte['nombre']}' ha sido eliminado.")
@@ -1511,9 +1510,9 @@ def ejecutar_reporte(reporte_id):
     y lo envía al navegador para su descarga.
     """
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
     cursor.execute(
-        'SELECT * FROM reportes WHERE id = %s',
+        'SELECT * FROM reportes WHERE id = ?',
         (reporte_id,
          ))
     reporte = cursor.fetchone()
@@ -1544,7 +1543,7 @@ def configuracion():
     """Página para la configuración del sistema."""
     form = ConfigurationForm()
     db = get_db()
-    cursor = db.cursor(cursor_factory=DictCursor)
+    cursor = db.cursor()
 
     if form.validate_on_submit():
         cursor.execute(
@@ -1555,10 +1554,10 @@ def configuracion():
         old_maintenance = cursor.fetchone()
 
         cursor.execute(
-            "INSERT INTO configuracion (clave, valor) VALUES (%s, %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", ('PER_PAGE', str(
+            "INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor", ('PER_PAGE', str(
                 form.per_page.data)))
         cursor.execute(
-            "INSERT INTO configuracion (clave, valor) VALUES (%s, %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor",
+            "INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor",
             ('MAINTENANCE_MODE',
              '1' if form.maintenance_mode.data else '0'))
         db.commit()

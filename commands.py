@@ -16,7 +16,7 @@ def crear_admin_command(username, password, email, nombre_completo):
     cursor = db.cursor()
     try:
         # Verificar si el usuario o el email ya existen
-        sql_check_user = "SELECT id FROM usuarios WHERE username = %s OR email = %s"
+        sql_check_user = "SELECT id FROM usuarios WHERE username = ? OR email = ?"
         cursor.execute(sql_check_user, (username, email))
         if cursor.fetchone():
             click.echo(f"Error: El usuario '{username}' o el email '{email}' ya existen.")
@@ -35,16 +35,16 @@ def crear_admin_command(username, password, email, nombre_completo):
         password_hash = generate_password_hash(password)
         sql_insert_user = """
             INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id
+            VALUES (?, ?, ?, ?, ?)
         """
         params_insert_user = (username, nombre_completo, email, password_hash, True)
         cursor.execute(sql_insert_user, params_insert_user)
 
         # Obtener el ID del usuario recién creado
-        new_user_id = cursor.fetchone()['id']
+        new_user_id = cursor.lastrowid
 
         # Asignar el rol de administrador al nuevo usuario
-        sql_insert_role = "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)"
+        sql_insert_role = "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)"
         cursor.execute(sql_insert_role, (new_user_id, admin_rol_id))
         db.commit()
         click.echo(f"Usuario administrador '{username}' creado exitosamente.")

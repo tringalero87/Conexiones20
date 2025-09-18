@@ -5,7 +5,7 @@ from datetime import datetime
 from flask import Flask, g, session, render_template, current_app, flash, redirect, url_for
 from dotenv import load_dotenv
 import json
-import psycopg2
+import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 import db
@@ -32,6 +32,7 @@ def create_app(test_config=None):
         SECRET_KEY=os.environ.get(
             'SECRET_KEY',
             'un-secreto-muy-dificil-de-adivinar-en-desarrollo'),
+        DATABASE_URL=f"sqlite:///{os.path.join(app.instance_path, 'heptaconexiones.db')}",
         UPLOAD_FOLDER=os.path.join(
             app.root_path,
             'uploads'),
@@ -61,7 +62,7 @@ def create_app(test_config=None):
                 os.environ.get('MAIL_USERNAME')),
             SCHEDULER_JOBSTORES={
                 'default': SQLAlchemyJobStore(
-                    url=os.environ.get('DATABASE_URL'))},
+                    url=app.config['DATABASE_URL'])},
             SCHEDULER_JOB_DEFAULTS={
                 'coalesce': True,
                 'max_instances': 1},
@@ -73,10 +74,8 @@ def create_app(test_config=None):
         # Cargar configuración de prueba
         app.config.from_mapping(test_config)
 
-        # Forzar el uso de la base de datos de prueba de PostgreSQL
-        test_db_url = os.environ.get('TEST_DATABASE_URL')
-        if not test_db_url:
-            raise RuntimeError("TEST_DATABASE_URL no está configurada. No se pueden ejecutar las pruebas.")
+        # Forzar el uso de la base de datos de prueba de SQLite
+        test_db_url = os.environ.get('TEST_DATABASE_URL', f"sqlite:///{os.path.join(app.instance_path, 'test.db')}")
 
         app.config.update(
             DATABASE_URL=test_db_url,
@@ -126,16 +125,15 @@ def create_app(test_config=None):
             if 'user_id' in session:
                 cursor = db_conn.cursor()
 
-                # Estandarizar a %s ya que las pruebas correrán sobre PostgreSQL
-                sql_user = "SELECT * FROM usuarios WHERE id = %s"
+                sql_user = "SELECT * FROM usuarios WHERE id = ?"
                 sql_roles = """
                     SELECT r.nombre FROM roles r
                     JOIN usuario_roles ur ON r.id = ur.rol_id
-                    WHERE ur.usuario_id = %s
+                    WHERE ur.usuario_id = ?
                 """
                 sql_notif = """
                     SELECT id, mensaje, url, fecha_creacion FROM notificaciones
-                    WHERE usuario_id = %s AND leida = 0 ORDER BY fecha_creacion DESC
+                    WHERE usuario_id = ? AND leida = 0 ORDER BY fecha_creacion DESC
                 """
 
                 # Obtener datos del usuario
@@ -166,13 +164,13 @@ def create_app(test_config=None):
                     session.clear()
 
                 cursor.close()
-        except psycopg2.Error as e:
-            if 'undefined_table' in str(e):
+        except sqlite3.Error as e:
+            if 'no such table' in str(e):
                 current_app.logger.warning(
                     "La base de datos no está inicializada. Ejecute 'flask init-db'.")
             else:
                 current_app.logger.error(
-                    f"Error operacional de base de datos: {e}")
+                    f"Error de base de datos: {e}")
 
     @app.context_processor
     def inject_global_vars():

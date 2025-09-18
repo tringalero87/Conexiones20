@@ -71,9 +71,15 @@ def test_prevent_last_admin_deletion(client, app, auth):
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
-        # 1. Ensure a clean state with only one administrator
-        # We delete all users except the one with id=1, who is the 'admin' from conftest
-        cursor.execute("SELECT id FROM usuarios WHERE id != 1")
+
+        # 1. Get the ID of the admin user from the conftest
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        admin_user_row = cursor.fetchone()
+        assert admin_user_row is not None, "Admin user from conftest not found"
+        admin_id = admin_user_row['id']
+
+        # 2. Ensure a clean state with only that one administrator
+        cursor.execute("SELECT id FROM usuarios WHERE id != ?", (admin_id,))
         other_users = cursor.fetchall()
         for user in other_users:
             cursor.execute("DELETE FROM usuario_roles WHERE usuario_id = ?", (user['id'],))
@@ -81,13 +87,12 @@ def test_prevent_last_admin_deletion(client, app, auth):
 
         cursor.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'")
         admin_role_id = cursor.fetchone()['id']
-        # Ensure only user 1 is an admin
-        cursor.execute("DELETE FROM usuario_roles WHERE rol_id = ? AND usuario_id != 1", (admin_role_id,))
+        # Ensure only our target user is an admin
+        cursor.execute("DELETE FROM usuario_roles WHERE rol_id = ? AND usuario_id != ?", (admin_role_id, admin_id))
         db.commit()
 
-        # 2. Get the ID of the last admin
-        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
-        last_admin_id = cursor.fetchone()['id']
+        # Re-fetch the last admin's ID to be sure
+        last_admin_id = admin_id
 
         # 3. Verify there is indeed only one admin
         cursor.execute("SELECT COUNT(usuario_id) as count FROM usuario_roles WHERE rol_id = ?", (admin_role_id,))

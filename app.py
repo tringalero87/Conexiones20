@@ -74,8 +74,10 @@ def create_app(test_config=None):
         # Cargar configuración de prueba
         app.config.from_mapping(test_config)
 
-        # Forzar el uso de la base de datos de prueba de SQLite
-        test_db_url = os.environ.get('TEST_DATABASE_URL', f"sqlite:///{os.path.join(app.instance_path, 'test.db')}")
+        # Forzar el uso de la base de datos de prueba de SQLite.
+        # Se prioriza la URL de `test_config` para evitar que variables de entorno
+        # interfieran con las pruebas.
+        test_db_url = app.config['DATABASE_URL']
 
         app.config.update(
             DATABASE_URL=test_db_url,
@@ -90,6 +92,14 @@ def create_app(test_config=None):
             MAIL_SUPPRESS_SEND=True,
             TESTING=True,
         )
+
+    # -- Validación estricta de la base de datos --
+    # Asegurarse de que la aplicación solo pueda usar SQLite.
+    db_url = app.config.get('DATABASE_URL')
+    if not db_url or not db_url.startswith('sqlite:///'):
+        raise ValueError("Error de configuración: La aplicación está diseñada para funcionar exclusivamente con SQLite. "
+                         "Asegúrese de que la variable de entorno DATABASE_URL o la configuración "
+                         "por defecto apunte a una base de datos SQLite (ej: 'sqlite:///path/to/database.db').")
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)

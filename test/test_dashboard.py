@@ -13,48 +13,48 @@ def test_dashboard_approver_isolation(client, app, auth):
     # Create two projects
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto A', 'Desc A') RETURNING id")
-            project_a_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto B', 'Desc B') RETURNING id")
-            project_b_id = cursor.fetchone()['id']
-            db.commit()
+        cursor = db.cursor()
+        cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)", ('Proyecto A', 'Desc A'))
+        project_a_id = cursor.lastrowid
+        cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)", ('Proyecto B', 'Desc B'))
+        project_b_id = cursor.lastrowid
+        db.commit()
 
     # Create two approvers and assign them to different projects
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # Approver A for Project A
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                       ('approver_a', generate_password_hash('password'), 'Approver A', 'approver_a@test.com', 1))
-            approver_a_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (approver_a_id,))
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (project_a_id, approver_a_id))
+        cursor = db.cursor()
+        # Approver A for Project A
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                   ('approver_a', generate_password_hash('password'), 'Approver A', 'approver_a@test.com', 1))
+        approver_a_id = cursor.lastrowid
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (approver_a_id,))
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_a_id, approver_a_id))
 
-            # Approver B for Project B
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                       ('approver_b', generate_password_hash('password'), 'Approver B', 'approver_b@test.com', 1))
-            approver_b_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (approver_b_id,))
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (project_b_id, approver_b_id))
+        # Approver B for Project B
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                   ('approver_b', generate_password_hash('password'), 'Approver B', 'approver_b@test.com', 1))
+        approver_b_id = cursor.lastrowid
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (approver_b_id,))
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_b_id, approver_b_id))
 
-            # Create a requester
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                       ('requester', generate_password_hash('password'), 'Requester', 'requester@test.com', 1))
-            requester_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, (SELECT id FROM roles WHERE nombre = 'SOLICITANTE'))", (requester_id,))
+        # Create a requester
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                   ('requester', generate_password_hash('password'), 'Requester', 'requester@test.com', 1))
+        requester_id = cursor.lastrowid
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'SOLICITANTE'))", (requester_id,))
 
 
-            # Create one connection in 'REALIZADO' state for each project
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES (%s, %s, %s, 'REALIZADO', 'Test', 'Test', 'Test')",
-                ('PROJ-A-001', project_a_id, requester_id)
-            )
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES (%s, %s, %s, 'REALIZADO', 'Test', 'Test', 'Test')",
-                ('PROJ-B-001', project_b_id, requester_id)
-            )
-            db.commit()
+        # Create one connection in 'REALIZADO' state for each project
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES (?, ?, ?, 'REALIZADO', 'Test', 'Test', 'Test')",
+            ('PROJ-A-001', project_a_id, requester_id)
+        )
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES (?, ?, ?, 'REALIZADO', 'Test', 'Test', 'Test')",
+            ('PROJ-B-001', project_b_id, requester_id)
+        )
+        db.commit()
 
     auth.logout()
 
@@ -92,53 +92,53 @@ def multi_role_user(app):
     """Fixture to create a user with multiple roles for testing dashboard summaries."""
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # Create user with multiple roles
-            cursor.execute(
-                "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                ('multi_role', generate_password_hash('password'), 'Multi Role User', 'multi@test.com', 1)
-            )
-            user_id = cursor.fetchone()['id']
+        cursor = db.cursor()
+        # Create user with multiple roles
+        cursor.execute(
+            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+            ('multi_role', generate_password_hash('password'), 'Multi Role User', 'multi@test.com', 1)
+        )
+        user_id = cursor.lastrowid
 
-            roles = ['SOLICITANTE', 'REALIZADOR', 'APROBADOR']
-            for role_name in roles:
-                cursor.execute("SELECT id FROM roles WHERE nombre = %s", (role_name,))
-                role_id = cursor.fetchone()['id']
-                cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (user_id, role_id))
+        roles = ['SOLICITANTE', 'REALIZADOR', 'APROBADOR']
+        for role_name in roles:
+            cursor.execute("SELECT id FROM roles WHERE nombre = ?", (role_name,))
+            role_id = cursor.fetchone()['id']
+            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (user_id, role_id))
 
-            # Create a project and assign user to it
-            cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto Multi', 'Desc Multi') RETURNING id")
-            project_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (project_id, user_id))
+        # Create a project and assign user to it
+        cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)", ('Proyecto Multi', 'Desc Multi'))
+        project_id = cursor.lastrowid
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_id, user_id))
 
-            # Create test connections for this user
-            # 1. Created by user
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES (%s, %s, %s, 'SOLICITADO', 'T', 'S', 'T')",
-                ('MULTI-001', project_id, user_id)
-            )
-            # 2. In process by user
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, estado, tipo, subtipo, tipologia) VALUES (%s, %s, %s, %s, 'EN_PROCESO', 'T', 'S', 'T')",
-                ('MULTI-002', project_id, user_id, user_id)
-            )
-            # 3. Approved by user
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, aprobador_id, estado, tipo, subtipo, tipologia) VALUES (%s, %s, %s, %s, %s, 'APROBADO', 'T', 'S', 'T')",
-                ('MULTI-003', project_id, user_id, user_id, user_id)
-            )
-            # 4. Pending approval from this user (as an approver)
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, estado, tipo, subtipo, tipologia) VALUES (%s, %s, %s, %s, 'REALIZADO', 'T', 'S', 'T')",
-                ('MULTI-004', project_id, 1, 1) # some other user created it
-            )
-            # 5. Realizado by user in last 30 days
-            cursor.execute(
-                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, estado, tipo, subtipo, tipologia, fecha_modificacion) VALUES (%s, %s, %s, %s, 'REALIZADO', 'T', 'S', 'T', %s)",
-                ('MULTI-005', project_id, 1, user_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            )
-            db.commit()
-            return user_id
+        # Create test connections for this user
+        # 1. Created by user
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES (?, ?, ?, 'SOLICITADO', 'T', 'S', 'T')",
+            ('MULTI-001', project_id, user_id)
+        )
+        # 2. In process by user
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, estado, tipo, subtipo, tipologia) VALUES (?, ?, ?, ?, 'EN_PROCESO', 'T', 'S', 'T')",
+            ('MULTI-002', project_id, user_id, user_id)
+        )
+        # 3. Approved by user
+        cursor.execute(
+                "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, aprobador_id, estado, tipo, subtipo, tipologia) VALUES (?, ?, ?, ?, ?, 'APROBADO', 'T', 'S', 'T')",
+            ('MULTI-003', project_id, user_id, user_id, user_id)
+        )
+        # 4. Pending approval from this user (as an approver)
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, estado, tipo, subtipo, tipologia) VALUES (?, ?, ?, ?, 'REALIZADO', 'T', 'S', 'T')",
+            ('MULTI-004', project_id, 1, 1) # some other user created it
+        )
+        # 5. Realizado by user in last 30 days
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, realizador_id, estado, tipo, subtipo, tipologia, fecha_modificacion) VALUES (?, ?, ?, ?, 'REALIZADO', 'T', 'S', 'T', ?)",
+            ('MULTI-005', project_id, 1, user_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        )
+        db.commit()
+        return user_id
 
 def test_dashboard_summary_kpis_for_multi_role_user(client, auth, multi_role_user):
     """
@@ -179,15 +179,15 @@ def test_dashboard_admin_kpis(client, app, auth):
     # Create some data
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
-            admin_id = cursor.fetchone()['id']
-            # FIX: Use the project created in the test fixture
-            cursor.execute("SELECT id FROM proyectos WHERE nombre = 'Proyecto Test'")
-            project_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES ('ADMIN-001', %s, %s, 'APROBADO', 'T', 'S', 'T')", (project_id, admin_id))
-            cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES ('ADMIN-002', %s, %s, 'EN_PROCESO', 'T', 'S', 'T')", (project_id, admin_id))
-            db.commit()
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        admin_id = cursor.fetchone()['id']
+        # FIX: Use the project created in the test fixture
+        cursor.execute("SELECT id FROM proyectos WHERE nombre = 'Proyecto Test'")
+        project_id = cursor.fetchone()['id']
+        cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES ('ADMIN-001', ?, ?, 'APROBADO', 'T', 'S', 'T')", (project_id, admin_id))
+        cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, solicitante_id, estado, tipo, subtipo, tipologia) VALUES ('ADMIN-002', ?, ?, 'EN_PROCESO', 'T', 'S', 'T')", (project_id, admin_id))
+        db.commit()
 
     auth.login('admin', 'password')
     response = client.get('/dashboard')

@@ -2,6 +2,7 @@ import sqlite3
 import click
 from flask import current_app, g
 from flask.cli import with_appcontext
+from werkzeug.security import generate_password_hash
 import os
 
 def get_db():
@@ -42,6 +43,41 @@ def init_db():
     with current_app.open_resource('schema.sql') as f:
         # SQLite3's `executescript` puede manejar múltiples sentencias
         db.executescript(f.read().decode('utf8'))
+
+    # --- Creación del usuario administrador por defecto ---
+    cursor = db.cursor()
+
+    # Verificar si el usuario 'Admin' ya existe para evitar duplicados
+    cursor.execute("SELECT id FROM usuarios WHERE username = ?", ('Admin',))
+    if cursor.fetchone() is None:
+        # 1. Hashear la contraseña
+        password_hash = generate_password_hash('624BGHwsj*')
+
+        # 2. Insertar el nuevo usuario administrador
+        cursor.execute(
+            "INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
+            ('Admin', 'Admin', 'heptaconexiones@heptapro.com', password_hash, 1)
+        )
+        user_id = cursor.lastrowid
+
+        # 3. Obtener el ID del rol 'ADMINISTRADOR'
+        cursor.execute("SELECT id FROM roles WHERE nombre = ?", ('ADMINISTRADOR',))
+        role = cursor.fetchone()
+
+        if role:
+            admin_role_id = role['id']
+            # 4. Asignar el rol de administrador al nuevo usuario
+            cursor.execute(
+                "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)",
+                (user_id, admin_role_id)
+            )
+            click.echo("Usuario administrador por defecto 'Admin' creado.")
+        else:
+            click.echo("Advertencia: No se pudo encontrar el rol 'ADMINISTRADOR'. El usuario 'Admin' fue creado pero no tiene rol de administrador.")
+
+        # 5. Guardar los cambios
+        db.commit()
+
 
 @click.command('init-db')
 @with_appcontext

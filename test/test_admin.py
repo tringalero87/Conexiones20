@@ -317,3 +317,49 @@ def test_admin_cannot_delete_user_assigned_to_project(client, app, auth):
         cursor.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,))
         user = cursor.fetchone()
         assert user is None, "User should have been deleted after being unassigned from projects."
+
+def test_admin_cannot_delete_user_with_solicitudes(client, app, auth):
+    """
+    Tests that an admin cannot delete a user who has requested connections.
+    """
+    auth.login('admin', 'password')
+
+    with app.app_context():
+        db = get_db()
+        cursor = db.cursor()
+        # 1. Create a 'SOLICITANTE' user
+        solicitante_pass = generate_password_hash('password')
+        cursor.execute(
+            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+            ('solicitante_test', solicitante_pass, 'Solicitante Test', 'solicitante-deleter-test@test.com', 1)
+        )
+        solicitante_id = cursor.lastrowid
+        cursor.execute("SELECT id FROM roles WHERE nombre = 'SOLICITANTE'")
+        solicitante_role_id = cursor.fetchone()['id']
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (solicitante_id, solicitante_role_id))
+
+        # 2. Create a project
+        cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Test Project Solicitudes', 1))
+        proyecto_id = cursor.lastrowid
+
+        # 3. Create a connection requested by the 'SOLICITANTE'
+        cursor.execute(
+            """INSERT INTO conexiones
+               (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, estado, solicitante_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            ('TEST-SOL-001', proyecto_id, 'TIPO', 'SUBTIPO', 'TIPOLOGIA', 'SOLICITADO', solicitante_id)
+        )
+        db.commit()
+
+    # 4. Attempt to delete the user who has requested a connection
+    response = client.post(f'/admin/usuarios/{solicitante_id}/eliminar', follow_redirects=True)
+    assert response.status_code == 200
+    assert b'No se puede eliminar al usuario porque ha solicitado' in response.data
+    assert b'conexi\xc3\xb3n(es).' in response.data
+
+    # 5. Verify the user was NOT deleted
+    with app.app_context():
+        cursor = get_db().cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE id = ?", (solicitante_id,))
+        user = cursor.fetchone()
+        assert user is not None, "User with requested connections should not be deleted."

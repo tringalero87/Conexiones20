@@ -79,8 +79,7 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
                 resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
 
         if not has_error:
-            timestamp_expr = "CURRENT_TIMESTAMP"
-            sql = f'UPDATE conexiones SET detalles_json = ?, fecha_modificacion = {timestamp_expr} WHERE id = ?'
+            sql = 'UPDATE conexiones SET detalles_json = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?'
             params = (json.dumps(updated_detalles), conexion_id)
             cursor.execute(sql, params)
             db.commit()

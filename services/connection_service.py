@@ -142,22 +142,23 @@ def process_connection_state_transition(db, conexion_id, new_status_form, user_i
 
     cursor = db.cursor()
     try:
-        timestamp_expr = "CURRENT_TIMESTAMP"
-        sql_update = f"UPDATE conexiones SET estado = ?, fecha_modificacion = {timestamp_expr}"
+        sql_update_parts = ["estado = ?", "fecha_modificacion = CURRENT_TIMESTAMP"]
         params = [new_db_state]
 
         if new_db_state == 'EN_PROCESO' and audit_action == 'TOMAR_CONEXION':
-            sql_update += ", realizador_id = ?"
+            sql_update_parts.append("realizador_id = ?")
             params.append(user_id)
         elif new_db_state == 'APROBADO':
-            sql_update += ", aprobador_id = ?"
+            sql_update_parts.append("aprobador_id = ?")
             params.append(user_id)
         elif audit_action == 'RECHAZAR_CONEXION':
-            sql_update += ", detalles_rechazo = ?"
+            sql_update_parts.append("detalles_rechazo = ?")
             params.append(details)
 
-        sql_update += " WHERE id = ?"
+        # Construye la consulta de forma segura
+        sql_update = "UPDATE conexiones SET " + ", ".join(sql_update_parts) + " WHERE id = ?"
         params.append(conexion_id)
+
         cursor.execute(sql_update, tuple(params))
 
         sql_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (?, ?, ?, ?)"

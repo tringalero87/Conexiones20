@@ -6,8 +6,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from db import get_db, log_action
 from . import roles_required
 from forms import LoginForm, ProfileForm
+from dal.sqlite_dal import SQLiteDAL
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+dal = SQLiteDAL()
 
 @auth_bp.route('/login', methods=('GET', 'POST'))
 def login():
@@ -16,38 +18,27 @@ def login():
 
     form = LoginForm()
     if form.validate_on_submit():
-        db = get_db()
-        cursor = db.cursor()
         error = None
-        
-        try:
-            user_sql = 'SELECT * FROM usuarios WHERE username = ?'
-            cursor.execute(user_sql, (form.username.data,))
-            user = cursor.fetchone()
+        user = dal.get_user_by_username(form.username.data)
 
-            # Mitigación de enumeración de usuarios:
-            # Si el usuario no existe, se genera un hash falso y se compara.
-            # Esto asegura que el tiempo de procesamiento sea similar
-            # al de un usuario existente con contraseña incorrecta.
-            password_hash = user['password_hash'] if user else generate_password_hash("dummy_password_for_timing_attack_mitigation")
+        # Mitigación de enumeración de usuarios
+        password_hash_to_check = user['password_hash'] if user else generate_password_hash("dummy_password_for_timing_attack_mitigation")
 
-            if user is None or not user['activo'] or not check_password_hash(password_hash, form.password.data):
-                error = 'Nombre de usuario o contraseña incorrectos.'
+        if user is None or not user['activo'] or not check_password_hash(password_hash_to_check, form.password.data):
+            error = 'Nombre de usuario o contraseña incorrectos.'
 
-            if error is None and user:
-                session.clear()
-                session['user_id'] = user['id']
-                log_action('INICIAR_SESION', user['id'], 'usuarios', user['id'], f"Inicio de sesión exitoso para el usuario '{form.username.data}'.")
-                next_page = request.args.get('next')
-                return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
+        if error is None and user:
+            session.clear()
+            session['user_id'] = user['id']
+            log_action('INICIAR_SESION', user['id'], 'usuarios', user['id'], f"Inicio de sesión exitoso para el usuario '{form.username.data}'.")
+            next_page = request.args.get('next')
+            return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
 
-            flash(error, 'danger')
-            log_action('INTENTO_FALLIDO_SESION', None, 'usuarios', None, f"Intento de inicio de sesión fallido para el usuario '{form.username.data}'.")
-        finally:
-            cursor.close()
+        flash(error, 'danger')
+        # No registrar el nombre de usuario en intentos fallidos para mayor seguridad
+        log_action('INTENTO_FALLIDO_SESION', None, 'usuarios', None, f"Intento de inicio de sesión fallido desde IP: {request.remote_addr}.")
 
     return render_template('login.html', form=form, titulo="Iniciar Sesión")
-
 
 @auth_bp.route('/logout')
 def logout():
@@ -63,36 +54,29 @@ def logout():
 def perfil():
     form = ProfileForm()
     db = get_db()
-    cursor = db.cursor()
 
-    try:
-        if form.validate_on_submit():
-            # Iniciar transacción
+    if form.validate_on_submit():
+        try:
             changes = {}
-
             # Actualizar datos del usuario
-            sql_update_user = "UPDATE usuarios SET nombre_completo = ?, email = ? WHERE id = ?"
-            cursor.execute(sql_update_user, (form.nombre_completo.data, form.email.data, g.user['id']))
-            if form.nombre_completo.data != g.user['nombre_completo']: changes['nombre_completo'] = {'old': g.user['nombre_completo'], 'new': form.nombre_completo.data}
-            if form.email.data != g.user['email']: changes['email'] = {'old': g.user['email'], 'new': form.email.data}
+            if form.nombre_completo.data != g.user['nombre_completo'] or form.email.data != g.user['email']:
+                dal.update_user_profile(g.user['id'], form.nombre_completo.data, form.email.data)
+                if form.nombre_completo.data != g.user['nombre_completo']:
+                    changes['nombre_completo'] = {'old': g.user['nombre_completo'], 'new': form.nombre_completo.data}
+                if form.email.data != g.user['email']:
+                    changes['email'] = {'old': g.user['email'], 'new': form.email.data}
 
             # Actualizar contraseña si se proporcionó
             if form.new_password.data:
                 password_hash = generate_password_hash(form.new_password.data)
-                sql_update_pass = "UPDATE usuarios SET password_hash = ? WHERE id = ?"
-                cursor.execute(sql_update_pass, (password_hash, g.user['id']))
+                dal.update_user_password(g.user['id'], password_hash)
                 changes['password'] = 'changed'
 
             # Actualizar preferencias de notificación
-            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = ?"
-            cursor.execute(sql_get_prefs, (g.user['id'],))
-            user_prefs = cursor.fetchone()
+            user_prefs = dal.get_notification_preferences(g.user['id'])
             initial_email_notif_estado = user_prefs['email_notif_estado'] if user_prefs else True
-
-            sql_upsert_prefs = "INSERT INTO preferencias_notificaciones (usuario_id, email_notif_estado) VALUES (?, ?) ON CONFLICT (usuario_id) DO UPDATE SET email_notif_estado = excluded.email_notif_estado"
-            cursor.execute(sql_upsert_prefs, (g.user['id'], form.email_notif_estado.data))
-
             if initial_email_notif_estado != form.email_notif_estado.data:
+                dal.upsert_notification_preferences(g.user['id'], form.email_notif_estado.data)
                 changes['email_notif_estado'] = {'old': initial_email_notif_estado, 'new': form.email_notif_estado.data}
 
             db.commit()
@@ -101,17 +85,16 @@ def perfil():
                 log_action('ACTUALIZAR_PERFIL', g.user['id'], 'usuarios', g.user['id'], f"Perfil y preferencias actualizados. Cambios: {json.dumps(changes)}")
             flash('Perfil y preferencias actualizados con éxito.', 'success')
 
-            # No es necesario refrescar g.user aquí, se hará en la próxima solicitud
             return redirect(url_for('auth.perfil'))
+        except Exception as e:
+            db.rollback()
+            current_app.logger.error(f"Error al actualizar el perfil del usuario {g.user['id']}: {e}")
+            flash('Ocurrió un error al actualizar el perfil.', 'danger')
 
-        elif request.method == 'GET':
-            form.nombre_completo.data = g.user['nombre_completo']
-            form.email.data = g.user['email']
-            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = ?"
-            cursor.execute(sql_get_prefs, (g.user['id'],))
-            user_prefs = cursor.fetchone()
-            form.email_notif_estado.data = user_prefs['email_notif_estado'] if user_prefs else True
-    finally:
-        cursor.close()
+    elif request.method == 'GET':
+        form.nombre_completo.data = g.user['nombre_completo']
+        form.email.data = g.user['email']
+        user_prefs = dal.get_notification_preferences(g.user['id'])
+        form.email_notif_estado.data = user_prefs['email_notif_estado'] if user_prefs else True
 
     return render_template('perfil.html', titulo="Mi Perfil", form=form)

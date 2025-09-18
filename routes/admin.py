@@ -56,16 +56,31 @@ def _generate_report_data_and_file(reporte_id, app_context):
                 f"Error de JSON en filtros para reporte ID {reporte_id}.")
             return None, None, None, None
 
-        columnas_seleccionadas = filtros.get('columnas', [])
+        columnas_seleccionadas_input = filtros.get('columnas', [])
         output_format = filtros.get('output_format', 'csv')
 
-        if not columnas_seleccionadas:
-            current_app.logger.warning(
-                f"Reporte ID {reporte_id} no tiene columnas seleccionadas.")
+        if not columnas_seleccionadas_input:
+            current_app.logger.warning(f"Reporte ID {reporte_id} no tiene columnas seleccionadas.")
             return None, None, None, None
 
-        query_base = f"""SELECT {
-            ', '.join(columnas_seleccionadas)} FROM conexiones_view WHERE 1=1"""
+        # Lista blanca de columnas permitidas para la vista conexiones_view
+        allowed_columns = [
+            'id', 'codigo_conexion', 'proyecto_id', 'proyecto_nombre', 'tipo',
+            'subtipo', 'tipologia', 'descripcion', 'detalles_json', 'estado',
+            'solicitante_id', 'solicitante_nombre', 'realizador_id', 'realizador_nombre',
+            'aprobador_id', 'aprobador_nombre', 'fecha_creacion', 'fecha_modificacion',
+            'detalles_rechazo'
+        ]
+
+        # Filtrar las columnas seleccionadas para asegurar que solo se usen las permitidas
+        columnas_seleccionadas = [col for col in columnas_seleccionadas_input if col in allowed_columns]
+
+        if not columnas_seleccionadas:
+            current_app.logger.error(f"Reporte ID {reporte_id}: Ninguna de las columnas seleccionadas es válida.")
+            return None, None, None, None
+
+        # Construcción segura de la consulta
+        query_base = f"SELECT {', '.join(columnas_seleccionadas)} FROM conexiones_view WHERE 1=1"
         params = []
 
         if filtros.get('proyecto_id') and filtros['proyecto_id'] != 0:

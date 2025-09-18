@@ -44,7 +44,7 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
     cursor = db.cursor()
 
     try:
-        cursor.execute('SELECT * FROM conexiones WHERE id = %s', (conexion_id,))
+        cursor.execute('SELECT * FROM conexiones WHERE id = ?', (conexion_id,))
         conexion = cursor.fetchone()
 
         if not conexion:
@@ -80,7 +80,7 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
 
         if not has_error:
             timestamp_expr = "CURRENT_TIMESTAMP"
-            sql = f'UPDATE conexiones SET detalles_json = %s, fecha_modificacion = {timestamp_expr} WHERE id = %s'
+            sql = f'UPDATE conexiones SET detalles_json = ?, fecha_modificacion = {timestamp_expr} WHERE id = ?'
             params = (json.dumps(updated_detalles), conexion_id)
             cursor.execute(sql, params)
             db.commit()

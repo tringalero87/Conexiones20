@@ -39,7 +39,7 @@ def _get_conexion(conexion_id):
             LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
             LEFT JOIN usuarios real ON c.realizador_id = real.id
             LEFT JOIN usuarios aprob ON c.aprobador_id = aprob.id
-            WHERE c.id = %s
+            WHERE c.id = ?
         """
         cursor.execute(conexion_query, (conexion_id,))
         conexion = cursor.fetchone()
@@ -80,7 +80,7 @@ def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
     """Crea notificaciones y envía correos electrónicos a usuarios con roles específicos."""
     conexion = _get_conexion(conexion_id)
 
-    placeholders = ', '.join(['%s'] * len(roles_to_notify))
+    placeholders = ', '.join(['?'] * len(roles_to_notify))
     params = [conexion['proyecto_id']] + roles_to_notify
 
     query = f"""
@@ -90,7 +90,7 @@ def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
         JOIN usuario_roles ur ON u.id = ur.usuario_id
         JOIN roles r ON ur.rol_id = r.id
         LEFT JOIN preferencias_notificaciones pn ON u.id = pn.usuario_id
-        WHERE pu.proyecto_id = %s AND r.nombre IN ({placeholders}) AND u.activo = 1
+        WHERE pu.proyecto_id = ? AND r.nombre IN ({placeholders}) AND u.activo = 1
     """
 
     cursor = db.cursor()
@@ -98,7 +98,7 @@ def _notify_users(db, conexion_id, message, url_suffix, roles_to_notify):
         cursor.execute(query, params)
         users_to_notify = cursor.fetchall()
 
-        sql_insert = "INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES (%s, %s, %s, %s)"
+        sql_insert = "INSERT INTO notificaciones (usuario_id, mensaje, url, conexion_id) VALUES (?, ?, ?, ?)"
         for user in users_to_notify:
             if user['id'] != g.user['id']:
                 full_url = url_for('conexiones.detalle_conexion', conexion_id=conexion_id, _external=True) + url_suffix
@@ -144,24 +144,24 @@ def process_connection_state_transition(db, conexion_id, new_status_form, user_i
     cursor = db.cursor()
     try:
         timestamp_expr = "CURRENT_TIMESTAMP"
-        sql_update = f"UPDATE conexiones SET estado = %s, fecha_modificacion = {timestamp_expr}"
+        sql_update = f"UPDATE conexiones SET estado = ?, fecha_modificacion = {timestamp_expr}"
         params = [new_db_state]
 
         if new_db_state == 'EN_PROCESO' and audit_action == 'TOMAR_CONEXION':
-            sql_update += ", realizador_id = %s"
+            sql_update += ", realizador_id = ?"
             params.append(user_id)
         elif new_db_state == 'APROBADO':
-            sql_update += ", aprobador_id = %s"
+            sql_update += ", aprobador_id = ?"
             params.append(user_id)
         elif audit_action == 'RECHAZAR_CONEXION':
-            sql_update += ", detalles_rechazo = %s"
+            sql_update += ", detalles_rechazo = ?"
             params.append(details)
 
-        sql_update += " WHERE id = %s"
+        sql_update += " WHERE id = ?"
         params.append(conexion_id)
         cursor.execute(sql_update, tuple(params))
 
-        sql_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (%s, %s, %s, %s)"
+        sql_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (?, ?, ?, ?)"
         cursor.execute(sql_historial, (conexion_id, user_id, new_status_form, details))
         db.commit()
     except Exception as e:

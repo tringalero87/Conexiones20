@@ -110,6 +110,22 @@ def create_app(test_config=None):
     csrf.init_app(app)
     mail.init_app(app)
     db.init_app(app)
+
+    with app.app_context():
+        db_conn = db.get_db()
+        cursor = db_conn.cursor()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'")
+            if cursor.fetchone() is None:
+                app.logger.info("Base de datos no inicializada. Creando tablas...")
+                db.init_db()
+                app.logger.info("Base de datos inicializada correctamente.")
+        except Exception as e:
+            app.logger.error(f"Error al inicializar la base de datos: {e}")
+        finally:
+            # No es necesario cerrar el cursor aquí si get_db() gestiona el ciclo de vida
+            pass
+
     app.cli.add_command(crear_admin_command)
 
     scheduler = BackgroundScheduler(

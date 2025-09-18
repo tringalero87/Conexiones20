@@ -9,32 +9,30 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
     Gestiona la importación masiva de conexiones desde un archivo Excel.
     """
     db = get_db()
-    placeholder = '%s'
-
-    with db.cursor() as cursor:
-        cursor.execute(f'SELECT * FROM proyectos WHERE id = {placeholder}', (proyecto_id,))
-        proyecto = cursor.fetchone()
-    if not proyecto:
-        return 0, [], "El proyecto no existe."
+    cursor = db.cursor()
 
     try:
-        df = pd.read_excel(file, engine='openpyxl')
+        cursor.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,))
+        proyecto = cursor.fetchone()
+        if not proyecto:
+            return 0, [], "El proyecto no existe."
 
+        df = pd.read_excel(file, engine='openpyxl')
         required_cols = ['TIPO', 'SUBTIPO', 'TIPOLOGIA', 'PERFIL1']
         df.columns = [col.upper().strip() for col in df.columns]
+
         if not all(col in df.columns for col in required_cols):
             return 0, [], 'El archivo Excel no contiene todas las columnas requeridas (TIPO, SUBTIPO, TIPOLOGIA, PERFIL1).'
 
+        cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
+        aliases = cursor.fetchall()
+        alias_map_by_fullname = {row['nombre_perfil']: row['alias'] for row in aliases}
+
+        cursor.execute("SELECT codigo_conexion FROM conexiones")
+        existing_codes = {row['codigo_conexion'] for row in cursor.fetchall()}
+
         imported_count = 0
         error_rows = []
-
-        with db.cursor() as cursor:
-            cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
-            aliases = cursor.fetchall()
-            cursor.execute("SELECT codigo_conexion FROM conexiones")
-            existing_codes = set(row['codigo_conexion'] for row in cursor.fetchall())
-
-        alias_map_by_fullname = {row['nombre_perfil']: row['alias'] for row in aliases}
 
         for index, row in df.iterrows():
             try:
@@ -42,9 +40,10 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
                 subtipo = str(row.get('SUBTIPO')).upper().strip()
                 tipologia_nombre = str(row.get('TIPOLOGIA')).upper().strip()
                 perfil1_input = str(row.get('PERFIL1')).strip()
-                perfil2_input = str(row.get('PERFIL2')).strip() if 'PERFIL2' in df.columns else ''
-                descripcion_input = str(row.get('DESCRIPCION')).strip() if 'DESCRIPCION' in df.columns else None
-                if descripcion_input == 'nan': descripcion_input = None
+                perfil2_input = str(row.get('PERFIL2', '')).strip()
+                descripcion_input = str(row.get('DESCRIPCION', '')).strip()
+                if pd.isna(descripcion_input) or descripcion_input == 'nan':
+                    descripcion_input = None
 
                 if not all([tipo, subtipo, tipologia_nombre, perfil1_input]):
                     error_rows.append(f"Fila {index+2}: Faltan datos obligatorios (Tipo, Subtipo, Tipología, Perfil1).")
@@ -72,7 +71,7 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
                     perfiles_para_plantilla['p2'] = alias_map_by_fullname.get(perfil2_input, perfil2_input)
 
                 if num_perfiles_requeridos >= 3:
-                    perfil3_input = str(row.get('PERFIL3')).strip() if 'PERFIL3' in df.columns else ''
+                    perfil3_input = str(row.get('PERFIL3', '')).strip()
                     if not perfil3_input:
                         error_rows.append(f"Fila {index+2}: Se requiere Perfil 3 para esta tipología, pero no se proporcionó.")
                         continue
@@ -86,35 +85,39 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
                 while codigo_conexion_final in existing_codes:
                     contador += 1
                     codigo_conexion_final = f"{codigo_conexion_base}-{contador}"
-                existing_codes.add(codigo_conexion_final)
 
                 detalles_json = json.dumps(perfiles_para_detalles)
 
-                sql_insert_conexion = f"INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}) RETURNING id"
+                sql_insert_conexion = "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
                 params_conexion = (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion_input, detalles_json, user_id)
 
-                sql_insert_historial = f"INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES ({placeholder}, {placeholder}, {placeholder})"
+                cursor.execute(sql_insert_conexion, params_conexion)
+                new_conexion_id = cursor.fetchone()['id']
 
-                with db.cursor() as cursor:
-                    cursor.execute(sql_insert_conexion, params_conexion)
-                    new_conexion_id = cursor.fetchone()['id']
-                    cursor.execute(sql_insert_historial, (new_conexion_id, user_id, 'SOLICITADO'))
-                db.commit()
-                log_action('IMPORTAR_CONEXION', user_id, 'conexiones', new_conexion_id,
-                           f"Conexión '{codigo_conexion_final}' importada en proyecto '{proyecto['nombre']}'.")
+                sql_insert_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES (?, ?, ?)"
+                cursor.execute(sql_insert_historial, (new_conexion_id, user_id, 'SOLICITADO'))
+
+                existing_codes.add(codigo_conexion_final)
+                log_action('IMPORTAR_CONEXION', user_id, 'conexiones', new_conexion_id, f"Conexión '{codigo_conexion_final}' importada en proyecto '{proyecto['nombre']}'.")
                 imported_count += 1
 
             except Exception as row_e:
-                db.rollback()
                 error_rows.append(f"Fila {index+2}: Error al procesar - {row_e}")
-                current_app.logger.error(f"Error al importar fila {index+2}: {row_e}")
+                current_app.logger.error(f"Error al importar fila {index+2}: {row_e}", exc_info=True)
 
+        db.commit()
         return imported_count, error_rows, None
 
     except pd.errors.EmptyDataError:
+        db.rollback()
         return 0, [], 'El archivo Excel está vacío o no contiene datos válidos.'
     except pd.errors.ParserError as pe:
+        db.rollback()
         return 0, [], f'Error al analizar el archivo Excel. Asegúrate de que el formato sea correcto. Detalle: {pe}'
     except Exception as e:
-        current_app.logger.error(f"Ocurrió un error inesperado durante la importación: {e}")
+        db.rollback()
+        current_app.logger.error(f"Ocurrió un error inesperado durante la importación: {e}", exc_info=True)
         return 0, [], f"Ocurrió un error inesperado durante la importación: {e}"
+    finally:
+        if cursor:
+            cursor.close()

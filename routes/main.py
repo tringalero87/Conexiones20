@@ -39,9 +39,7 @@ def dashboard():
         'date_end', datetime.now().strftime('%Y-%m-%d'))
     filters = {'start': date_start_str, 'end': date_end_str}
 
-    date_func_30_days = "date('now', '-30 days')"
-
-    summary_query = f"""
+    summary_query = """
         SELECT
             SUM(CASE WHEN solicitante_id = ? THEN 1 ELSE 0 END) as total_conexiones_creadas,
             SUM(CASE WHEN solicitante_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END)
@@ -51,10 +49,10 @@ def dashboard():
             SUM(CASE WHEN realizador_id = ? AND estado = 'EN_PROCESO' THEN 1 ELSE 0 END)
                 as mis_tareas_en_proceso,
             SUM(CASE WHEN realizador_id = ? AND estado = 'REALIZADO'
-                AND fecha_modificacion >= {date_func_30_days} THEN 1 ELSE 0 END)
+                AND fecha_modificacion >= date('now', '-30 days') THEN 1 ELSE 0 END)
                 as mis_tareas_realizadas_ult_30d,
             SUM(CASE WHEN aprobador_id = ? AND estado = 'APROBADO'
-                AND fecha_modificacion >= {date_func_30_days} THEN 1 ELSE 0 END)
+                AND fecha_modificacion >= date('now', '-30 days') THEN 1 ELSE 0 END)
                 as aprobadas_por_mi_ult_30d
         FROM conexiones
         WHERE solicitante_id = ? OR realizador_id = ? OR aprobador_id = ?
@@ -118,13 +116,13 @@ def dashboard():
 
         params = (user_id, user_id, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S'))
 
-        sql = (
-            f"SELECT date(fecha_modificacion) as completion_date, COUNT(id) as total "
-            f"FROM conexiones WHERE ((realizador_id = ? AND estado = 'REALIZADO') "
-            f"OR (aprobador_id = ? AND estado = 'APROBADO')) "
-            f"AND fecha_modificacion >= ? "
-            f"GROUP BY completion_date ORDER BY completion_date"
-        )
+        sql = """
+            SELECT date(fecha_modificacion) as completion_date, COUNT(id) as total
+            FROM conexiones
+            WHERE ((realizador_id = ? AND estado = 'REALIZADO') OR (aprobador_id = ? AND estado = 'APROBADO'))
+            AND fecha_modificacion >= ?
+            GROUP BY completion_date ORDER BY completion_date
+        """
         cursor.execute(sql, params)
         completed_tasks_by_day = cursor.fetchall()
 

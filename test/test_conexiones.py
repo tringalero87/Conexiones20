@@ -323,3 +323,59 @@ def test_reporte_computos_shows_correct_data(client, app, auth):
     assert 'IPE-200' in response_data
     assert '2000' in response_data
     assert '44.8' in response_data # This should also fail
+
+
+def test_eliminar_archivo_con_path_traversal(client, app, auth, tmp_path):
+    """
+    Tests that an attempt to delete a file using path traversal is blocked.
+    """
+    # Create a sensitive file in the instance path, which is outside the upload folder
+    sensitive_file = tmp_path / "sensitive_file.txt"
+    sensitive_file.write_text("This should not be deleted.")
+
+    with app.app_context():
+        db = get_db()
+        cursor = db.cursor()
+
+        # Get admin user
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        admin_user_id = cursor.fetchone()['id']
+
+        # Create project and connection
+        cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Path Traversal Test', 'Desc')")
+        project_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id, estado) VALUES (?, ?, 'Test', 'Test', 'Test', ?, 'SOLICITADO')",
+            ('TRAVERSAL-TEST', project_id, admin_user_id)
+        )
+        connection_id = cursor.lastrowid
+
+        # Insert a malicious file record into the database
+        malicious_filename = f"../../{sensitive_file.name}"
+        cursor.execute(
+            "INSERT INTO archivos (conexion_id, usuario_id, tipo_archivo, nombre_archivo) VALUES (?, ?, ?, ?)",
+            (connection_id, admin_user_id, 'malicious', malicious_filename)
+        )
+        file_id = cursor.lastrowid
+        db.commit()
+
+    auth.login('admin', 'password')
+
+    # Attempt to delete the file via the malicious record
+    response = client.post(f'/conexiones/{connection_id}/eliminar_archivo/{file_id}', follow_redirects=False)
+    assert response.status_code == 302 # Should redirect
+
+    # Check that the flash message indicates success (for deleting the DB record)
+    with client.session_transaction() as session:
+        flashes = [msg for cat, msg in session['_flashes']]
+        assert 'Archivo eliminado con éxito.' in flashes
+
+    # CRITICAL: Verify that the sensitive file still exists
+    assert sensitive_file.exists()
+
+    # Verify the malicious record was deleted from the database
+    with app.app_context():
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM archivos WHERE id = ?", (file_id,))
+        assert cursor.fetchone() is None

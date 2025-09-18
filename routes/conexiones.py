@@ -563,9 +563,13 @@ def eliminar_archivo(conexion_id, archivo_id):
             cursor.execute(sql_delete, (archivo_id,))
             db.commit()
 
-            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), archivo['nombre_archivo'])
+            # Sanitize filename to prevent path traversal
+            safe_filename = secure_filename(archivo['nombre_archivo'])
+            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), safe_filename)
+
             if os.path.exists(file_path):
                 os.remove(file_path)
+
             flash('Archivo eliminado con éxito.', 'success')
         else:
             flash('El archivo no existe.', 'danger')

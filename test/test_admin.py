@@ -8,12 +8,12 @@ def test_admin_can_delete_user(client, app, auth):
 
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # Create a user to be deleted
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                           ('user_to_delete', generate_password_hash('p'), 'User To Delete', 'utd@test.com', 1))
-            user_id = cursor.fetchone()['id']
-            db.commit()
+        cursor = db.cursor()
+        # Create a user to be deleted
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                       ('user_to_delete', generate_password_hash('p'), 'User To Delete', 'utd@test.com', 1))
+        user_id = cursor.lastrowid
+        db.commit()
 
     response = client.post(f'/admin/usuarios/{user_id}/eliminar', follow_redirects=True)
     assert response.status_code == 200
@@ -21,10 +21,10 @@ def test_admin_can_delete_user(client, app, auth):
 
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE id = %s", (user_id,))
-            user = cursor.fetchone()
-            assert user is None, "User should have been deleted."
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        assert user is None, "User should have been deleted."
 
 def test_admin_cannot_delete_self(client, app, auth):
     """
@@ -34,23 +34,23 @@ def test_admin_cannot_delete_self(client, app, auth):
     # Ensure there is more than one admin so the 'last admin' check doesn't fire.
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # The conftest fixture already creates 'admin'. We add another one.
-            cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                           ('another_admin', generate_password_hash('p'), 'Another Admin', 'aa@test.com', 1))
-            another_admin_id = cursor.fetchone()['id']
-            cursor.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'")
-            admin_role_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (another_admin_id, admin_role_id))
-            db.commit()
+        cursor = db.cursor()
+        # The conftest fixture already creates 'admin'. We add another one.
+        cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+                       ('another_admin', generate_password_hash('p'), 'Another Admin', 'aa@test.com', 1))
+        another_admin_id = cursor.lastrowid
+        cursor.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'")
+        admin_role_id = cursor.fetchone()['id']
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (another_admin_id, admin_role_id))
+        db.commit()
 
     # Log in as the original admin
     auth.login('admin', 'password')
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
-            admin_id = cursor.fetchone()['id']
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        admin_id = cursor.fetchone()['id']
 
     # Attempt to self-delete without following redirects
     response = client.post(f'/admin/usuarios/{admin_id}/eliminar', follow_redirects=False)
@@ -70,29 +70,29 @@ def test_prevent_last_admin_deletion(client, app, auth):
     """
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # 1. Ensure a clean state with only one administrator
-            # We delete all users except the one with id=1, who is the 'admin' from conftest
-            cursor.execute("SELECT id FROM usuarios WHERE id != 1")
-            other_users = cursor.fetchall()
-            for user in other_users:
-                cursor.execute("DELETE FROM usuario_roles WHERE usuario_id = %s", (user['id'],))
-                cursor.execute("DELETE FROM usuarios WHERE id = %s", (user['id'],))
+        cursor = db.cursor()
+        # 1. Ensure a clean state with only one administrator
+        # We delete all users except the one with id=1, who is the 'admin' from conftest
+        cursor.execute("SELECT id FROM usuarios WHERE id != 1")
+        other_users = cursor.fetchall()
+        for user in other_users:
+            cursor.execute("DELETE FROM usuario_roles WHERE usuario_id = ?", (user['id'],))
+            cursor.execute("DELETE FROM usuarios WHERE id = ?", (user['id'],))
 
-            cursor.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'")
-            admin_role_id = cursor.fetchone()['id']
-            # Ensure only user 1 is an admin
-            cursor.execute("DELETE FROM usuario_roles WHERE rol_id = %s AND usuario_id != 1", (admin_role_id,))
-            db.commit()
+        cursor.execute("SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR'")
+        admin_role_id = cursor.fetchone()['id']
+        # Ensure only user 1 is an admin
+        cursor.execute("DELETE FROM usuario_roles WHERE rol_id = ? AND usuario_id != 1", (admin_role_id,))
+        db.commit()
 
-            # 2. Get the ID of the last admin
-            cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
-            last_admin_id = cursor.fetchone()['id']
+        # 2. Get the ID of the last admin
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        last_admin_id = cursor.fetchone()['id']
 
-            # 3. Verify there is indeed only one admin
-            cursor.execute("SELECT COUNT(usuario_id) as count FROM usuario_roles WHERE rol_id = %s", (admin_role_id,))
-            admin_count = cursor.fetchone()['count']
-            assert admin_count == 1, "Test setup failed: there should be exactly one admin."
+        # 3. Verify there is indeed only one admin
+        cursor.execute("SELECT COUNT(usuario_id) as count FROM usuario_roles WHERE rol_id = ?", (admin_role_id,))
+        admin_count = cursor.fetchone()['count']
+        assert admin_count == 1, "Test setup failed: there should be exactly one admin."
 
     # 4. Log in as the last admin
     auth.login('admin', 'password')
@@ -112,10 +112,10 @@ def test_prevent_last_admin_deletion(client, app, auth):
     # 7. Verify the user was NOT deleted.
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("SELECT * FROM usuarios WHERE id = %s", (last_admin_id,))
-            user = cursor.fetchone()
-            assert user is not None, "Last admin should not have been deleted."
+        cursor = db.cursor()
+        cursor.execute("SELECT * FROM usuarios WHERE id = ?", (last_admin_id,))
+        user = cursor.fetchone()
+        assert user is not None, "Last admin should not have been deleted."
 
 def test_username_email_uniqueness_is_case_insensitive(client, app, auth):
     """
@@ -174,31 +174,31 @@ def test_admin_cannot_delete_user_with_active_connections(client, app, auth):
 
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # 1. Create a 'REALIZADOR' user
-            realizador_pass = generate_password_hash('password')
-            cursor.execute(
-                "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                ('realizador_test', realizador_pass, 'Realizador Test', 'realizador@test.com', 1)
-            )
-            realizador_id = cursor.fetchone()['id']
-            cursor.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'")
-            realizador_role_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (%s, %s)", (realizador_id, realizador_role_id))
+        cursor = db.cursor()
+        # 1. Create a 'REALIZADOR' user
+        realizador_pass = generate_password_hash('password')
+        cursor.execute(
+            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+            ('realizador_test', realizador_pass, 'Realizador Test', 'realizador@test.com', 1)
+        )
+        realizador_id = cursor.lastrowid
+        cursor.execute("SELECT id FROM roles WHERE nombre = 'REALIZADOR'")
+        realizador_role_id = cursor.fetchone()['id']
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (realizador_id, realizador_role_id))
 
-            # 2. Create a project
-            cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (%s, %s) RETURNING id", ('Test Project', 1))
-            proyecto_id = cursor.fetchone()['id']
+        # 2. Create a project
+        cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Test Project', 1))
+        proyecto_id = cursor.lastrowid
 
-            # 3. Create a connection assigned to the 'REALIZADOR' with status 'EN_PROCESO'
-            cursor.execute(
-                """INSERT INTO conexiones
-                   (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, estado, solicitante_id, realizador_id)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                ('TEST-001', proyecto_id, 'TIPO', 'SUBTIPO', 'TIPOLOGIA', 'EN_PROCESO', 1, realizador_id)
-            )
-            conexion_id = cursor.fetchone()['id']
-            db.commit()
+        # 3. Create a connection assigned to the 'REALIZADOR' with status 'EN_PROCESO'
+        cursor.execute(
+            """INSERT INTO conexiones
+               (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, estado, solicitante_id, realizador_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            ('TEST-001', proyecto_id, 'TIPO', 'SUBTIPO', 'TIPOLOGIA', 'EN_PROCESO', 1, realizador_id)
+        )
+        conexion_id = cursor.lastrowid
+        db.commit()
 
     # 4. Attempt to delete the user with an active connection
     response = client.post(f'/admin/usuarios/{realizador_id}/eliminar', follow_redirects=True)
@@ -208,17 +208,17 @@ def test_admin_cannot_delete_user_with_active_connections(client, app, auth):
 
     # 5. Verify the user was NOT deleted
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE id = %s", (realizador_id,))
-            user = cursor.fetchone()
-            assert user is not None, "User with active connections should not be deleted."
+        cursor = get_db().cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE id = ?", (realizador_id,))
+        user = cursor.fetchone()
+        assert user is not None, "User with active connections should not be deleted."
 
     # 6. Update the connection status to a non-active state (e.g., APROBADO)
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("UPDATE conexiones SET estado = 'APROBADO' WHERE id = %s", (conexion_id,))
-            db.commit()
+        cursor = db.cursor()
+        cursor.execute("UPDATE conexiones SET estado = 'APROBADO' WHERE id = ?", (conexion_id,))
+        db.commit()
 
     # 7. Attempt to delete the user again
     response = client.post(f'/admin/usuarios/{realizador_id}/eliminar', follow_redirects=True)
@@ -227,10 +227,10 @@ def test_admin_cannot_delete_user_with_active_connections(client, app, auth):
 
     # 8. Verify the user WAS deleted this time
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE id = %s", (realizador_id,))
-            user = cursor.fetchone()
-            assert user is None, "User should have been deleted after connections were no longer active."
+        cursor = get_db().cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE id = ?", (realizador_id,))
+        user = cursor.fetchone()
+        assert user is None, "User should have been deleted after connections were no longer active."
 
 def test_edit_user_get_request(client, auth, app):
     """
@@ -239,10 +239,10 @@ def test_edit_user_get_request(client, auth, app):
     """
     auth.login('admin', 'password')
     with app.app_context():
-        with get_db().cursor() as cursor:
-            # Find a user to edit (the 'solicitante' user from conftest)
-            cursor.execute("SELECT id FROM usuarios WHERE username = 'solicitante'")
-            user_id = cursor.fetchone()['id']
+        cursor = get_db().cursor()
+        # Find a user to edit (the 'solicitante' user from conftest)
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'solicitante'")
+        user_id = cursor.fetchone()['id']
 
     response = client.get(f'/admin/usuarios/{user_id}/editar')
     assert response.status_code == 200
@@ -262,22 +262,22 @@ def test_admin_cannot_delete_user_assigned_to_project(client, app, auth):
 
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            # 1. Create a user to be assigned and deleted
-            user_pass = generate_password_hash('password')
-            cursor.execute(
-                "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                ('project_user', user_pass, 'Project User', 'pu@test.com', 1)
-            )
-            user_id = cursor.fetchone()['id']
+        cursor = db.cursor()
+        # 1. Create a user to be assigned and deleted
+        user_pass = generate_password_hash('password')
+        cursor.execute(
+            "INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
+            ('project_user', user_pass, 'Project User', 'pu@test.com', 1)
+        )
+        user_id = cursor.lastrowid
 
-            # 2. Create a project
-            cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (%s, %s) RETURNING id", ('Project For Deletion Test', 1))
-            project_id = cursor.fetchone()['id']
+        # 2. Create a project
+        cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Project For Deletion Test', 1))
+        project_id = cursor.lastrowid
 
-            # 3. Assign the user to the project
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (%s, %s)", (project_id, user_id))
-            db.commit()
+        # 3. Assign the user to the project
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_id, user_id))
+        db.commit()
 
     # 4. Attempt to delete the user while they are assigned to a project
     response = client.post(f'/admin/usuarios/{user_id}/eliminar', follow_redirects=True)
@@ -289,17 +289,17 @@ def test_admin_cannot_delete_user_assigned_to_project(client, app, auth):
 
     # 5. Verify the user was NOT deleted
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE id = %s", (user_id,))
-            user = cursor.fetchone()
-            assert user is not None, "User assigned to a project should not be deleted."
+        cursor = get_db().cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        assert user is not None, "User assigned to a project should not be deleted."
 
     # 6. Unassign the user from the project
     with app.app_context():
         db = get_db()
-        with db.cursor() as cursor:
-            cursor.execute("DELETE FROM proyecto_usuarios WHERE usuario_id = %s", (user_id,))
-            db.commit()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM proyecto_usuarios WHERE usuario_id = ?", (user_id,))
+        db.commit()
 
     # 7. Attempt to delete the user again
     response = client.post(f'/admin/usuarios/{user_id}/eliminar', follow_redirects=True)
@@ -308,7 +308,7 @@ def test_admin_cannot_delete_user_assigned_to_project(client, app, auth):
 
     # 8. Verify the user WAS deleted this time
     with app.app_context():
-        with get_db().cursor() as cursor:
-            cursor.execute("SELECT id FROM usuarios WHERE id = %s", (user_id,))
-            user = cursor.fetchone()
-            assert user is None, "User should have been deleted after being unassigned from projects."
+        cursor = get_db().cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        assert user is None, "User should have been deleted after being unassigned from projects."

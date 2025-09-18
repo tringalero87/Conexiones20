@@ -1,18 +1,14 @@
 -- ===================================================================================
--- Hepta-Conexiones - Esquema de Base de Datos
+-- Hepta-Conexiones - Esquema de Base de Datos para SQLite
 -- Versión: 9.0
--- Creador: Yimmy Moreno
---
--- Este script define la estructura de la base de datos para PostgreSQL.
--- Utiliza SERIAL PRIMARY KEY para campos de ID auto-incrementales, que es el
--- tipo de dato estándar en PostgreSQL para esta funcionalidad.
+-- Adaptado para SQLite
 -- ===================================================================================
 
 -- -----------------------------------------------------
 -- Tabla: usuarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS usuarios (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   nombre_completo TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -25,7 +21,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla: roles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS roles (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE
 );
 
@@ -33,29 +29,32 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Tabla: usuario_roles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS usuario_roles (
-  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-  rol_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-  PRIMARY KEY (usuario_id, rol_id)
+  usuario_id INTEGER NOT NULL,
+  rol_id INTEGER NOT NULL,
+  PRIMARY KEY (usuario_id, rol_id),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE CASCADE
 );
 
 -- -----------------------------------------------------
 -- Tabla: proyectos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS proyectos (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL UNIQUE,
   descripcion TEXT,
   fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  creador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
+  creador_id INTEGER,
+  FOREIGN KEY (creador_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- -----------------------------------------------------
 -- Tabla: conexiones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS conexiones (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   codigo_conexion TEXT NOT NULL UNIQUE,
-  proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+  proyecto_id INTEGER NOT NULL,
   tipo TEXT NOT NULL,
   subtipo TEXT NOT NULL,
   tipologia TEXT NOT NULL,
@@ -63,70 +62,83 @@ CREATE TABLE IF NOT EXISTS conexiones (
   detalles_json TEXT,
   estado TEXT NOT NULL DEFAULT 'SOLICITADO'
     CHECK(estado IN ('SOLICITADO', 'EN_PROCESO', 'REALIZADO', 'APROBADO', 'RECHAZADO')),
-  solicitante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-  realizador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-  aprobador_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  solicitante_id INTEGER,
+  realizador_id INTEGER,
+  aprobador_id INTEGER,
   fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   fecha_modificacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   detalles_rechazo TEXT,
-  fts_document TSVECTOR -- Columna para FTS. Se actualizará con un trigger.
+  FOREIGN KEY (proyecto_id) REFERENCES proyectos(id) ON DELETE CASCADE,
+  FOREIGN KEY (solicitante_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (realizador_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (aprobador_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- -----------------------------------------------------
 -- Tabla: archivos
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS archivos (
-  id SERIAL PRIMARY KEY,
-  conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
-  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conexion_id INTEGER NOT NULL,
+  usuario_id INTEGER,
   tipo_archivo TEXT NOT NULL,
   nombre_archivo TEXT NOT NULL,
-  fecha_subida TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_subida TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conexion_id) REFERENCES conexiones(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- -----------------------------------------------------
 -- Tabla: comentarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS comentarios (
-  id SERIAL PRIMARY KEY,
-  conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
-  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conexion_id INTEGER NOT NULL,
+  usuario_id INTEGER,
   contenido TEXT NOT NULL,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conexion_id) REFERENCES conexiones(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- -----------------------------------------------------
 -- Tabla: notificaciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS notificaciones (
-  id SERIAL PRIMARY KEY,
-  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
   mensaje TEXT NOT NULL,
   url TEXT NOT NULL,
-  conexion_id INTEGER REFERENCES conexiones(id) ON DELETE CASCADE,
+  conexion_id INTEGER,
   leida INTEGER NOT NULL DEFAULT 0,
-  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (conexion_id) REFERENCES conexiones(id) ON DELETE CASCADE
 );
 
 -- -----------------------------------------------------
 -- Tabla: historial_estados
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS historial_estados (
-  id SERIAL PRIMARY KEY,
-  conexion_id INTEGER NOT NULL REFERENCES conexiones(id) ON DELETE CASCADE,
-  usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conexion_id INTEGER NOT NULL,
+  usuario_id INTEGER,
   estado TEXT NOT NULL,
   detalles TEXT,
-  fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conexion_id) REFERENCES conexiones(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- -----------------------------------------------------
 -- Tabla: proyecto_usuarios
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS proyecto_usuarios (
-    proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
-    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-    PRIMARY KEY (proyecto_id, usuario_id)
+    proyecto_id INTEGER NOT NULL,
+    usuario_id INTEGER NOT NULL,
+    PRIMARY KEY (proyecto_id, usuario_id),
+    FOREIGN KEY (proyecto_id) REFERENCES proyectos(id) ON DELETE CASCADE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
 -- -----------------------------------------------------
@@ -141,23 +153,24 @@ CREATE TABLE IF NOT EXISTS configuracion (
 -- Tabla: reportes
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS reportes (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
     descripcion TEXT,
-    creador_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    creador_id INTEGER NOT NULL,
     filtros TEXT NOT NULL,
     programado INTEGER NOT NULL DEFAULT 0,
     frecuencia TEXT,
     destinatarios TEXT,
     ultima_ejecucion TIMESTAMP,
-    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (creador_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
 -- -----------------------------------------------------
 -- Tabla: alias_perfiles
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS alias_perfiles (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre_perfil TEXT NOT NULL UNIQUE,
   alias TEXT NOT NULL UNIQUE,
   norma TEXT
@@ -167,29 +180,32 @@ CREATE TABLE IF NOT EXISTS alias_perfiles (
 -- Tabla: auditoria_acciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS auditoria_acciones (
-    id SERIAL PRIMARY KEY,
-    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER,
     accion TEXT NOT NULL,
     tipo_objeto TEXT,
     objeto_id INTEGER,
     detalles TEXT,
-    fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- -----------------------------------------------------
 -- Tabla: preferencias_notificaciones
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS preferencias_notificaciones (
-    usuario_id INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
-    email_notif_estado INTEGER NOT NULL DEFAULT 1
+    usuario_id INTEGER PRIMARY KEY,
+    email_notif_estado INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
 -- -----------------------------------------------------
 -- Tabla: user_dashboard_preferences
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_dashboard_preferences (
-  usuario_id INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
-  widgets_config TEXT
+  usuario_id INTEGER PRIMARY KEY,
+  widgets_config TEXT,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
 -- -----------------------------------------------------
@@ -224,9 +240,9 @@ JOIN conexiones c ON h.conexion_id = c.id;
 -- -----------------------------------------------------
 -- INSERCIÓN DE DATOS INICIALES
 -- -----------------------------------------------------
-INSERT INTO roles (nombre) VALUES ('ADMINISTRADOR'), ('APROBADOR'), ('REALIZADOR'), ('SOLICITANTE') ON CONFLICT (nombre) DO NOTHING;
-INSERT INTO configuracion (clave, valor) VALUES ('PER_PAGE', '10') ON CONFLICT (clave) DO NOTHING;
-INSERT INTO configuracion (clave, valor) VALUES ('MAINTENANCE_MODE', '0') ON CONFLICT (clave) DO NOTHING;
+INSERT OR IGNORE INTO roles (nombre) VALUES ('ADMINISTRADOR'), ('APROBADOR'), ('REALIZADOR'), ('SOLICITANTE');
+INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('PER_PAGE', '10');
+INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('MAINTENANCE_MODE', '0');
 
 -- -----------------------------------------------------
 -- Índices
@@ -245,27 +261,6 @@ CREATE INDEX IF NOT EXISTS idx_conexiones_fecha_modificacion ON conexiones (fech
 CREATE INDEX IF NOT EXISTS idx_conexiones_estado_realizador ON conexiones (estado, realizador_id);
 
 -- -----------------------------------------------------
--- Funciones y Triggers para Full-Text Search (FTS)
--- -----------------------------------------------------
-
--- 1. Crear la función que actualizará la columna fts_document
-CREATE OR REPLACE FUNCTION fts_conexiones_trigger() RETURNS trigger AS $$
-BEGIN
-  NEW.fts_document :=
-    setweight(to_tsvector('spanish', coalesce(NEW.codigo_conexion, '')), 'A') ||
-    setweight(to_tsvector('spanish', coalesce(NEW.tipo, '')), 'B') ||
-    setweight(to_tsvector('spanish', coalesce(NEW.subtipo, '')), 'B') ||
-    setweight(to_tsvector('spanish', coalesce(NEW.tipologia, '')), 'C') ||
-    setweight(to_tsvector('spanish', coalesce(NEW.descripcion, '')), 'D');
-  RETURN NEW;
-END
-$$ LANGUAGE plpgsql;
-
--- 2. Crear el trigger que se ejecuta en cada INSERT o UPDATE
-DROP TRIGGER IF EXISTS fts_conexiones_update ON conexiones;
-CREATE TRIGGER fts_conexiones_update
-BEFORE INSERT OR UPDATE ON conexiones
-FOR EACH ROW EXECUTE FUNCTION fts_conexiones_trigger();
-
 -- -----------------------------------------------------
 -- Fin del esquema
+-- -----------------------------------------------------

@@ -21,7 +21,7 @@ def login():
         error = None
         
         try:
-            user_sql = 'SELECT * FROM usuarios WHERE username = %s'
+            user_sql = 'SELECT * FROM usuarios WHERE username = ?'
             cursor.execute(user_sql, (form.username.data,))
             user = cursor.fetchone()
 
@@ -65,7 +65,7 @@ def perfil():
             changes = {}
 
             # Actualizar datos del usuario
-            sql_update_user = "UPDATE usuarios SET nombre_completo = %s, email = %s WHERE id = %s"
+            sql_update_user = "UPDATE usuarios SET nombre_completo = ?, email = ? WHERE id = ?"
             cursor.execute(sql_update_user, (form.nombre_completo.data, form.email.data, g.user['id']))
             if form.nombre_completo.data != g.user['nombre_completo']: changes['nombre_completo'] = {'old': g.user['nombre_completo'], 'new': form.nombre_completo.data}
             if form.email.data != g.user['email']: changes['email'] = {'old': g.user['email'], 'new': form.email.data}
@@ -73,17 +73,17 @@ def perfil():
             # Actualizar contraseña si se proporcionó
             if form.new_password.data:
                 password_hash = generate_password_hash(form.new_password.data)
-                sql_update_pass = "UPDATE usuarios SET password_hash = %s WHERE id = %s"
+                sql_update_pass = "UPDATE usuarios SET password_hash = ? WHERE id = ?"
                 cursor.execute(sql_update_pass, (password_hash, g.user['id']))
                 changes['password'] = 'changed'
 
             # Actualizar preferencias de notificación
-            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = %s"
+            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = ?"
             cursor.execute(sql_get_prefs, (g.user['id'],))
             user_prefs = cursor.fetchone()
             initial_email_notif_estado = user_prefs['email_notif_estado'] if user_prefs else True
 
-            sql_upsert_prefs = "INSERT INTO preferencias_notificaciones (usuario_id, email_notif_estado) VALUES (%s, %s) ON CONFLICT (usuario_id) DO UPDATE SET email_notif_estado = EXCLUDED.email_notif_estado"
+            sql_upsert_prefs = "INSERT INTO preferencias_notificaciones (usuario_id, email_notif_estado) VALUES (?, ?) ON CONFLICT (usuario_id) DO UPDATE SET email_notif_estado = excluded.email_notif_estado"
             cursor.execute(sql_upsert_prefs, (g.user['id'], form.email_notif_estado.data))
 
             if initial_email_notif_estado != form.email_notif_estado.data:
@@ -101,7 +101,7 @@ def perfil():
         elif request.method == 'GET':
             form.nombre_completo.data = g.user['nombre_completo']
             form.email.data = g.user['email']
-            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = %s"
+            sql_get_prefs = "SELECT email_notif_estado FROM preferencias_notificaciones WHERE usuario_id = ?"
             cursor.execute(sql_get_prefs, (g.user['id'],))
             user_prefs = cursor.fetchone()
             form.email_notif_estado.data = user_prefs['email_notif_estado'] if user_prefs else True

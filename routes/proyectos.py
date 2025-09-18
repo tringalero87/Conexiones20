@@ -30,7 +30,7 @@ def listar_proyectos():
                    FROM proyectos p
                    JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id
                    LEFT JOIN usuarios u ON p.creador_id = u.id
-                   WHERE pu.usuario_id = %s
+                   WHERE pu.usuario_id = ?
                    ORDER BY p.fecha_creacion DESC"""
             params = (g.user['id'],)
 
@@ -49,7 +49,7 @@ def detalle_proyecto(proyecto_id):
     cursor = db.cursor()
     
     try:
-        query_proyecto = 'SELECT p.*, u.nombre_completo as creador FROM proyectos p LEFT JOIN usuarios u ON p.creador_id = u.id WHERE p.id = %s'
+        query_proyecto = 'SELECT p.*, u.nombre_completo as creador FROM proyectos p LEFT JOIN usuarios u ON p.creador_id = u.id WHERE p.id = ?'
         cursor.execute(query_proyecto, (proyecto_id,))
         proyecto = cursor.fetchone()
 
@@ -60,11 +60,11 @@ def detalle_proyecto(proyecto_id):
         per_page = current_app.config.get('PER_PAGE', 10)
         offset = (page - 1) * per_page
 
-        query_conexiones = 'SELECT c.*, u.nombre_completo as solicitante_nombre FROM conexiones c LEFT JOIN usuarios u ON c.solicitante_id = u.id WHERE c.proyecto_id = %s ORDER BY c.fecha_creacion DESC LIMIT %s OFFSET %s'
+        query_conexiones = 'SELECT c.*, u.nombre_completo as solicitante_nombre FROM conexiones c LEFT JOIN usuarios u ON c.solicitante_id = u.id WHERE c.proyecto_id = ? ORDER BY c.fecha_creacion DESC LIMIT ? OFFSET ?'
         cursor.execute(query_conexiones, (proyecto_id, per_page, offset))
         conexiones = cursor.fetchall()
 
-        query_total = 'SELECT COUNT(id) as total FROM conexiones WHERE proyecto_id = %s'
+        query_total = 'SELECT COUNT(id) as total FROM conexiones WHERE proyecto_id = ?'
         cursor.execute(query_total, (proyecto_id,))
         total_conexiones = cursor.fetchone()['total']
     finally:
@@ -81,14 +81,14 @@ def nuevo_proyecto():
         db = get_db()
         cursor = db.cursor()
         try:
-            check_sql = 'SELECT id FROM proyectos WHERE LOWER(nombre) = %s'
+            check_sql = 'SELECT id FROM proyectos WHERE LOWER(nombre) = ?'
             cursor.execute(check_sql, (form.nombre.data.lower(),))
             if cursor.fetchone() is not None:
                 flash(f"El proyecto '{form.nombre.data}' ya existe.", 'danger')
             else:
-                sql = 'INSERT INTO proyectos (nombre, descripcion, creador_id) VALUES (%s, %s, %s) RETURNING id'
+                sql = 'INSERT INTO proyectos (nombre, descripcion, creador_id) VALUES (?, ?, ?)'
                 cursor.execute(sql, (form.nombre.data, form.descripcion.data, g.user['id']))
-                new_project_id = cursor.fetchone()['id']
+                new_project_id = cursor.lastrowid
                 db.commit()
                 log_action('CREAR_PROYECTO', g.user['id'], 'proyectos', new_project_id, f"Proyecto '{form.nombre.data}' creado.")
                 flash('Proyecto creado con éxito.', 'success')
@@ -105,19 +105,19 @@ def editar_proyecto(proyecto_id):
     cursor = db.cursor()
 
     try:
-        cursor.execute('SELECT * FROM proyectos WHERE id = %s', (proyecto_id,))
+        cursor.execute('SELECT * FROM proyectos WHERE id = ?', (proyecto_id,))
         proyecto = cursor.fetchone()
         if not proyecto:
             abort(404)
 
         form = ProjectForm(obj=proyecto)
         if form.validate_on_submit():
-            check_sql = 'SELECT id FROM proyectos WHERE LOWER(nombre) = %s AND id != %s'
+            check_sql = 'SELECT id FROM proyectos WHERE LOWER(nombre) = ? AND id != ?'
             cursor.execute(check_sql, (form.nombre.data.lower(), proyecto_id))
             if cursor.fetchone():
                 flash(f"Ya existe otro proyecto con el nombre '{form.nombre.data}'.", 'danger')
             else:
-                update_sql = 'UPDATE proyectos SET nombre = %s, descripcion = %s WHERE id = %s'
+                update_sql = 'UPDATE proyectos SET nombre = ?, descripcion = ? WHERE id = ?'
                 cursor.execute(update_sql, (form.nombre.data, form.descripcion.data, proyecto_id))
                 db.commit()
                 log_action('EDITAR_PROYECTO', g.user['id'], 'proyectos', proyecto_id, f"Proyecto '{form.nombre.data}' actualizado.")
@@ -139,10 +139,10 @@ def eliminar_proyecto(proyecto_id):
     cursor = db.cursor()
 
     try:
-        cursor.execute('SELECT nombre FROM proyectos WHERE id = %s', (proyecto_id,))
+        cursor.execute('SELECT nombre FROM proyectos WHERE id = ?', (proyecto_id,))
         proyecto = cursor.fetchone()
         if proyecto:
-            cursor.execute('DELETE FROM proyectos WHERE id = %s', (proyecto_id,))
+            cursor.execute('DELETE FROM proyectos WHERE id = ?', (proyecto_id,))
             db.commit()
             log_action('ELIMINAR_PROYECTO', g.user['id'], 'proyectos', proyecto_id, f"Proyecto '{proyecto['nombre']}' eliminado.")
             flash(f"El proyecto '{proyecto['nombre']}' y todas sus conexiones han sido eliminados.", 'success')

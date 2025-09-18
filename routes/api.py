@@ -56,13 +56,12 @@ def buscar_perfiles():
     resultados = []
     added_profiles = set()
 
-    # Usar ILIKE para búsqueda case-insensitive y normalizar en la consulta
     sql_query = """
         SELECT nombre_perfil, alias FROM alias_perfiles
         WHERE
-            REPLACE(REPLACE(nombre_perfil, ' ', ''), '-', '') ILIKE %s
+            REPLACE(REPLACE(nombre_perfil, ' ', ''), '-', '') LIKE ?
             OR
-            REPLACE(REPLACE(alias, ' ', ''), '-', '') ILIKE %s
+            REPLACE(REPLACE(alias, ' ', ''), '-', '') LIKE ?
     """
     like_param = f'%{normalized_query}%'
 
@@ -108,7 +107,7 @@ def set_theme():
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def marcar_notificaciones_leidas():
     db = get_db()
-    sql = 'UPDATE notificaciones SET leida = 1 WHERE usuario_id = %s AND leida = 0'
+    sql = 'UPDATE notificaciones SET leida = 1 WHERE usuario_id = ? AND leida = 0'
     cursor = db.cursor()
     try:
         cursor.execute(sql, (g.user['id'],))
@@ -134,7 +133,7 @@ def get_project_details_for_chart():
     cursor = db.cursor()
 
     try:
-        sql = "SELECT id, codigo_conexion, fecha_creacion FROM conexiones WHERE proyecto_id = %s AND estado = %s ORDER BY fecha_creacion DESC"
+        sql = "SELECT id, codigo_conexion, fecha_creacion FROM conexiones WHERE proyecto_id = ? AND estado = ? ORDER BY fecha_creacion DESC"
         cursor.execute(sql, (proyecto_id, estado))
         conexiones = cursor.fetchall()
 
@@ -154,14 +153,14 @@ def cambiar_estado_rapido(conexion_id):
     cursor = db.cursor()
 
     try:
-        conexion_sql = "SELECT proyecto_id FROM conexiones WHERE id = %s"
+        conexion_sql = "SELECT proyecto_id FROM conexiones WHERE id = ?"
         cursor.execute(conexion_sql, (conexion_id,))
         conexion = cursor.fetchone()
         if not conexion:
             return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
 
         if 'ADMINISTRADOR' not in session.get('user_roles', []):
-            acceso_sql = "SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = %s AND usuario_id = %s"
+            acceso_sql = "SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?"
             cursor.execute(acceso_sql, (conexion['proyecto_id'], g.user['id']))
             acceso = cursor.fetchone()
             if not acceso:
@@ -190,7 +189,7 @@ def save_dashboard_preferences():
     data = request.get_json()
     widgets_config = json.dumps(data.get('widgets_config', {}))
     
-    sql = "INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (%s, %s) ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = EXCLUDED.widgets_config"
+    sql = "INSERT INTO user_dashboard_preferences (usuario_id, widgets_config) VALUES (?, ?) ON CONFLICT (usuario_id) DO UPDATE SET widgets_config = excluded.widgets_config"
 
     cursor = db.cursor()
     try:

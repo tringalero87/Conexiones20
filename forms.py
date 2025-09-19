@@ -54,6 +54,8 @@ class ProjectForm(FlaskForm):
     submit = SubmitField('Guardar Proyecto')
 
 
+from validators import unique_email, unique_username
+
 class UserForm(FlaskForm):
     """
     Formulario para crear y editar usuarios en el panel de administración.
@@ -62,7 +64,8 @@ class UserForm(FlaskForm):
     """
     username = StringField('Nombre de usuario', validators=[
         DataRequired(message="El nombre de usuario es requerido."),
-        Length(min=4, max=25, message="Debe tener entre 4 y 25 caracteres.")
+        Length(min=4, max=25, message="Debe tener entre 4 y 25 caracteres."),
+        unique_username
     ])
 
     nombre_completo = StringField('Nombre Completo', validators=[
@@ -71,7 +74,8 @@ class UserForm(FlaskForm):
 
     email = StringField('Correo Electrónico', validators=[
         DataRequired(message="El email es requerido."),
-        Email(message="Por favor, introduce una dirección de correo válida.")
+        Email(message="Por favor, introduce una dirección de correo válida."),
+        unique_email
     ])
 
     password = PasswordField('Contraseña', validators=[Optional(), Length(
@@ -113,39 +117,6 @@ class UserForm(FlaskForm):
         if not kwargs.get('obj'):
             self.password.validators.insert(0, DataRequired(
                 message="La contraseña es obligatoria para nuevos usuarios."))
-
-    def validate_username(self, username):
-        from db import get_db
-        from flask import current_app
-        db = get_db()
-
-        if not self.original_username or username.data.lower(
-        ) != self.original_username.lower():
-            sql = 'SELECT id FROM usuarios WHERE LOWER(username) = ?'
-            cursor = db.cursor()
-            cursor.execute(sql, (username.data.lower(),))
-            user = cursor.fetchone()
-            cursor.close()
-
-            if user:
-                raise ValidationError(
-                    'Este nombre de usuario ya está en uso. Por favor, elige otro.')
-
-    def validate_email(self, email):
-        from db import get_db
-        from flask import current_app
-        db = get_db()
-
-        if not self.original_email or email.data.lower() != self.original_email.lower():
-            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = ?'
-            cursor = db.cursor()
-            cursor.execute(sql, (email.data.lower(),))
-            user = cursor.fetchone()
-            cursor.close()
-
-            if user:
-                raise ValidationError(
-                    'Este correo electrónico ya está registrado. Por favor, elige otro.')
 
 
 class ProfileForm(FlaskForm):

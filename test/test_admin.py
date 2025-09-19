@@ -150,10 +150,7 @@ def test_username_email_uniqueness_is_case_insensitive(client, app, auth):
         'confirm_password': 'password',
         'roles': ['SOLICITANTE'],
         'activo': 'y'
-    }, follow_redirects=True)
-
-    # With the fix, this should fail validation and show an error.
-    # The buggy code would not show this error.
+    })
     assert b'Este nombre de usuario ya est\xc3\xa1 en uso.' in response.data
 
     # 3. Try to create a third user with case-variant email
@@ -165,9 +162,7 @@ def test_username_email_uniqueness_is_case_insensitive(client, app, auth):
         'confirm_password': 'password',
         'roles': ['SOLICITANTE'],
         'activo': 'y'
-    }, follow_redirects=True)
-
-    # With the fix, this should also fail validation.
+    })
     assert b'Este correo electr\xc3\xb3nico ya est\xc3\xa1 registrado.' in response.data
 
 def test_admin_cannot_delete_user_with_active_connections(client, app, auth):

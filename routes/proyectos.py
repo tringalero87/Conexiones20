@@ -49,12 +49,19 @@ def detalle_proyecto(proyecto_id):
     cursor = db.cursor()
     
     try:
-        query_proyecto = 'SELECT p.*, u.nombre_completo as creador FROM proyectos p LEFT JOIN usuarios u ON p.creador_id = u.id WHERE p.id = ?'
+        query_proyecto = """
+            SELECT p.*, u.nombre_completo as creador,
+                   (SELECT COUNT(c.id) FROM conexiones c WHERE c.proyecto_id = p.id) as total_conexiones
+            FROM proyectos p LEFT JOIN usuarios u ON p.creador_id = u.id
+            WHERE p.id = ?
+        """
         cursor.execute(query_proyecto, (proyecto_id,))
         proyecto = cursor.fetchone()
 
         if proyecto is None:
             abort(404, f"El proyecto con id {proyecto_id} no existe.")
+
+        total_conexiones = proyecto['total_conexiones']
 
         page = request.args.get('page', 1, type=int)
         per_page = current_app.config.get('PER_PAGE', 10)
@@ -64,9 +71,6 @@ def detalle_proyecto(proyecto_id):
         cursor.execute(query_conexiones, (proyecto_id, per_page, offset))
         conexiones = cursor.fetchall()
 
-        query_total = 'SELECT COUNT(id) as total FROM conexiones WHERE proyecto_id = ?'
-        cursor.execute(query_total, (proyecto_id,))
-        total_conexiones = cursor.fetchone()['total']
     finally:
         cursor.close()
 

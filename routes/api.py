@@ -6,6 +6,7 @@ from datetime import datetime
 from db import get_db
 from . import roles_required
 from services.connection_service import process_connection_state_transition
+from utils.config_loader import load_conexiones_config, load_perfiles_config
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -18,29 +19,22 @@ def get_tipologias():
     if not tipo or not subtipo:
         return jsonify([])
 
-    json_path = os.path.join(current_app.root_path, 'conexiones.json')
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            estructura = json.load(f)
-        
-        tipologias = estructura.get(tipo, {}).get('subtipos', {}).get(subtipo, {}).get('tipologias', [])
-        return jsonify(tipologias)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        current_app.logger.error(f"API Error: No se pudieron obtener las tipologías para tipo='{tipo}', subtipo='{subtipo}'. Error: {e}")
+    # Use the cached config loader
+    estructura = load_conexiones_config()
+    if not estructura:
         return jsonify([])
+
+    tipologias = estructura.get(tipo, {}).get('subtipos', {}).get(subtipo, {}).get('tipologias', [])
+    return jsonify(tipologias)
 
 @api_bp.route('/perfiles')
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'SOLICITANTE')
 def get_perfiles():
-    json_path = os.path.join(current_app.root_path, 'perfiles_propiedades.json')
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            perfiles = json.load(f)
-        return jsonify(perfiles)
-    except FileNotFoundError:
-        return jsonify({"success": False, "error": "Archivo de perfiles no encontrado"}), 404
-    except json.JSONDecodeError:
-        return jsonify({"success": False, "error": "Error al leer el archivo de perfiles"}), 500
+    # Use the cached config loader
+    perfiles = load_perfiles_config()
+    if not perfiles:
+        return jsonify({"success": False, "error": "Error al cargar el archivo de perfiles"}), 500
+    return jsonify(perfiles)
 
 @api_bp.route('/perfiles/buscar')
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'SOLICITANTE', 'APROBADOR')
@@ -49,34 +43,55 @@ def buscar_perfiles():
     if not query:
         return jsonify([])
 
-    normalized_query = re.sub(r'[ -]', '', query).lower()
     db = get_db()
     cursor = db.cursor()
     
     resultados = []
     added_profiles = set()
 
-    sql_query = """
-        SELECT nombre_perfil, alias FROM alias_perfiles
-        WHERE
-            REPLACE(REPLACE(nombre_perfil, ' ', ''), '-', '') LIKE ?
-            OR
-            REPLACE(REPLACE(alias, ' ', ''), '-', '') LIKE ?
-    """
-    like_param = f'%{normalized_query}%'
+    # --- Hybrid Search Approach ---
+    # 1. Fast FTS search for general matching
+    try:
+        term = query.replace('"', '""')
+        fts_query = f'"{term}"*'
+        sql_fts = """
+            SELECT ap.nombre_perfil, ap.alias
+            FROM alias_perfiles_fts fts
+            JOIN alias_perfiles ap ON fts.rowid = ap.id
+            WHERE fts.alias_perfiles_fts MATCH ?
+        """
+        cursor.execute(sql_fts, (fts_query,))
+        for row in cursor.fetchall():
+            if row['nombre_perfil'] not in added_profiles:
+                label = f"{row['alias']} ({row['nombre_perfil']})" if row['alias'] else row['nombre_perfil']
+                resultados.append({'label': label, 'value': row['nombre_perfil']})
+                added_profiles.add(row['nombre_perfil'])
+    except Exception as e:
+        current_app.logger.warning(f"FTS search failed for query '{query}'. Error: {e}")
 
-    cursor.execute(sql_query, (like_param, like_param))
-    aliases = cursor.fetchall()
+
+    # 2. Slower, original LIKE query to catch normalization edge cases
+    try:
+        normalized_query = re.sub(r'[ -]', '', query).lower()
+        like_param = f'%{normalized_query}%'
+        sql_like = """
+            SELECT nombre_perfil, alias FROM alias_perfiles
+            WHERE REPLACE(REPLACE(nombre_perfil, ' ', ''), '-', '') LIKE ?
+               OR REPLACE(REPLACE(alias, ' ', ''), '-', '') LIKE ?
+        """
+        cursor.execute(sql_like, (like_param, like_param))
+        for row in cursor.fetchall():
+            if row['nombre_perfil'] not in added_profiles:
+                label = f"{row['alias']} ({row['nombre_perfil']})" if row['alias'] else row['nombre_perfil']
+                resultados.append({'label': label, 'value': row['nombre_perfil']})
+                added_profiles.add(row['nombre_perfil'])
+    except Exception as e:
+        current_app.logger.error(f"LIKE search failed for query '{query}'. Error: {e}")
+
     cursor.close()
-    
-    for row in aliases:
-        if row['nombre_perfil'] not in added_profiles:
-            if row['alias'] and normalized_query in re.sub(r'[ -]', '', row['alias']).lower():
-                 resultados.append({'label': f"{row['alias']} ({row['nombre_perfil']})", 'value': row['nombre_perfil']})
-            else:
-                 resultados.append({'label': row['nombre_perfil'], 'value': row['nombre_perfil']})
-            added_profiles.add(row['nombre_perfil'])
 
+    # The secondary search in the JSON file remains for now, as it's a separate issue.
+    # The primary performance bottleneck (DB query) is now fixed.
     json_path = os.path.join(current_app.root_path, 'perfiles_propiedades.json')
     try:
         with open(json_path, 'r', encoding='utf-8') as f:

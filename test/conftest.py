@@ -75,3 +75,14 @@ def auth(client):
             return client.get('/auth/logout', follow_redirects=True)
 
     return AuthActions()
+
+@pytest.fixture(autouse=True)
+def clear_cache_between_tests(app):
+    """
+    An autouse fixture to ensure the dashboard cache is cleared before each test.
+    This prevents data from one test leaking into another.
+    """
+    with app.app_context():
+        from services.dashboard_service import clear_dashboard_cache
+        clear_dashboard_cache()
+    yield

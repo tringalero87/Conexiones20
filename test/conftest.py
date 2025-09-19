@@ -1,98 +1,116 @@
-import os
-import sys
-import tempfile
 import pytest
-from werkzeug.security import generate_password_hash
 from app import create_app
-from db import get_db, init_db
+from extensions import db
+from models import Usuario, Rol, Proyecto
+from werkzeug.security import generate_password_hash
 
-# Add project root to the Python path
-sys.path.insert(0, os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..')))
-
-
-@pytest.fixture
+@pytest.fixture(scope='session')
 def app():
-    db_fd, db_path = tempfile.mkstemp()
-
+    """Crea una instancia de la aplicación para la sesión de prueba."""
     app = create_app({
-        "TESTING": True,
-        "DATABASE_URL": f"sqlite:///{db_path}",
-        "WTF_CSRF_ENABLED": False,
-        "SERVER_NAME": "localhost.localdomain"
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:', # Use in-memory DB for speed
+        'WTF_CSRF_ENABLED': False,
+        'SERVER_NAME': 'localhost'
     })
+    return app
 
+@pytest.fixture(scope='function')
+def test_db(app):
+    """
+    Crea una base de datos limpia para cada prueba y la puebla con datos iniciales.
+    """
     with app.app_context():
-        init_db()
-        db = get_db()
-        cursor = db.cursor()
+        db.create_all()
 
-        cursor.execute(
-            "INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-            ('admin', 'Admin User', 'admin@test.com',
-             generate_password_hash('password'), 1)
-        )
-        admin_id = cursor.lastrowid
+        # Crear tablas virtuales FTS (de forma idempotente)
+        fts_setup_sqls = [
+            # Para búsqueda de perfiles
+            "CREATE VIRTUAL TABLE IF NOT EXISTS alias_perfiles_fts USING fts5(nombre_perfil, alias, content='alias_perfiles', content_rowid='id');",
+            """
+            CREATE TRIGGER IF NOT EXISTS alias_perfiles_ai AFTER INSERT ON alias_perfiles BEGIN
+              INSERT INTO alias_perfiles_fts(rowid, nombre_perfil, alias) VALUES (new.id, new.nombre_perfil, new.alias);
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS alias_perfiles_ad AFTER DELETE ON alias_perfiles BEGIN
+              INSERT INTO alias_perfiles_fts(alias_perfiles_fts, rowid, nombre_perfil, alias) VALUES ('delete', old.id, old.nombre_perfil, old.alias);
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS alias_perfiles_au AFTER UPDATE ON alias_perfiles BEGIN
+              INSERT INTO alias_perfiles_fts(alias_perfiles_fts, rowid, nombre_perfil, alias) VALUES ('delete', old.id, old.nombre_perfil, old.alias);
+              INSERT INTO alias_perfiles_fts(rowid, nombre_perfil, alias) VALUES (new.id, new.nombre_perfil, new.alias);
+            END;
+            """,
+            # Para búsqueda de conexiones
+            "CREATE VIRTUAL TABLE IF NOT EXISTS conexiones_fts USING fts5(codigo_conexion, descripcion, content='conexiones', content_rowid='id');",
+            """
+            CREATE TRIGGER IF NOT EXISTS conexiones_ai AFTER INSERT ON conexiones BEGIN
+                INSERT INTO conexiones_fts(rowid, codigo_conexion, descripcion) VALUES (new.id, new.codigo_conexion, new.descripcion);
+            END;
+            """,
+             """
+            CREATE TRIGGER IF NOT EXISTS conexiones_ad AFTER DELETE ON conexiones BEGIN
+                INSERT INTO conexiones_fts(conexiones_fts, rowid, codigo_conexion, descripcion) VALUES ('delete', old.id, old.codigo_conexion, old.descripcion);
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS conexiones_au AFTER UPDATE ON conexiones BEGIN
+                INSERT INTO conexiones_fts(conexiones_fts, rowid, codigo_conexion, descripcion) VALUES ('delete', old.id, old.codigo_conexion, old.descripcion);
+                INSERT INTO conexiones_fts(rowid, codigo_conexion, descripcion) VALUES (new.id, new.codigo_conexion, new.descripcion);
+            END;
+            """
+        ]
+        for sql in fts_setup_sqls:
+            db.session.execute(db.text(sql))
 
-        cursor.execute(
-            "INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-            ('solicitante', 'Solicitante User', 'solicitante@test.com',
-             generate_password_hash('password'), 1)
-        )
-        solicitante_id = cursor.lastrowid
+        # Crear roles
+        roles = {
+            'ADMINISTRADOR': Rol(nombre='ADMINISTRADOR'),
+            'SOLICITANTE': Rol(nombre='SOLICITANTE'),
+            'REALIZADOR': Rol(nombre='REALIZADOR'),
+            'APROBADOR': Rol(nombre='APROBADOR')
+        }
+        for role in roles.values():
+            db.session.add(role)
 
-        cursor.execute(
-            "SELECT id FROM roles WHERE nombre IN ('ADMINISTRADOR', 'SOLICITANTE', 'REALIZADOR', 'APROBADOR')")
-        admin_roles = cursor.fetchall()
-        for role in admin_roles:
-            cursor.execute(
-                "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (admin_id, role['id']))
+        # Crear usuarios
+        admin_user = Usuario(username='admin', nombre_completo='Admin User', email='admin@test.com', password_hash=generate_password_hash('password'), activo=True)
+        solicitante_user = Usuario(username='solicitante', nombre_completo='Solicitante User', email='solicitante@test.com', password_hash=generate_password_hash('password'), activo=True)
 
-        cursor.execute("SELECT id FROM roles WHERE nombre = 'SOLICITANTE'")
-        solicitante_role_id = cursor.fetchone()['id']
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)",
-                       (solicitante_id, solicitante_role_id))
+        admin_user.roles.extend(roles.values())
+        solicitante_user.roles.append(roles['SOLICITANTE'])
 
-        cursor.execute("INSERT INTO proyectos (nombre, descripcion, creador_id) VALUES (?, ?, ?)",
-                       ('Proyecto Test', 'Desc', admin_id))
+        db.session.add_all([admin_user, solicitante_user])
 
-        db.commit()
+        # Crear proyecto
+        test_project = Proyecto(nombre='Proyecto Test', descripcion='Desc', creador=admin_user)
+        db.session.add(test_project)
 
-    yield app
+        db.session.commit()
 
-    os.close(db_fd)
-    os.unlink(db_path)
+        yield db
 
+        db.session.remove()
+        db.drop_all()
 
-@pytest.fixture
-def client(app):
+@pytest.fixture(scope='function')
+def client(app, test_db):
+    """Un cliente de prueba para la aplicación."""
     return app.test_client()
 
-
 @pytest.fixture
-def runner(app):
+def runner(app, test_db):
+    """Un runner de CLI para la aplicación."""
     return app.test_cli_runner()
-
 
 @pytest.fixture
 def auth(client):
+    """Un helper para acciones de autenticación."""
     class AuthActions:
         def login(self, username='admin', password='password'):
             return client.post('/auth/login', data={'username': username, 'password': password}, follow_redirects=True)
-
         def logout(self):
             return client.get('/auth/logout', follow_redirects=True)
-
     return AuthActions()
-
-
-@pytest.fixture(autouse=True)
-def clear_cache_between_tests(app):
-    """
-    An autouse fixture to ensure the dashboard cache is cleared before each test.
-    This prevents data from one test leaking into another.
-    """
-    with app.app_context():
-        from services.dashboard_service import clear_dashboard_cache
-        clear_dashboard_cache()
-    yield

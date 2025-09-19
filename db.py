@@ -1,137 +1,100 @@
-import sqlite3
 import click
-from flask import current_app, g
+import os
+import secrets
+import string
 from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
-import os
-import datetime
-
-
-def adapt_datetime_iso(val):
-    """Adapter for datetime objects to store them in ISO 8601 format."""
-    return val.isoformat()
-
-
-def convert_timestamp(val):
-    """Converter for ISO 8601 timestamps to datetime objects."""
-    return datetime.datetime.fromisoformat(val.decode())
-
-
-# Register the adapter and converter
-sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
-sqlite3.register_converter("timestamp", convert_timestamp)
-
-
-def get_db():
-    """
-    Obtiene una conexión a la base de datos SQLite para la solicitud actual.
-    Crea la conexión si no existe y la almacena en 'g'.
-    """
-    if 'db' not in g:
-        db_path = current_app.config['DATABASE_URL']
-        # Asegurarse de que el directorio de la base de datos exista
-        db_dir = os.path.dirname(db_path)
-        if db_dir:
-            os.makedirs(db_dir, exist_ok=True)
-
-        g.db = sqlite3.connect(
-            db_path,
-            detect_types=sqlite3.PARSE_DECLTYPES
-        )
-        g.db.row_factory = sqlite3.Row
-
-    return g.db
-
-
-def close_db(e=None):
-    """
-    Cierra la conexión de la base de datos.
-    """
-    db = g.pop('db', None)
-
-    if db is not None:
-        db.close()
-
-
-def init_db():
-    """
-    Inicializa la base de datos ejecutando el script SQL del archivo 'schema.sql'.
-    """
-    db = get_db()
-
-    with current_app.open_resource('schema.sql') as f:
-        # SQLite3's `executescript` puede manejar múltiples sentencias
-        db.executescript(f.read().decode('utf8'))
-
-    # --- Creación del usuario administrador por defecto ---
-    cursor = db.cursor()
-
-    # Verificar si el usuario 'Admin' ya existe para evitar duplicados
-    cursor.execute("SELECT id FROM usuarios WHERE username = ?", ('Admin',))
-    if cursor.fetchone() is None:
-        # 1. Hashear la contraseña
-        password_hash = generate_password_hash('624BGHwsj*')
-
-        # 2. Insertar el nuevo usuario administrador
-        cursor.execute(
-            "INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-            ('Admin', 'Admin', 'heptaconexiones@heptapro.com', password_hash, 1)
-        )
-        user_id = cursor.lastrowid
-
-        # 3. Obtener el ID del rol 'ADMINISTRADOR'
-        cursor.execute("SELECT id FROM roles WHERE nombre = ?",
-                       ('ADMINISTRADOR',))
-        role = cursor.fetchone()
-
-        if role:
-            admin_role_id = role['id']
-            # 4. Asignar el rol de administrador al nuevo usuario
-            cursor.execute(
-                "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)",
-                (user_id, admin_role_id)
-            )
-            click.echo("Usuario administrador por defecto 'Admin' creado.")
-        else:
-            click.echo(
-                "Advertencia: No se pudo encontrar el rol 'ADMINISTRADOR'. El usuario 'Admin' fue creado pero no tiene rol de administrador.")
-
-        # 5. Guardar los cambios
-        db.commit()
-
+from extensions import db
+from models import Usuario, Rol, Configuracion, AuditoriaAccion
 
 @click.command('init-db')
 @with_appcontext
 def init_db_command():
-    """Define un comando de terminal 'flask init-db' para inicializar la base de datos."""
-    init_db()
-    click.echo('Base de datos SQLite inicializada.')
+    """
+    Limpia los datos existentes y crea nuevas tablas y datos iniciales.
+    ADVERTENCIA: Este comando destruirá todos los datos existentes.
+    Para producción, use 'flask db upgrade'.
+    """
+    if os.environ.get('FLASK_ENV') == 'production':
+        click.secho(
+            'ADVERTENCIA: Estás en un entorno de producción. '
+            'Ejecutar init-db destruirá todos los datos. '
+            'Usa "flask db upgrade" en su lugar. '
+            'Para continuar, establece la variable de entorno I_AM_SURE a "true".',
+            fg='red'
+        )
+        if os.environ.get('I_AM_SURE') != 'true':
+            return
 
+    db.drop_all()
+    db.create_all()
+
+    create_initial_data()
+    create_default_admin()
+    click.secho('Base de datos inicializada con éxito.', fg='green')
+
+def create_initial_data():
+    """Crea los roles y la configuración por defecto."""
+    roles = ['ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE']
+    for role_name in roles:
+        if not Rol.query.filter_by(nombre=role_name).first():
+            db.session.add(Rol(nombre=role_name))
+
+    configs = {'PER_PAGE': '10', 'MAINTENANCE_MODE': '0'}
+    for key, value in configs.items():
+        if not Configuracion.query.filter_by(clave=key).first():
+            db.session.add(Configuracion(clave=key, valor=value))
+
+    db.session.commit()
+    click.echo("Roles y configuración por defecto creados.")
+
+def create_default_admin():
+    """Crea el usuario administrador por defecto si no existe."""
+    if Usuario.query.filter_by(username='Admin').first():
+        return
+
+    admin_password = os.environ.get('DEFAULT_ADMIN_PASSWORD')
+    if not admin_password:
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()_+-=[]{}|;:,.<>?"
+        admin_password = ''.join(secrets.choice(alphabet) for _ in range(16))
+        click.secho("ADVERTENCIA: DEFAULT_ADMIN_PASSWORD no está configurada.", fg='yellow')
+        click.echo("Se ha generado una contraseña temporal segura para el usuario 'Admin'.")
+        click.secho(f"Contraseña generada: {admin_password}", fg='green')
+
+    admin_user = Usuario(
+        username='Admin',
+        nombre_completo='Admin',
+        email='heptaconexiones@heptapro.com',
+        password_hash=generate_password_hash(admin_password),
+        activo=True
+    )
+
+    admin_role = Rol.query.filter_by(nombre='ADMINISTRADOR').first()
+    if admin_role:
+        admin_user.roles.append(admin_role)
+    else:
+        click.secho("Advertencia: No se pudo encontrar el rol 'ADMINISTRADOR'.", fg='red')
+
+    db.session.add(admin_user)
+    db.session.commit()
+    click.echo("Usuario administrador por defecto 'Admin' creado.")
 
 def init_app(app):
-    """
-    Registra las funciones de la base de datos con la instancia de la aplicación Flask.
-    """
-    app.teardown_appcontext(close_db)
+    """Registra los comandos de la base de datos con la aplicación Flask."""
     app.cli.add_command(init_db_command)
 
-
 def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
-    """
-    Registra una acción de auditoría en la base de datos.
-    """
-    db = get_db()
-    sql = """
-        INSERT INTO auditoria_acciones (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-        VALUES (?, ?, ?, ?, ?)
-    """
-    params = (usuario_id, accion, tipo_objeto, objeto_id, detalles)
-
+    """Registra una acción de auditoría en la base de datos usando el ORM."""
     try:
-        cursor = db.cursor()
-        cursor.execute(sql, params)
-        db.commit()
+        log_entry = AuditoriaAccion(
+            usuario_id=usuario_id,
+            accion=accion,
+            tipo_objeto=tipo_objeto,
+            objeto_id=objeto_id,
+            detalles=detalles
+        )
+        db.session.add(log_entry)
+        db.session.commit()
     except Exception as e:
-        current_app.logger.error(
-            f"Error al registrar acción de auditoría: {accion} por {usuario_id} - {e}")
-        db.rollback()
+        db.session.rollback()
+        print(f"Error al registrar acción de auditoría: {e}")

@@ -67,19 +67,14 @@
                     <li><a href="{{ url_for('admin.listar_reportes') }}" class="{{ 'active' if request.endpoint in ['admin.listar_reportes', 'admin.nuevo_reporte', 'admin.editar_reporte'] }}"><i class="bi bi-file-earmark-bar-graph-fill"></i> Reportes</a></li>
                     {% endif %}
 
-                    {# Auditoría: Solo para Administradores #}
-                    {% if is_admin %}
-                    <li><a href="{{ url_for('admin.ver_auditoria') }}" class=" {{ 'active' if 'auditoria' in request.endpoint }}"><i class="bi bi-journal-check"></i> Auditoría</a></li>
-                    {% endif %}
-
                     {# Almacenamiento: Visible para todos los roles #}
                     {% if can_view_general_admin %}
                     <li><a href="{{ url_for('admin.storage_management') }}" class="{{ 'active' if 'storage' in request.endpoint }}"><i class="bi bi-hdd-fill"></i> Almacenamiento</a></li>
                     {% endif %}
 
-                    {# Logs del Sistema y Configuración: Solo para Administradores #}
+                    {# Auditoría / Logs y Configuración: Solo para Administradores #}
                     {% if is_admin %}
-                    <li><a href="{{ url_for('admin.logs') }}" class="{{ 'active' if 'logs' in request.endpoint }}"><i class="bi bi-journal-text"></i> Logs del Sistema</a></li>
+                    <li><a href="{{ url_for('admin.ver_auditoria') }}" class="{{ 'active' if 'auditoria' in request.endpoint }}"><i class="bi bi-journal-text"></i> Logs del Sistema</a></li>
                     <li><a href="{{ url_for('admin.configuracion') }}" class="{{ 'active' if 'configuracion' in request.endpoint }}"><i class="bi bi-gear-fill"></i> Configuración</a></li>
                     {% endif %}
                 </ul>

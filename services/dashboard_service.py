@@ -1,169 +1,97 @@
 import time
-import json
 from datetime import datetime, timedelta
-from flask import g
-from db import get_db
+from flask import g, request
+from sqlalchemy import func, case, text
+from extensions import db
+from models import Conexion, Usuario, Proyecto, HistorialEstado, AuditoriaAccion, UserDashboardPreference, Notificacion, Comentario
 
-_cache = {}
-CACHE_TIMEOUT = 60  # Cache results for 60 seconds
-
-
-def clear_dashboard_cache():
-    """Clears the in-memory dashboard cache."""
-    _cache.clear()
-
-
-def get_dashboard_data(user_id, user_roles):
+def get_dashboard_data(user):
     """
-    Fetches and consolidates all data required for the dashboard.
-    Results are cached to improve performance.
-    This version uses multiple correct queries and ensures consistent data structure.
+    Obtiene todos los datos necesarios para el dashboard de un usuario.
     """
-    cache_key = f"dashboard_{user_id}"
-    now = time.time()
+    user_id = user.id
+    user_roles = user.roles
 
-    if cache_key in _cache:
-        cached_data, timestamp = _cache[cache_key]
-        if now - timestamp < CACHE_TIMEOUT:
-            return cached_data.copy()
-
-    db = get_db()
-    cursor = db.cursor()
-
-    # Initialize with all keys expected by the template
     dashboard_data = {
-        'kpis': {},
-        'charts': {},
-        'tareas': {},
-        'feed_actividad': [],
-        'my_summary': {},
-        'my_performance': {},
-        'my_performance_chart': {},
-        'my_projects_summary': [],
-        'user_prefs': {},
-        'all_projects_for_filter': []
+        'kpis': {}, 'charts': {}, 'filters': {},
+        'tareas': {'pendientes_aprobacion': [], 'mis_asignadas': [], 'disponibles': [], 'mis_solicitudes': []},
+        'feed_actividad': [], 'my_summary': {}, 'my_performance': {}, 'my_performance_chart': {},
+        'my_projects_summary': [], 'user_prefs': {}, 'all_projects_for_filter': []
     }
 
-    # --- Personal Summary (My Summary) ---
-    summary = {}
-    cursor.execute(
-        "SELECT COUNT(id) FROM conexiones WHERE solicitante_id = ?", (user_id,))
-    summary['total_conexiones_creadas'] = cursor.fetchone()[0]
-    cursor.execute(
-        "SELECT COUNT(id) FROM conexiones WHERE solicitante_id = ? AND estado = 'EN_PROCESO'", (user_id,))
-    summary['conexiones_en_proceso_solicitadas'] = cursor.fetchone()[0]
-    cursor.execute(
-        "SELECT COUNT(id) FROM conexiones WHERE solicitante_id = ? AND estado = 'APROBADO'", (user_id,))
-    summary['conexiones_aprobadas_solicitadas'] = cursor.fetchone()[0]
-    cursor.execute(
-        "SELECT COUNT(id) FROM conexiones WHERE realizador_id = ? AND estado = 'EN_PROCESO'", (user_id,))
-    summary['mis_tareas_en_proceso'] = cursor.fetchone()[0]
-    cursor.execute(
-        "SELECT COUNT(id) FROM conexiones WHERE realizador_id = ? AND estado = 'REALIZADO' AND fecha_modificacion >= date('now', '-30 days')", (user_id,))
-    summary['mis_tareas_realizadas_ult_30d'] = cursor.fetchone()[0]
-    cursor.execute(
-        "SELECT COUNT(id) FROM conexiones WHERE aprobador_id = ? AND estado = 'APROBADO' AND fecha_modificacion >= date('now', '-30 days')", (user_id,))
-    summary['aprobadas_por_mi_ult_30d'] = cursor.fetchone()[0]
-    pendientes_query = "SELECT COUNT(c.id) as total FROM conexiones c JOIN proyecto_usuarios pu ON c.proyecto_id = pu.proyecto_id WHERE c.estado = 'REALIZADO' AND pu.usuario_id = ?"
-    cursor.execute(pendientes_query, (user_id,))
-    summary['pendientes_mi_aprobacion'] = cursor.fetchone()['total']
-    summary['notificaciones_no_leidas'] = len(g.get('notifications', []))
+    # --- Lógica de Administrador ---
+    if 'ADMINISTRADOR' in user_roles:
+        start_date_str = request.args.get('date_start')
+        end_date_str = request.args.get('date_end')
+
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else datetime.utcnow()
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else end_date - timedelta(days=30)
+
+        dashboard_data['filters'] = {'start': start_date.strftime('%Y-%m-%d'), 'end': end_date.strftime('%Y-%m-%d')}
+
+        # KPIs
+        kpis = {}
+        base_query = db.session.query(Conexion).filter(Conexion.fecha_creacion.between(start_date, end_date))
+        kpis['total_activas'] = base_query.filter(Conexion.estado.notin_(['APROBADO', 'RECHAZADO'])).count()
+        kpis['creadas_hoy'] = db.session.query(Conexion).filter(func.date(Conexion.fecha_creacion) == func.date('now')).count()
+        total_count = base_query.count()
+        rechazadas_count = base_query.filter_by(estado='RECHAZADO').count()
+        kpis['tasa_rechazo'] = f"{(rechazadas_count / total_count * 100) if total_count > 0 else 0:.1f}%"
+        dashboard_data['kpis'] = kpis
+
+        # Charts
+        estados_data = db.session.query(Conexion.estado, func.count(Conexion.id)).group_by(Conexion.estado).all()
+        meses_data = db.session.query(func.strftime('%Y-%m', Conexion.fecha_creacion), func.count(Conexion.id)).group_by(func.strftime('%Y-%m', Conexion.fecha_creacion)).order_by(func.strftime('%Y-%m', Conexion.fecha_creacion)).all()
+        dashboard_data['charts'] = {
+            'estados': {row[0]: row[1] for row in estados_data},
+            'conexiones_mes': [{'mes': row[0], 'total': row[1]} for row in meses_data]
+        }
+
+    # --- Lógica para todos los usuarios ---
+
+    # My Summary
+    summary = {
+        'total_conexiones_creadas': db.session.query(Conexion).filter_by(solicitante_id=user_id).count(),
+        'conexiones_aprobadas_solicitadas': db.session.query(Conexion).filter_by(solicitante_id=user_id, estado='APROBADO').count(),
+        'mis_tareas_en_proceso': db.session.query(Conexion).filter_by(realizador_id=user_id, estado='EN_PROCESO').count(),
+        'pendientes_mi_aprobacion': db.session.query(Conexion).join(Proyecto.usuarios_asignados).filter(Conexion.estado == 'REALIZADO', Usuario.id == user_id).count(),
+        'notificaciones_no_leidas': db.session.query(Notificacion).filter_by(usuario_id=user_id, leida=False).count()
+    }
     dashboard_data['my_summary'] = summary
 
-    # --- Performance Metrics for Realizador/Aprobador ---
-    if 'REALIZADOR' in user_roles or 'APROBADOR' in user_roles:
-        avg_time_sql = "SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days FROM historial_estados h1 JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id WHERE h1.usuario_id = ? AND h1.estado = 'EN_PROCESO' AND h2.estado IN ('REALIZADO', 'APROBADO')"
-        completed_sql = "SELECT COUNT(id) as total FROM conexiones WHERE ((realizador_id = ? AND estado = 'REALIZADO') OR (aprobador_id = ? AND estado = 'APROBADO')) AND strftime('%Y-%m', fecha_modificacion) = strftime('%Y-%m', 'now')"
-        cursor.execute(avg_time_sql, (user_id,))
-        avg_time_result = cursor.fetchone()
-        avg_days_val = avg_time_result['avg_days'] if avg_time_result and avg_time_result['avg_days'] is not None else 0
-        cursor.execute(completed_sql, (user_id, user_id))
-        completed_query = cursor.fetchone()
-        tasks_completed = completed_query['total'] if completed_query else 0
-        dashboard_data['my_performance'] = {
-            'avg_completion_time': f"{avg_days_val:.1f} días" if avg_days_val > 0 else 'N/A',
-            'tasks_completed_this_month': tasks_completed
-        }
-        sql_chart = "SELECT date(fecha_modificacion) as completion_date, COUNT(id) as total FROM conexiones WHERE ((realizador_id = ? AND estado = 'REALIZADO') OR (aprobador_id = ? AND estado = 'APROBADO')) AND fecha_modificacion >= ? GROUP BY completion_date ORDER BY completion_date"
-        params_chart = (user_id, user_id, (datetime.now() -
-                        timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S'))
-        cursor.execute(sql_chart, params_chart)
-        tasks_map = {row['completion_date']: row['total']
-                     for row in cursor.fetchall()}
-        chart_data = {'labels': [], 'data': []}
-        for i in range(29, -1, -1):
-            date = (datetime.now() - timedelta(days=i))
-            date_str = date.strftime('%Y-%m-%d')
-            chart_data['labels'].append(date.strftime('%d %b'))
-            chart_data['data'].append(tasks_map.get(date_str, 0))
-        dashboard_data['my_performance_chart'] = chart_data
+    # My Projects Summary
+    dashboard_data['my_projects_summary'] = db.session.query(
+        Proyecto.id,
+        Proyecto.nombre,
+        func.count(Conexion.id).label('total_conexiones'),
+        func.sum(case((Conexion.estado == 'SOLICITADO', 1), else_=0)).label('solicitadas'),
+        func.sum(case((Conexion.estado.in_(['EN_PROCESO', 'REALIZADO']), 1), else_=0)).label('en_proceso'),
+        func.sum(case((Conexion.estado == 'APROBADO', 1), else_=0)).label('aprobadas'),
+        func.sum(case((Conexion.estado == 'RECHAZADO', 1), else_=0)).label('rechazadas')
+    ).outerjoin(Conexion).join(Proyecto.usuarios_asignados).filter(Usuario.id == user_id).group_by(Proyecto.id, Proyecto.nombre).all()
 
-    # --- User's projects summary ---
-    query_projects = "SELECT p.id, p.nombre, COUNT(c.id) AS total_conexiones, SUM(CASE WHEN c.estado = 'SOLICITADO' THEN 1 ELSE 0 END) AS solicitadas, SUM(CASE WHEN c.estado = 'EN_PROCESO' THEN 1 ELSE 0 END) AS en_proceso, SUM(CASE WHEN c.estado = 'APROBADO' THEN 1 ELSE 0 END) AS aprobadas, SUM(CASE WHEN c.estado = 'RECHAZADO' THEN 1 ELSE 0 END) AS rechazadas FROM proyectos p JOIN proyecto_usuarios pu ON p.id = pu.proyecto_id LEFT JOIN conexiones c ON p.id = c.proyecto_id WHERE pu.usuario_id = ? GROUP BY p.id, p.nombre ORDER BY p.nombre"
-    cursor.execute(query_projects, (user_id,))
-    dashboard_data['my_projects_summary'] = [
-        dict(row) for row in cursor.fetchall()]
 
-    # --- Admin KPIs (Global Stats) ---
-    if 'ADMINISTRADOR' in user_roles:
-        kpi_counts_query = "SELECT SUM(CASE WHEN estado NOT IN ('APROBADO', 'RECHAZADO') THEN 1 ELSE 0 END) as total_activas, SUM(CASE WHEN date(fecha_creacion) = date('now') THEN 1 ELSE 0 END) as creadas_hoy FROM conexiones"
-        avg_time_sql_admin = "SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_time FROM historial_estados h1 JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'"
-        cursor.execute(kpi_counts_query)
-        kpi_counts = cursor.fetchone()
-        cursor.execute(avg_time_sql_admin)
-        avg_time_result_admin = cursor.fetchone()
-        avg_days_admin = avg_time_result_admin['avg_time'] if avg_time_result_admin and avg_time_result_admin['avg_time'] is not None else 0
-        dashboard_data['kpis'] = {
-            'total_activas': kpi_counts['total_activas'] or 0,
-            'creadas_hoy': kpi_counts['creadas_hoy'] or 0,
-            'tiempo_aprobacion': f"{avg_days_admin:.1f} días" if avg_days_admin > 0 else "N/A"
-        }
-        # Placeholder for charts data to avoid template errors
-        dashboard_data['charts'] = {}
-
-    # --- Task lists ---
-    tasks = {'pendientes_aprobacion': [], 'mis_asignadas': [],
-             'disponibles': [], 'mis_solicitudes': []}
+    # Task Lists
     if 'APROBADOR' in user_roles:
-        query_aprobador = "SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre, c.fecha_creacion, c.tipo, c.estado, c.realizador_id FROM conexiones c JOIN proyectos p ON c.proyecto_id = p.id JOIN proyecto_usuarios pu ON c.proyecto_id = pu.proyecto_id WHERE c.estado = 'REALIZADO' AND pu.usuario_id = ? ORDER BY c.fecha_modificacion DESC LIMIT 5"
-        cursor.execute(query_aprobador, (user_id,))
-        tasks['pendientes_aprobacion'] = [
-            dict(row) for row in cursor.fetchall()]
+        dashboard_data['tareas']['pendientes_aprobacion'] = db.session.query(Conexion).join(Proyecto.usuarios_asignados).filter(Conexion.estado == 'REALIZADO', Usuario.id == user_id).order_by(Conexion.fecha_modificacion.desc()).limit(5).all()
     if 'REALIZADOR' in user_roles:
-        query_realizador = "SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre, c.fecha_creacion, c.tipo, c.estado, c.realizador_id FROM conexiones c JOIN proyectos p ON c.proyecto_id = p.id WHERE c.estado = 'EN_PROCESO' AND c.realizador_id = ? ORDER BY c.fecha_modificacion DESC LIMIT 5"
-        cursor.execute(query_realizador, (user_id,))
-        tasks['mis_asignadas'] = [dict(row) for row in cursor.fetchall()]
-        query_disponibles = "SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre, c.fecha_creacion, c.tipo, c.estado, c.realizador_id FROM conexiones c JOIN proyectos p ON c.proyecto_id = p.id WHERE c.estado = 'SOLICITADO' ORDER BY c.fecha_creacion DESC LIMIT 5"
-        cursor.execute(query_disponibles)
-        tasks['disponibles'] = [dict(row) for row in cursor.fetchall()]
+        dashboard_data['tareas']['mis_asignadas'] = db.session.query(Conexion).filter_by(realizador_id=user_id, estado='EN_PROCESO').order_by(Conexion.fecha_modificacion.desc()).limit(5).all()
+        dashboard_data['tareas']['disponibles'] = db.session.query(Conexion).filter_by(estado='SOLICITADO').order_by(Conexion.fecha_creacion.desc()).limit(5).all()
     if 'SOLICITANTE' in user_roles:
-        query_solicitante = "SELECT id, codigo_conexion, estado, fecha_creacion, tipo FROM conexiones WHERE solicitante_id = ? AND estado NOT IN ('APROBADO') ORDER BY fecha_creacion DESC LIMIT 5"
-        cursor.execute(query_solicitante, (user_id,))
-        tasks['mis_solicitudes'] = [dict(row) for row in cursor.fetchall()]
-    dashboard_data['tareas'] = tasks
+        dashboard_data['tareas']['mis_solicitudes'] = db.session.query(Conexion).filter_by(solicitante_id=user_id).order_by(Conexion.fecha_creacion.desc()).limit(10).all()
 
-    # --- Activity Feed ---
-    cursor.execute("""
-        SELECT h.objeto_id as conexion_id, h.fecha, u.nombre_completo as usuario_nombre, c.codigo_conexion, h.accion, h.detalles
-        FROM auditoria_acciones h JOIN usuarios u ON h.usuario_id = u.id
-        LEFT JOIN conexiones c ON h.objeto_id = c.id AND h.tipo_objeto = 'conexiones'
-        WHERE h.accion IN ('CREAR_CONEXION', 'TOMAR_CONEXION', 'MARCAR_REALIZADO_CONEXION', 'APROBAR_CONEXION', 'RECHAZAR_CONEXION', 'SUBIR_ARCHIVO', 'AGREGAR_COMENTARIO')
-        ORDER BY h.fecha DESC LIMIT 10
-    """)
-    dashboard_data['feed_actividad'] = [dict(row) for row in cursor.fetchall()]
+    # Recent Activity Feed
+    dashboard_data['feed_actividad'] = db.session.query(
+        HistorialEstado.fecha,
+        HistorialEstado.estado.label('accion'),
+        Usuario.nombre_completo.label('usuario_nombre'),
+        Conexion.id.label('conexion_id'),
+        Conexion.codigo_conexion
+    ).join(Usuario, HistorialEstado.usuario_id == Usuario.id)\
+     .join(Conexion, HistorialEstado.conexion_id == Conexion.id)\
+     .order_by(HistorialEstado.fecha.desc()).limit(10).all()
 
-    # --- Other data needed by template ---
-    cursor.execute(
-        'SELECT widgets_config FROM user_dashboard_preferences WHERE usuario_id = ?', (user_id,))
-    user_prefs_row = cursor.fetchone()
-    dashboard_data['user_prefs'] = json.loads(
-        user_prefs_row['widgets_config']) if user_prefs_row and user_prefs_row['widgets_config'] else {}
-    cursor.execute("SELECT id, nombre FROM proyectos ORDER BY nombre")
-    dashboard_data['all_projects_for_filter'] = [
-        dict(row) for row in cursor.fetchall()]
-
-    _cache[cache_key] = (dashboard_data, now)
-
-    cursor.close()
+    # All projects for filter dropdown
+    dashboard_data['all_projects_for_filter'] = db.session.query(Proyecto).join(Proyecto.usuarios_asignados).filter(Usuario.id == user_id).all()
 
     return dashboard_data

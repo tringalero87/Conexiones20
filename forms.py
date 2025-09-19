@@ -157,19 +157,13 @@ class ProfileForm(FlaskForm):
     submit = SubmitField('Actualizar Perfil')
 
     def validate_email(self, email):
-        from db import get_db
+        from models import Usuario
         from flask import g
-        db = get_db()
-        if email.data.lower() != g.user['email'].lower():
-            sql = 'SELECT id FROM usuarios WHERE LOWER(email) = ?'
-            cursor = db.cursor()
-            cursor.execute(sql, (email.data.lower(),))
-            user = cursor.fetchone()
-            cursor.close()
-
-            if user:
-                raise ValidationError(
-                    'Este correo electrónico ya está registrado. Por favor, elige otro.')
+        from sqlalchemy import func
+        from extensions import db
+        if g.user and email.data.lower() != g.user.email.lower():
+            if db.session.query(Usuario).filter(func.lower(Usuario.email) == email.data.lower()).first():
+                raise ValidationError('Este correo electrónico ya está registrado. Por favor, elige otro.')
 
     def validate_current_password(self, field):
         from flask import g
@@ -177,11 +171,8 @@ class ProfileForm(FlaskForm):
 
         if self.new_password.data or self.confirm_password.data:
             if not field.data:
-                raise ValidationError(
-                    "Debes proporcionar tu contraseña actual para cambiarla.")
-
-            if not g.user or not check_password_hash(
-                    g.user['password_hash'], field.data):
+                raise ValidationError("Debes proporcionar tu contraseña actual para cambiarla.")
+            if not g.user or not check_password_hash(g.user.password_hash, field.data):
                 raise ValidationError("La contraseña actual no es correcta.")
 
 

@@ -1,107 +1,73 @@
 import json
-from db import get_db, log_action
+from extensions import db
+from models import Conexion
+from db import log_action
 from utils.computos import calcular_peso_perfil
 
-
 def get_computos_results(conexion):
-    """
-    Calculates and returns the metric computations for a connection based on saved data.
-    """
-    detalles = json.loads(
-        conexion['detalles_json']) if conexion['detalles_json'] else {}
-    perfiles = [(key, value)
-                for key, value in detalles.items() if key.startswith('Perfil')]
+    """Calcula y devuelve los cómputos métricos para una conexión."""
+    detalles = json.loads(conexion.detalles_json) if conexion.detalles_json else {}
+    perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
 
     resultados = []
-
     for i, (key, full_profile_name) in enumerate(perfiles):
         longitud_guardada_mm = detalles.get(f'Longitud {key} (mm)')
         if longitud_guardada_mm is not None:
             try:
-                peso = calcular_peso_perfil(
-                    full_profile_name, float(longitud_guardada_mm))
-                resultados.append({
-                    'perfil': full_profile_name,
-                    'longitud': float(longitud_guardada_mm),
-                    'peso': peso
-                })
+                peso = calcular_peso_perfil(full_profile_name, float(longitud_guardada_mm))
+                resultados.append({'perfil': full_profile_name, 'longitud': float(longitud_guardada_mm), 'peso': peso})
             except (ValueError, TypeError):
-                resultados.append({
-                    'perfil': full_profile_name,
-                    'longitud': longitud_guardada_mm,
-                    'peso': 'Error'
-                })
+                resultados.append({'perfil': full_profile_name, 'longitud': longitud_guardada_mm, 'peso': 'Error'})
         else:
-            resultados.append({
-                'perfil': full_profile_name,
-                'longitud': '',  # Empty string for placeholder
-                'peso': 'N/A'
-            })
+            resultados.append({'perfil': full_profile_name, 'longitud': '', 'peso': 'N/A'})
     return resultados, detalles
 
-
 def calculate_and_save_computos(conexion_id, form_data, user_id):
-    """
-    Calculates and saves the metric computations for a connection.
-    """
-    db = get_db()
-    cursor = db.cursor()
+    """Calcula y guarda los cómputos métricos para una conexión usando el ORM."""
+    conexion = db.session.get(Conexion, conexion_id)
+    if not conexion:
+        return None, "La conexión no existe.", None, None
 
-    try:
-        cursor.execute('SELECT * FROM conexiones WHERE id = ?', (conexion_id,))
-        conexion = cursor.fetchone()
+    detalles = json.loads(conexion.detalles_json) if conexion.detalles_json else {}
+    perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
 
-        if not conexion:
-            return None, "La conexión no existe.", None, None
+    resultados = []
+    updated_detalles = detalles.copy()
+    has_error = False
+    error_messages = []
 
-        detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] and isinstance(
-            conexion['detalles_json'], str) else conexion['detalles_json'] or {}
-        perfiles = [(key, value)
-                    for key, value in detalles.items() if key.startswith('Perfil')]
+    for i, (key, full_profile_name) in enumerate(perfiles):
+        longitud_mm_str = form_data.get(f'longitud_{i+1}')
+        if not longitud_mm_str:
+            has_error = True
+            error_messages.append(f"La longitud para {full_profile_name} ({key}) no puede estar vacía.")
+            continue
+        try:
+            longitud_mm = float(longitud_mm_str)
+            peso = calcular_peso_perfil(full_profile_name, longitud_mm)
+            resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm, 'peso': peso})
+            updated_detalles[f'Longitud {key} (mm)'] = longitud_mm
+        except (ValueError, TypeError):
+            has_error = True
+            error_messages.append(f"La longitud para {full_profile_name} ({key}) no es un número válido.")
+            resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
+        except Exception as e:
+            has_error = True
+            error_messages.append(f"Error al calcular peso para {full_profile_name} ({key}): {e}")
+            resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
 
-        resultados = []
-        updated_detalles = detalles.copy()
-        has_error = False
-        error_messages = []
-
-        for i, (key, full_profile_name) in enumerate(perfiles):
-            longitud_mm_str = form_data.get(f'longitud_{i+1}')
-            if not longitud_mm_str:
-                has_error = True
-                error_messages.append(
-                    f"La longitud para {full_profile_name} ({key}) no puede estar vacía.")
-                continue
-            try:
-                longitud_mm = float(longitud_mm_str)
-                peso = calcular_peso_perfil(full_profile_name, longitud_mm)
-                resultados.append(
-                    {'perfil': full_profile_name, 'longitud': longitud_mm, 'peso': peso})
-                updated_detalles[f'Longitud {key} (mm)'] = longitud_mm
-            except ValueError:
-                has_error = True
-                error_messages.append(
-                    f"La longitud para {full_profile_name} ({key}) no es un número válido.")
-                resultados.append(
-                    {'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
-            except Exception as e:
-                has_error = True
-                error_messages.append(
-                    f"Error al calcular peso para {full_profile_name} ({key}): {e}")
-                resultados.append(
-                    {'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
-
-        if not has_error:
-            sql = 'UPDATE conexiones SET detalles_json = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?'
-            params = (json.dumps(updated_detalles), conexion_id)
-            cursor.execute(sql, params)
-            db.commit()
-            log_action('CALCULAR_COMPUTOS', user_id, 'conexiones', conexion_id,
-                       f"Cómputos métricos calculados para '{conexion['codigo_conexion']}'.")
+    if not has_error:
+        try:
+            conexion.detalles_json = json.dumps(updated_detalles)
+            db.session.commit()
+            log_action('CALCULAR_COMPUTOS', user_id, 'conexiones', conexion_id, f"Cómputos métricos calculados para '{conexion.codigo_conexion}'.")
             return resultados, "Cómputos calculados y guardados con éxito.", None, perfiles
-        else:
-            for i, (key, _) in enumerate(perfiles):
-                updated_detalles[f'Longitud {key} (mm)'] = form_data.get(
-                    f'longitud_{i+1}')
+        except Exception as e:
+            db.session.rollback()
+            error_messages.append(f"Error al guardar en la base de datos: {e}")
             return resultados, None, error_messages, perfiles
-    finally:
-        cursor.close()
+    else:
+        # If there were errors, we don't commit, but we want to show the entered values back to the user.
+        for i, (key, _) in enumerate(perfiles):
+            updated_detalles[f'Longitud {key} (mm)'] = form_data.get(f'longitud_{i+1}')
+        return resultados, None, error_messages, perfiles

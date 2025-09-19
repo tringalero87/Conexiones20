@@ -5,11 +5,10 @@ from flask import Flask, g, session, render_template, current_app, flash, redire
 from dotenv import load_dotenv
 import json
 from concurrent.futures import ThreadPoolExecutor
-import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-import db
-from extensions import csrf, mail
+from extensions import csrf, mail, db, migrate
+import models
 from commands import crear_admin_command
 
 load_dotenv()
@@ -29,77 +28,42 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
 
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get(
-            'SECRET_KEY',
-            'un-secreto-muy-dificil-de-adivinar-en-desarrollo'),
-        DATABASE_URL=f"sqlite:///{os.path.join(app.instance_path, 'heptaconexiones.db')}",
-        UPLOAD_FOLDER=os.path.join(
-            app.root_path,
-            'uploads'),
+        SECRET_KEY=os.environ.get('SECRET_KEY', 'a-secret-key'),
+        SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', f"sqlite:///{os.path.join(app.instance_path, 'heptaconexiones.db')}"),
+        SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads'),
         PER_PAGE=10,
     )
 
     if test_config is None:
-        # Cargar configuración de producción/desarrollo desde variables de
-        # entorno y archivos
+        # Cargar configuración de producción/desarrollo
         app.config.from_pyfile('config.py', silent=True)
         app.config.update(
             MAIL_SERVER=os.environ.get('MAIL_SERVER'),
-            MAIL_PORT=int(
-                os.environ.get(
-                    'MAIL_PORT',
-                    587)),
-            MAIL_USE_TLS=os.environ.get(
-                'MAIL_USE_TLS',
-                'true').lower() in [
-                    'true',
-                    '1',
-                    't'],
+            MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
+            MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't'],
             MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
             MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
-            MAIL_DEFAULT_SENDER=(
-                'Hepta-Conexiones',
-                os.environ.get('MAIL_USERNAME')),
-            SCHEDULER_JOBSTORES={
-                'default': SQLAlchemyJobStore(
-                    url=app.config['DATABASE_URL'])},
-            SCHEDULER_JOB_DEFAULTS={
-                'coalesce': True,
-                'max_instances': 1},
-            SCHEDULER_EXECUTORS={
-                'default': {
-                    'type': 'threadpool',
-                    'max_workers': 20}})
+            MAIL_DEFAULT_SENDER=('Hepta-Conexiones', os.environ.get('MAIL_USERNAME')),
+            SCHEDULER_JOBSTORES={'default': SQLAlchemyJobStore(url=app.config['SQLALCHEMY_DATABASE_URI'])},
+            SCHEDULER_JOB_DEFAULTS={'coalesce': False, 'max_instances': 1},
+            SCHEDULER_EXECUTORS={'default': {'type': 'threadpool', 'max_workers': 20}}
+        )
     else:
-        # Cargar configuración de prueba
-        app.config.from_mapping(test_config)
+        # Cargar configuración de prueba: el test_config tiene prioridad
+        app.config.update(test_config)
 
-        # Forzar el uso de la base de datos de prueba de SQLite.
-        # Se prioriza la URL de `test_config` para evitar que variables de entorno
-        # interfieran con las pruebas.
-        test_db_url = app.config['DATABASE_URL']
+        # Si la URI de la BD no se pasó en el test_config, entonces usa la variable de entorno o un default.
+        if 'SQLALCHEMY_DATABASE_URI' not in test_config:
+             app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('TEST_DATABASE_URL', f"sqlite:///{os.path.join(app.instance_path, 'test.db')}")
 
         app.config.update(
-            DATABASE_URL=test_db_url,
-            SCHEDULER_JOBSTORES={
-                'default': SQLAlchemyJobStore(url=test_db_url)
-            },
-            SCHEDULER_EXECUTORS={
-                'default': {'type': 'threadpool', 'max_workers': 1}
-            },
+            SCHEDULER_JOBSTORES={'default': SQLAlchemyJobStore(url=app.config['SQLALCHEMY_DATABASE_URI'])},
+            SCHEDULER_EXECUTORS={'default': {'type': 'threadpool', 'max_workers': 1}},
             SCHEDULER_JOB_DEFAULTS={'coalesce': True, 'max_instances': 1},
-            # Deshabilitar el envío de correos en pruebas
             MAIL_SUPPRESS_SEND=True,
             TESTING=True,
         )
-
-    # -- Validación estricta de la base de datos --
-    # Asegurarse de que la aplicación solo pueda usar SQLite.
-    db_url = app.config.get('DATABASE_URL')
-    if not db_url or not db_url.startswith('sqlite:///'):
-        raise ValueError("Error de configuración: La aplicación está diseñada para funcionar exclusivamente con SQLite. "
-                         "Asegúrese de que la variable de entorno DATABASE_URL o la configuración "
-                         "por defecto apunte a una base de datos SQLite (ej: 'sqlite:///path/to/database.db').")
 
     try:
         os.makedirs(app.instance_path, exist_ok=True)
@@ -110,26 +74,10 @@ def create_app(test_config=None):
     csrf.init_app(app)
     mail.init_app(app)
     db.init_app(app)
+    migrate.init_app(app, db)
 
     # Configurar un ThreadPoolExecutor para tareas asíncronas como el envío de correos
     app.executor = ThreadPoolExecutor(max_workers=5)
-
-    with app.app_context():
-        db_conn = db.get_db()
-        cursor = db_conn.cursor()
-        try:
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'")
-            if cursor.fetchone() is None:
-                app.logger.info(
-                    "Base de datos no inicializada. Creando tablas...")
-                db.init_db()
-                app.logger.info("Base de datos inicializada correctamente.")
-        except Exception as e:
-            app.logger.error(f"Error al inicializar la base de datos: {e}")
-        finally:
-            # No es necesario cerrar el cursor aquí si get_db() gestiona el ciclo de vida
-            pass
 
     app.cli.add_command(crear_admin_command)
 
@@ -143,65 +91,16 @@ def create_app(test_config=None):
 
     @app.before_request
     def before_request_handler():
-        """
-        Se ejecuta ANTES de cada solicitud.
-        Carga el usuario y sus notificaciones en el objeto global 'g' de Flask,
-        que está disponible durante el ciclo de vida de la solicitud.
-        """
         g.user = None
         session.setdefault('user_roles', [])
-
-        try:
-            db_conn = db.get_db()
-            if 'user_id' in session:
-                cursor = db_conn.cursor()
-
-                sql_user = "SELECT * FROM usuarios WHERE id = ?"
-                sql_roles = """
-                    SELECT r.nombre FROM roles r
-                    JOIN usuario_roles ur ON r.id = ur.rol_id
-                    WHERE ur.usuario_id = ?
-                """
-                sql_notif = """
-                    SELECT id, mensaje, url, fecha_creacion FROM notificaciones
-                    WHERE usuario_id = ? AND leida = 0 ORDER BY fecha_creacion DESC
-                """
-
-                # Obtener datos del usuario
-                cursor.execute(sql_user, (session['user_id'],))
-                user_data = cursor.fetchone()
-
-                if user_data:
-                    if not user_data['activo']:
-                        flash(
-                            "Tu cuenta ha sido desactivada. Por favor, contacta a un administrador.",
-                            "warning")
-                        session.clear()
-                        return redirect(url_for('auth.login'))
-
-                    g.user = dict(user_data)
-
-                    # Obtener roles del usuario
-                    cursor.execute(sql_roles, (g.user['id'],))
-                    roles_data = cursor.fetchall()
-                    user_roles_list = [row['nombre'] for row in roles_data]
-                    session['user_roles'] = user_roles_list
-                    g.user['roles'] = user_roles_list
-
-                    # Obtener notificaciones
-                    cursor.execute(sql_notif, (g.user['id'],))
-                    g.notifications = cursor.fetchall()
-                else:
-                    session.clear()
-
-                cursor.close()
-        except sqlite3.Error as e:
-            if 'no such table' in str(e):
-                current_app.logger.warning(
-                    "La base de datos no está inicializada. Ejecute 'flask init-db'.")
+        user_id = session.get('user_id')
+        if user_id:
+            g.user = db.session.get(models.Usuario, user_id)
+            if g.user:
+                 session['user_roles'] = [role.nombre for role in g.user.roles]
+                 g.notifications = models.Notificacion.query.filter_by(usuario_id=user_id, leida=False).order_by(models.Notificacion.fecha_creacion.desc()).all()
             else:
-                current_app.logger.error(
-                    f"Error de base de datos: {e}")
+                session.clear()
 
     @app.context_processor
     def inject_global_vars():
@@ -247,7 +146,7 @@ def create_app(test_config=None):
             return None
 
     from routes import main, auth, conexiones, proyectos, admin, api
-    app.register_blueprint(main.main_bp)
+    app.register_blueprint(main.bp)
     app.register_blueprint(auth.auth_bp)
     app.register_blueprint(conexiones.conexiones_bp)
     app.register_blueprint(proyectos.proyectos_bp)
@@ -264,9 +163,8 @@ def create_app(test_config=None):
 
     @app.errorhandler(500)
     def internal_error(error):
-        db_conn = getattr(g, 'db', None)
-        if db_conn is not None:
-            db_conn.rollback()
+        db.session.rollback()
+        current_app.logger.error(f"Error interno del servidor: {error}", exc_info=True)
         return render_template('errors/500.html'), 500
 
     if not app.debug and not app.testing:

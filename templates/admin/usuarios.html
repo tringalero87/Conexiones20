@@ -50,8 +50,8 @@
                                 como un 'badge' (etiqueta visual).
                             #}
                             {% if usuario.roles %}
-                                {% for rol in usuario.roles.split(',') %}
-                                    <span class="badge bg-secondary">{{ rol.strip() }}</span>
+                                {% for rol in usuario.roles %}
+                                    <span class="badge bg-secondary">{{ rol.nombre }}</span>
                                 {% endfor %}
                             {% else %}
                                 <span class="badge bg-light text-dark">Sin roles</span>

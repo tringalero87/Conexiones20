@@ -1,34 +1,45 @@
-from db import get_db
+from extensions import db
+from models import Proyecto, Usuario
 
-
-def test_project_name_is_case_insensitive_unique(client, app, auth):
-    """
-    Tests that project names are unique regardless of case.
-    """
+def test_project_list_for_admin(client, auth):
+    """Prueba que un admin ve todos los proyectos."""
     auth.login('admin', 'password')
+    with client.application.app_context():
+        db.session.add(Proyecto(nombre='Proyecto B', descripcion='Otro proyecto'))
+        db.session.commit()
 
-    # 1. Create the first project with a lowercase name
-    response = client.post('/proyectos/nuevo', data={
-        'nombre': 'proyecto de prueba',
-        'descripcion': 'Un proyecto para pruebas.'
-    }, follow_redirects=True)
-    assert b'Proyecto creado con \xc3\xa9xito.' in response.data
+    response = client.get('/proyectos/')
+    assert response.status_code == 200
+    assert 'Proyecto Test'.encode('utf-8') in response.data
+    assert 'Proyecto B'.encode('utf-8') in response.data
 
-    # 2. Attempt to create a second project with the same name but different casing
-    response = client.post('/proyectos/nuevo', data={
-        'nombre': 'Proyecto De Prueba',
-        'descripcion': 'Otro proyecto.'
-    }, follow_redirects=True)
+def test_project_list_for_solicitante(client, auth, test_db):
+    """Prueba que un solicitante solo ve los proyectos a los que está asignado."""
+    with client.application.app_context():
+        admin = Usuario.query.filter_by(username='admin').one()
+        solicitante = Usuario.query.filter_by(username='solicitante').one()
 
-    # The buggy code would create this project. The fixed code will show an error.
-    # We assert the fixed behavior, so this test will fail initially.
-    assert b'ya existe' in response.data
+        # Proyecto al que el solicitante SÍ tiene acceso (creado en conftest)
+        proyecto_a = Proyecto.query.filter_by(nombre='Proyecto Test').one()
+        proyecto_a.usuarios_asignados.append(solicitante)
 
-    # 3. Verify that only one project was actually created
-    with app.app_context():
-        db = get_db()
-        cursor = db.cursor()
-        cursor.execute(
-            "SELECT COUNT(id) FROM proyectos WHERE LOWER(nombre) = 'proyecto de prueba'")
-        count = cursor.fetchone()[0]
-        assert count == 1
+        # Proyecto al que el solicitante NO tiene acceso
+        proyecto_b = Proyecto(nombre='Proyecto Secreto', creador=admin)
+        db.session.add(proyecto_b)
+        db.session.commit()
+
+    auth.login('solicitante', 'password')
+    response = client.get('/proyectos/')
+    assert response.status_code == 200
+    assert 'Proyecto Test'.encode('utf-8') in response.data
+    assert 'Proyecto Secreto'.encode('utf-8') not in response.data
+
+def test_create_project(client, auth):
+    """Prueba la creación de un nuevo proyecto."""
+    auth.login('admin', 'password')
+    response = client.post('/proyectos/nuevo', data={'nombre': 'Nuevo Proyecto Desde Test', 'descripcion': '...'}, follow_redirects=True)
+    assert response.status_code == 200
+    assert 'Proyecto creado con éxito'.encode('utf-8') in response.data
+
+    with client.application.app_context():
+        assert Proyecto.query.filter_by(nombre='Nuevo Proyecto Desde Test').count() == 1

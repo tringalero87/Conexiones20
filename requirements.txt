@@ -11,6 +11,8 @@ email_validator==2.3.0
 et_xmlfile==2.0.0
 Flask==3.1.2
 Flask-Mail==0.10.0
+Flask-Migrate==4.0.7
+Flask-SQLAlchemy==3.1.1
 Flask-WTF==1.2.2
 fonttools==4.60.0
 greenlet==3.2.4
@@ -43,3 +45,4 @@ WTForms==3.2.1
 zopfli==0.2.3.post1
 gunicorn==23.0.0
 waitress==3.0.2
+psycopg2-binary==2.9.9

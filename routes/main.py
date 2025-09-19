@@ -1,65 +1,35 @@
-from datetime import datetime, timedelta
-from flask import (Blueprint, render_template, g, redirect,
-                   url_for, request, session, flash)
+from flask import Blueprint, render_template, g, session
 from . import roles_required
-from services.dashboard_service import get_dashboard_data
-from services.main_service import get_catalogo_data, search_conexiones
+import services.dashboard_service as ds
+import services.main_service as ms
+from flask import request, redirect, url_for
+from forms import LoginForm
 
-main_bp = Blueprint('main', __name__)
+bp = Blueprint('main', __name__)
 
-
-@main_bp.route('/')
+@bp.route('/')
 def index():
-    return redirect(url_for('main.dashboard'))
+    if g.user:
+        return redirect(url_for('main.dashboard'))
+    form = LoginForm()
+    return render_template('login.html', form=form, titulo="Iniciar Sesión")
 
-
-@main_bp.route('/dashboard')
+@bp.route('/dashboard')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def dashboard():
-    user_id = g.user['id']
-    user_roles = session.get('user_roles', [])
+    dashboard_data = ds.get_dashboard_data(g.user)
+    return render_template('dashboard.html', titulo="Dashboard", **dashboard_data)
 
-    date_start_str = request.args.get(
-        'date_start', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
-    date_end_str = request.args.get(
-        'date_end', datetime.now().strftime('%Y-%m-%d'))
-    filters = {'start': date_start_str, 'end': date_end_str}
-
-    dashboard_data = get_dashboard_data(user_id, user_roles)
-
-    return render_template(
-        'dashboard.html',
-        dashboard_data=dashboard_data,
-        titulo="Dashboard",
-        filters=filters,
-        all_projects_for_filter=dashboard_data.get('all_projects_for_filter', []))
-
-
-@main_bp.route('/catalogo')
+@bp.route('/catalogo')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def catalogo():
-    preselect_project_id = request.args.get('preselect_project_id', type=int)
-    try:
-        data = get_catalogo_data(preselect_project_id)
-        return render_template(
-            'catalogo.html',
-            estructura=data['estructura'],
-            proyectos=data['proyectos'],
-            preselect_project_id=data['preselect_project_id'],
-            titulo="Catálogo")
-    except ValueError as e:
-        flash(str(e), "danger")
-        return redirect(url_for('main.dashboard'))
+    preselect_project_id = session.get('last_project_id', None)
+    catalogo_data = ms.get_catalogo_data(preselect_project_id)
+    return render_template('catalogo.html', titulo="Catálogo de Tipologías", **catalogo_data)
 
-
-@main_bp.route('/buscar')
+@bp.route('/buscar')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def buscar():
     query = request.args.get('q', '')
-    resultados = search_conexiones(query) if query else []
-
-    return render_template(
-        'buscar.html',
-        resultados=resultados,
-        query=query,
-        titulo=f"Resultados para '{query}'" if query else "Buscar")
+    resultados = ms.search_conexiones(query)
+    return render_template('buscar.html', resultados=resultados, query=query, titulo=f"Resultados para '{query}'")

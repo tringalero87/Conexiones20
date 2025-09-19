@@ -264,3 +264,68 @@ CREATE INDEX IF NOT EXISTS idx_conexiones_estado_realizador ON conexiones (estad
 -- -----------------------------------------------------
 -- Fin del esquema
 -- -----------------------------------------------------
+
+-- ===================================================================================
+-- Tablas Virtuales FTS5 para Búsqueda de Texto Completo
+-- ===================================================================================
+
+-- -----------------------------------------------------
+-- Tabla FTS para: conexiones
+-- Indexa 'codigo_conexion' y 'descripcion' para búsquedas rápidas.
+-- -----------------------------------------------------
+CREATE VIRTUAL TABLE IF NOT EXISTS conexiones_fts USING fts5(
+    codigo_conexion,
+    descripcion,
+    content='conexiones',
+    content_rowid='id'
+);
+
+-- Triggers para mantener la tabla FTS sincronizada con la tabla 'conexiones'
+CREATE TRIGGER IF NOT EXISTS t_conexiones_after_insert AFTER INSERT ON conexiones BEGIN
+  INSERT INTO conexiones_fts(rowid, codigo_conexion, descripcion)
+  VALUES (new.id, new.codigo_conexion, new.descripcion);
+END;
+
+CREATE TRIGGER IF NOT EXISTS t_conexiones_after_delete AFTER DELETE ON conexiones BEGIN
+  INSERT INTO conexiones_fts(conexiones_fts, rowid, codigo_conexion, descripcion)
+  VALUES ('delete', old.id, old.codigo_conexion, old.descripcion);
+END;
+
+CREATE TRIGGER IF NOT EXISTS t_conexiones_after_update AFTER UPDATE ON conexiones BEGIN
+  INSERT INTO conexiones_fts(conexiones_fts, rowid, codigo_conexion, descripcion)
+  VALUES ('delete', old.id, old.codigo_conexion, old.descripcion);
+  INSERT INTO conexiones_fts(rowid, codigo_conexion, descripcion)
+  VALUES (new.id, new.codigo_conexion, new.descripcion);
+END;
+
+
+-- -----------------------------------------------------
+-- Tabla FTS para: alias_perfiles
+-- Indexa 'nombre_perfil' y 'alias' para búsquedas rápidas.
+-- Se utiliza un tokenizador personalizado para manejar prefijos y normalización.
+-- -----------------------------------------------------
+CREATE VIRTUAL TABLE IF NOT EXISTS alias_perfiles_fts USING fts5(
+    nombre_perfil,
+    alias,
+    content='alias_perfiles',
+    content_rowid='id',
+    tokenize = "unicode61"
+);
+
+-- Triggers para mantener la tabla FTS sincronizada con la tabla 'alias_perfiles'
+CREATE TRIGGER IF NOT EXISTS t_alias_after_insert AFTER INSERT ON alias_perfiles BEGIN
+  INSERT INTO alias_perfiles_fts(rowid, nombre_perfil, alias)
+  VALUES (new.id, new.nombre_perfil, new.alias);
+END;
+
+CREATE TRIGGER IF NOT EXISTS t_alias_after_delete AFTER DELETE ON alias_perfiles BEGIN
+  INSERT INTO alias_perfiles_fts(alias_perfiles_fts, rowid, nombre_perfil, alias)
+  VALUES ('delete', old.id, old.nombre_perfil, old.alias);
+END;
+
+CREATE TRIGGER IF NOT EXISTS t_alias_after_update AFTER UPDATE ON alias_perfiles BEGIN
+  INSERT INTO alias_perfiles_fts(alias_perfiles_fts, rowid, nombre_perfil, alias)
+  VALUES ('delete', old.id, old.nombre_perfil, old.alias);
+  INSERT INTO alias_perfiles_fts(rowid, nombre_perfil, alias)
+  VALUES (new.id, new.nombre_perfil, new.alias);
+END;

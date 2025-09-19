@@ -4,19 +4,18 @@ from flask import current_app, render_template, url_for, g
 from flask_mail import Message
 from extensions import mail
 from db import get_db, log_action
+from utils.config_loader import load_conexiones_config
 
 def get_tipologia_config(tipo, subtipo, tipologia_nombre):
-    """Función auxiliar para obtener la configuración de una tipología desde conexiones.json."""
-    json_path = os.path.join(current_app.root_path, 'conexiones.json')
+    """Función auxiliar para obtener la configuración de una tipología desde el loader cacheado."""
+    estructura = load_conexiones_config()
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            estructura = json.load(f)
         if tipo in estructura and subtipo in estructura[tipo]['subtipos']:
             tipologia_obj_list = estructura[tipo]['subtipos'][subtipo]['tipologias']
             return next((t for t in tipologia_obj_list if t['nombre'] == tipologia_nombre), None)
         return None
-    except (KeyError, StopIteration, FileNotFoundError, json.JSONDecodeError) as e:
-        current_app.logger.error(f"Error al cargar configuración de tipología: {e}")
+    except (KeyError, StopIteration) as e:
+        current_app.logger.error(f"Error al buscar configuración de tipología: {e}")
         return None
 
 def _get_conexion(conexion_id):

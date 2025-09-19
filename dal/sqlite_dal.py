@@ -90,6 +90,27 @@ class SQLiteDAL(BaseDAL):
         cursor.execute(sql, params)
         return cursor.fetchall()
 
+    def search_conexiones_fts(self, query):
+        db = get_db()
+        cursor = db.cursor()
+        try:
+            # Sanitize for FTS by escaping double quotes, then wrap in quotes for phrase search
+            # and add asterisk for prefix matching.
+            term = f'"{query.replace("\"", "\"\"")}"*'
+            sql = """
+                SELECT c.*, p.nombre as proyecto_nombre, sol.nombre_completo as solicitante_nombre
+                FROM conexiones_fts fts
+                JOIN conexiones c ON fts.rowid = c.id
+                JOIN proyectos p ON c.proyecto_id = p.id
+                LEFT JOIN usuarios sol ON c.solicitante_id = sol.id
+                WHERE fts.conexiones_fts MATCH ?
+                ORDER BY c.fecha_creacion DESC
+            """
+            cursor.execute(sql, (term,))
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+
     def get_proyectos_for_user(self, user_id, is_admin):
         db = get_db()
         cursor = db.cursor()
@@ -188,6 +209,13 @@ class SQLiteDAL(BaseDAL):
         sql = 'SELECT * FROM archivos WHERE id = ? AND conexion_id = ?'
         cursor = db.cursor()
         cursor.execute(sql, (archivo_id, conexion_id))
+        return cursor.fetchone()
+
+    def get_archivo_by_name(self, conexion_id, filename):
+        db = get_db()
+        sql = 'SELECT id FROM archivos WHERE conexion_id = ? AND nombre_archivo = ?'
+        cursor = db.cursor()
+        cursor.execute(sql, (conexion_id, filename))
         return cursor.fetchone()
 
     def delete_archivo(self, archivo_id):
@@ -395,3 +423,244 @@ class SQLiteDAL(BaseDAL):
         cursor = db.cursor()
         cursor.execute(sql, (user_id, email_notif_estado))
         # El commit se manejará en la ruta
+
+    def get_all_reports(self):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT r.*, u.nombre_completo as creador_nombre FROM reportes r JOIN usuarios u ON r.creador_id = u.id ORDER BY r.nombre")
+        return cursor.fetchall()
+
+    def get_report(self, reporte_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM reportes WHERE id = ?', (reporte_id,))
+        return cursor.fetchone()
+
+    def create_report(self, nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute(
+            "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios)
+        )
+        new_id = cursor.lastrowid
+        db.commit()
+        return new_id
+
+    def update_report(self, reporte_id, nombre, descripcion, filtros, programado, frecuencia, destinatarios):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute(
+            "UPDATE reportes SET nombre = ?, descripcion = ?, filtros = ?, programado = ?, frecuencia = ?, destinatarios = ? WHERE id = ?",
+            (nombre, descripcion, filtros, programado, frecuencia, destinatarios, reporte_id)
+        )
+        db.commit()
+
+    def delete_report(self, reporte_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('DELETE FROM reportes WHERE id = ?', (reporte_id,))
+        db.commit()
+
+    def get_report_data(self, filtros, columnas):
+        db = get_db()
+        cursor = db.cursor()
+
+        query_base = f"SELECT {', '.join(columnas)} FROM conexiones_view WHERE 1=1"
+        params = []
+
+        if filtros.get('proyecto_id') and filtros['proyecto_id'] != 0:
+            query_base += " AND proyecto_id = ?"
+            params.append(filtros['proyecto_id'])
+        if filtros.get('estado'):
+            query_base += " AND estado = ?"
+            params.append(filtros['estado'])
+        if filtros.get('realizador_id') and filtros['realizador_id'] != 0:
+            query_base += " AND realizador_id = ?"
+            params.append(filtros['realizador_id'])
+        if filtros.get('fecha_inicio'):
+            query_base += " AND date(fecha_creacion) >= ?"
+            params.append(filtros['fecha_inicio'])
+        if filtros.get('fecha_fin'):
+            query_base += " AND date(fecha_creacion) <= ?"
+            params.append(filtros['fecha_fin'])
+
+        cursor.execute(query_base, tuple(params))
+        return cursor.fetchall()
+
+    def update_report_last_execution(self, reporte_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = ?', (reporte_id,))
+        db.commit()
+
+    def get_alias_by_name_or_alias(self, nombre_perfil, alias):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('SELECT id FROM alias_perfiles WHERE nombre_perfil = ? OR alias = ?', (nombre_perfil, alias))
+        return cursor.fetchone()
+
+    def create_alias(self, nombre_perfil, alias, norma):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)', (nombre_perfil, alias, norma))
+        new_id = cursor.lastrowid
+        db.commit()
+        return new_id
+
+    def update_alias(self, alias_id, nombre_perfil, alias, norma):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('UPDATE alias_perfiles SET nombre_perfil = ?, alias = ?, norma = ? WHERE id = ?', (nombre_perfil, alias, norma, alias_id))
+        db.commit()
+
+    def delete_alias(self, alias_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('DELETE FROM alias_perfiles WHERE id = ?', (alias_id,))
+        db.commit()
+
+    def get_alias_by_id(self, alias_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM alias_perfiles WHERE id = ?', (alias_id,))
+        return cursor.fetchone()
+
+    def get_alias_by_name(self, nombre_perfil):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM alias_perfiles WHERE nombre_perfil = ?', (nombre_perfil,))
+        return cursor.fetchone()
+
+    def get_efficiency_kpis(self):
+        db = get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""
+            SELECT AVG(julianday(h2.fecha) - julianday(h1.fecha)) as avg_days
+            FROM historial_estados h1
+            JOIN historial_estados h2 ON h1.conexion_id = h2.conexion_id
+            WHERE h1.estado = 'SOLICITADO' AND h2.estado = 'APROBADO'
+        """)
+        avg_time_query = cursor.fetchone()
+        avg_approval_time = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
+
+        cursor.execute("SELECT COUNT(id) as total FROM conexiones WHERE fecha_modificacion >= date('now', '-30 days') AND estado = 'APROBADO'")
+        processed_last_30d_row = cursor.fetchone()
+        processed_last_30d = processed_last_30d_row['total'] if processed_last_30d_row else 0
+
+        cursor.execute("SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO'")
+        total_approved_row = cursor.fetchone()
+        total_approved = total_approved_row['total'] if total_approved_row else 0
+
+        cursor.execute("SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO'")
+        total_rejected_history_row = cursor.fetchone()
+        total_rejected_history = total_rejected_history_row['total'] if total_rejected_history_row else 0
+
+        rejection_rate = (total_rejected_history / (total_approved + total_rejected_history) * 100) if (total_approved + total_rejected_history) > 0 else 0
+
+        return {
+            'avg_approval_time': f"{avg_approval_time:.1f} días" if isinstance(avg_approval_time, (int, float)) else 'N/A',
+            'processed_in_range': processed_last_30d,
+            'rejection_rate': f"{rejection_rate:.1f}%"
+        }
+
+    def get_time_by_state(self):
+        # This is a placeholder. A real implementation would query the database.
+        return {'Solicitado': 8.5, 'En Proceso': 48.2, 'Realizado': 24.0}
+
+    def get_completed_by_user(self):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT u.nombre_completo, COUNT(c.id) as total
+            FROM conexiones c JOIN usuarios u ON c.realizador_id = u.id
+            WHERE c.estado = 'APROBADO' AND c.fecha_modificacion >= date('now', '-30 days')
+            GROUP BY u.id
+            ORDER BY total DESC
+        """)
+        return cursor.fetchall()
+
+    def get_slow_connections(self):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT c.id, c.codigo_conexion, p.nombre as proyecto_nombre,
+                   u.nombre_completo as realizador_nombre,
+                   (julianday('now') - julianday(c.fecha_modificacion)) as dias_en_proceso
+            FROM conexiones c
+            JOIN proyectos p ON c.proyecto_id = p.id
+            LEFT JOIN usuarios u ON c.realizador_id = u.id
+            WHERE c.estado = 'EN_PROCESO'
+            ORDER BY dias_en_proceso DESC
+            LIMIT 5
+        """)
+        return cursor.fetchall()
+
+    def get_audit_logs(self, offset, per_page, filtro_usuario_id=None, filtro_accion=None):
+        db = get_db()
+        cursor = db.cursor()
+
+        query = "SELECT a.*, u.nombre_completo as usuario_nombre FROM auditoria_acciones a JOIN usuarios u ON a.usuario_id = u.id WHERE 1=1"
+        count_query = "SELECT COUNT(*) FROM auditoria_acciones a JOIN usuarios u ON a.usuario_id = u.id WHERE 1=1"
+        params = []
+
+        if filtro_usuario_id:
+            query += " AND a.usuario_id = ?"
+            count_query += " AND a.usuario_id = ?"
+            params.append(filtro_usuario_id)
+        if filtro_accion:
+            query += " AND a.accion = ?"
+            count_query += " AND a.accion = ?"
+            params.append(filtro_accion)
+
+        query += " ORDER BY a.fecha DESC LIMIT ? OFFSET ?"
+
+        params_count = params[:]
+        params.extend([per_page, offset])
+
+        cursor.execute(query, tuple(params))
+        acciones = cursor.fetchall()
+
+        cursor.execute(count_query, tuple(params_count))
+        total_acciones = cursor.fetchone()[0]
+
+        return acciones, total_acciones
+
+    def get_distinct_audit_actions(self):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('SELECT DISTINCT accion FROM auditoria_acciones ORDER BY accion')
+        return cursor.fetchall()
+
+    def get_all_config(self):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT clave, valor FROM configuracion")
+        return {row['clave']: row['valor'] for row in cursor.fetchall()}
+
+    def update_config(self, key, value):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor", (key, value))
+        db.commit()
+
+    def user_has_access_to_project(self, user_id, proyecto_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?", (proyecto_id, user_id))
+        return cursor.fetchone() is not None
+
+    def get_users_for_project(self, proyecto_id):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?", (proyecto_id,))
+        return {row['usuario_id'] for row in cursor.fetchall()}
+
+    def assign_users_to_project(self, proyecto_id, user_ids):
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM proyecto_usuarios WHERE proyecto_id = ?", (proyecto_id,))
+        for user_id in user_ids:
+            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, int(user_id)))
+        db.commit()

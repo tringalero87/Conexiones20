@@ -161,41 +161,33 @@ def get_project_details_for_chart():
     finally:
         cursor.close()
 
+from dal.sqlite_dal import SQLiteDAL
+
 @api_bp.route('/conexiones/<int:conexion_id>/cambiar_estado_rapido', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'REALIZADOR', 'APROBADOR')
 def cambiar_estado_rapido(conexion_id):
-    db = get_db()
-    cursor = db.cursor()
+    dal = SQLiteDAL()
+    conexion = dal.get_conexion(conexion_id)
+    if not conexion:
+        return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
 
-    try:
-        conexion_sql = "SELECT proyecto_id FROM conexiones WHERE id = ?"
-        cursor.execute(conexion_sql, (conexion_id,))
-        conexion = cursor.fetchone()
-        if not conexion:
-            return jsonify({'success': False, 'error': 'La conexión no existe.'}), 404
+    if 'ADMINISTRADOR' not in session.get('user_roles', []):
+        if not dal.user_has_access_to_project(g.user['id'], conexion['proyecto_id']):
+            return jsonify({'success': False, 'error': 'No tienes permiso para acceder a esta conexión.'}), 403
 
-        if 'ADMINISTRADOR' not in session.get('user_roles', []):
-            acceso_sql = "SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?"
-            cursor.execute(acceso_sql, (conexion['proyecto_id'], g.user['id']))
-            acceso = cursor.fetchone()
-            if not acceso:
-                return jsonify({'success': False, 'error': 'No tienes permiso para acceder a esta conexión.'}), 403
+    data = request.get_json()
+    nuevo_estado = data.get('estado')
+    detalles = data.get('detalles', '')
 
-        data = request.get_json()
-        nuevo_estado = data.get('estado')
-        detalles = data.get('detalles', '')
+    success, message, _ = process_connection_state_transition(
+        conexion_id, nuevo_estado, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles
+    )
 
-        success, message, _ = process_connection_state_transition(
-            db, conexion_id, nuevo_estado, g.user['id'], g.user['nombre_completo'], session.get('user_roles', []), detalles
-        )
-
-        if success:
-            return jsonify({'success': True, 'message': message})
-        else:
-            status_code = 400 if "Debes proporcionar un motivo" in message else 403
-            return jsonify({'success': False, 'error': message}), status_code
-    finally:
-        cursor.close()
+    if success:
+        return jsonify({'success': True, 'message': message})
+    else:
+        status_code = 400 if "Debes proporcionar un motivo" in message else 403
+        return jsonify({'success': False, 'error': message}), status_code
 
 @api_bp.route('/dashboard/save_preferences', methods=['POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')

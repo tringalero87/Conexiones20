@@ -1,10 +1,11 @@
-import os
 import json
-from flask import current_app, render_template, url_for, g
+from flask import current_app, render_template, url_for, g, abort
 from flask_mail import Message
 from extensions import mail
 from db import get_db, log_action
 from utils.config_loader import load_conexiones_config
+from dal.sqlite_dal import SQLiteDAL
+
 
 def get_tipologia_config(tipo, subtipo, tipologia_nombre):
     """Función auxiliar para obtener la configuración de una tipología desde el loader cacheado."""
@@ -15,10 +16,10 @@ def get_tipologia_config(tipo, subtipo, tipologia_nombre):
             return next((t for t in tipologia_obj_list if t['nombre'] == tipologia_nombre), None)
         return None
     except (KeyError, StopIteration) as e:
-        current_app.logger.error(f"Error al buscar configuración de tipología: {e}")
+        current_app.logger.error(
+            f"Error al buscar configuración de tipología: {e}")
         return None
 
-from dal.sqlite_dal import SQLiteDAL
 
 def get_conexion(conexion_id):
     """
@@ -28,7 +29,6 @@ def get_conexion(conexion_id):
     dal = SQLiteDAL()
     conexion = dal.get_conexion(conexion_id)
     if conexion is None:
-        from flask import abort
         abort(404, f"La conexión con id {conexion_id} no existe.")
     return dict(conexion)
 
@@ -51,9 +51,12 @@ def get_connection_details(conexion_id):
             archivos_agrupados[tipo] = []
         archivos_agrupados[tipo].append(archivo)
 
-    detalles_json = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
-    plantilla_archivos = tipologia_config.get('plantilla_archivos', []) if tipologia_config else []
+    detalles_json = json.loads(
+        conexion['detalles_json']) if conexion['detalles_json'] else {}
+    tipologia_config = get_tipologia_config(
+        conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
+    plantilla_archivos = tipologia_config.get(
+        'plantilla_archivos', []) if tipologia_config else []
 
     return {
         "conexion": conexion,
@@ -111,8 +114,10 @@ def create_connection(form_data, user_id):
         perfiles_para_plantilla[f'p{i}'] = alias_row['alias'] if alias_row else nombre_completo_perfil
         perfiles_para_detalles[f'Perfil {i}'] = nombre_completo_perfil
 
-    codigo_conexion_base = tipologia_config.get('plantilla', '').format(**perfiles_para_plantilla)
-    codigo_conexion_final = generate_unique_connection_code(codigo_conexion_base)
+    codigo_conexion_base = tipologia_config.get(
+        'plantilla', '').format(**perfiles_para_plantilla)
+    codigo_conexion_final = generate_unique_connection_code(
+        codigo_conexion_base)
 
     conexion_data = {
         'codigo_conexion': codigo_conexion_final,
@@ -129,15 +134,19 @@ def create_connection(form_data, user_id):
         new_id = dal.create_conexion(conexion_data)
         dal.add_historial_estado(new_id, user_id, 'SOLICITADO')
 
-        log_action('CREAR_CONEXION', user_id, 'conexiones', new_id, f"Conexión '{codigo_conexion_final}' creada.")
+        log_action('CREAR_CONEXION', user_id, 'conexiones', new_id,
+                   f"Conexión '{codigo_conexion_final}' creada.")
 
         db = get_db()
-        _notify_users(db, new_id, f"Nueva conexión '{codigo_conexion_final}' lista para ser tomada.", "", ['REALIZADOR', 'ADMINISTRADOR'])
+        _notify_users(db, new_id, f"Nueva conexión '{codigo_conexion_final}' lista para ser tomada.", "", [
+                      'REALIZADOR', 'ADMINISTRADOR'])
 
         return new_id, f'Conexión {codigo_conexion_final} creada con éxito.'
     except Exception as e:
-        current_app.logger.error(f"Error al crear conexión: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error al crear conexión: {e}", exc_info=True)
         return None, "Ocurrió un error interno al crear la conexión."
+
 
 def _send_email_notification(recipients, subject, template, **kwargs):
     """
@@ -147,7 +156,8 @@ def _send_email_notification(recipients, subject, template, **kwargs):
         return
 
     if not current_app.config.get('MAIL_USERNAME'):
-        current_app.logger.warning("Configuración de correo electrónico no completa. No se enviará email.")
+        current_app.logger.warning(
+            "Configuración de correo electrónico no completa. No se enviará email.")
         return
 
     msg = Message(subject, recipients=recipients)
@@ -157,23 +167,29 @@ def _send_email_notification(recipients, subject, template, **kwargs):
         with app.app_context():
             try:
                 mail.send(msg_obj)
-                app.logger.info(f"Correo enviado a {', '.join(msg_obj.recipients)} con asunto: {msg_obj.subject}")
+                app.logger.info(
+                    f"Correo enviado a {', '.join(msg_obj.recipients)} con asunto: {msg_obj.subject}")
             except Exception as e:
-                app.logger.error(f"Error al enviar correo electrónico a {msg_obj.recipients}: {e}", exc_info=True)
+                app.logger.error(
+                    f"Error al enviar correo electrónico a {msg_obj.recipients}: {e}", exc_info=True)
 
     # Usar el ThreadPoolExecutor de la aplicación para gestionar los hilos
-    current_app.executor.submit(send_async_email, current_app._get_current_object(), msg)
+    current_app.executor.submit(
+        send_async_email, current_app._get_current_object(), msg)
+
 
 def _notify_users(conexion_id, message, url_suffix, roles_to_notify):
     """Crea notificaciones y envía correos electrónicos a usuarios con roles específicos."""
     dal = SQLiteDAL()
     conexion = get_conexion(conexion_id)
 
-    users_to_notify = dal.get_users_for_notification(conexion['proyecto_id'], roles_to_notify)
+    users_to_notify = dal.get_users_for_notification(
+        conexion['proyecto_id'], roles_to_notify)
 
     for user in users_to_notify:
         if user['id'] != g.user['id']:
-            full_url = url_for('conexiones.detalle_conexion', conexion_id=conexion_id, _external=True) + url_suffix
+            full_url = url_for('conexiones.detalle_conexion',
+                               conexion_id=conexion_id, _external=True) + url_suffix
             dal.create_notification(user['id'], message, full_url, conexion_id)
 
             if user['email'] and user['email_notif_estado']:
@@ -186,7 +202,6 @@ def _notify_users(conexion_id, message, url_suffix, roles_to_notify):
                     url_accion=full_url
                 )
 
-from flask import abort
 
 def update_connection(conexion_id, form, current_user, user_roles):
     """
@@ -202,7 +217,8 @@ def update_connection(conexion_id, form, current_user, user_roles):
     if not can_edit:
         abort(403)
 
-    tipologia_config = get_tipologia_config(conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
+    tipologia_config = get_tipologia_config(
+        conexion['tipo'], conexion['subtipo'], conexion['tipologia'])
     if not tipologia_config:
         return False, "Error: No se encontró la configuración de la tipología para editar.", None
 
@@ -211,12 +227,14 @@ def update_connection(conexion_id, form, current_user, user_roles):
     perfiles_nuevos_dict_full_name = {}
 
     for i in range(1, num_perfiles + 1):
-        nombre_completo_perfil_nuevo = getattr(form, f'perfil_{i}').data.strip()
+        nombre_completo_perfil_nuevo = getattr(
+            form, f'perfil_{i}').data.strip()
         alias_row = dal.get_alias(nombre_completo_perfil_nuevo)
         perfiles_nuevos_dict_alias[f'p{i}'] = alias_row['alias'] if alias_row else nombre_completo_perfil_nuevo
         perfiles_nuevos_dict_full_name[f'Perfil {i}'] = nombre_completo_perfil_nuevo
 
-    nuevo_codigo_base = tipologia_config['plantilla'].format(**perfiles_nuevos_dict_alias)
+    nuevo_codigo_base = tipologia_config['plantilla'].format(
+        **perfiles_nuevos_dict_alias)
     codigo_a_guardar = conexion['codigo_conexion']
     flash_message = None
 
@@ -232,10 +250,12 @@ def update_connection(conexion_id, form, current_user, user_roles):
 
     try:
         dal.update_conexion(conexion_id, update_data)
-        log_action('EDITAR_CONEXION', current_user['id'], 'conexiones', conexion_id, f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.")
+        log_action('EDITAR_CONEXION', current_user['id'], 'conexiones', conexion_id,
+                   f"Conexión '{conexion['codigo_conexion']}' editada a '{codigo_a_guardar}'.")
         return True, 'Conexión actualizada con éxito.', flash_message
     except Exception as e:
-        current_app.logger.error(f"Error al actualizar conexión {conexion_id}: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error al actualizar conexión {conexion_id}: {e}", exc_info=True)
         return False, "Ocurrió un error interno al actualizar la conexión.", None
 
 
@@ -253,36 +273,48 @@ def assign_realizador(conexion_id, username_to_assign, current_user):
     try:
         if conexion['estado'] == 'SOLICITADO':
             nuevo_estado = 'EN_PROCESO'
-            dal.update_conexion_realizador(conexion_id, usuario_a_asignar['id'], nuevo_estado)
-            dal.add_historial_estado(conexion_id, current_user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}")
+            dal.update_conexion_realizador(
+                conexion_id, usuario_a_asignar['id'], nuevo_estado)
+            dal.add_historial_estado(
+                conexion_id, current_user['id'], nuevo_estado, f"Asignada a {usuario_a_asignar['nombre_completo']}")
 
-            _notify_users(conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido asignada.", "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
+            _notify_users(conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido asignada.", "", [
+                          'SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
 
             return True, f"Conexión asignada a {usuario_a_asignar['nombre_completo']}."
         else:
-            dal.update_conexion_realizador(conexion_id, usuario_a_asignar['id'])
-            log_action('REASIGNAR_CONEXION', current_user['id'], 'conexiones', conexion_id, f"Conexión reasignada a '{usuario_a_asignar['nombre_completo']}'.")
+            dal.update_conexion_realizador(
+                conexion_id, usuario_a_asignar['id'])
+            log_action('REASIGNAR_CONEXION', current_user['id'], 'conexiones', conexion_id,
+                       f"Conexión reasignada a '{usuario_a_asignar['nombre_completo']}'.")
 
-            _notify_users(conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido reasignada.", "", ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
+            _notify_users(conexion_id, f"La conexión {conexion['codigo_conexion']} ha sido reasignada.", "", [
+                          'SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'])
 
             return True, 'Realizador de la conexión actualizado.'
     except Exception as e:
-        current_app.logger.error(f"Error al asignar realizador a conexión {conexion_id}: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error al asignar realizador a conexión {conexion_id}: {e}", exc_info=True)
         return False, "Ocurrió un error interno al asignar el realizador."
+
 
 def delete_connection(conexion_id, user_id):
     """
     Elimina una conexión y registra la acción.
     """
     dal = SQLiteDAL()
-    conexion = get_conexion(conexion_id) # Para obtener el código antes de eliminar
+    # Para obtener el código antes de eliminar
+    conexion = get_conexion(conexion_id)
     try:
         dal.delete_conexion(conexion_id)
-        log_action('ELIMINAR_CONEXION', user_id, 'conexiones', conexion_id, f"Conexión '{conexion['codigo_conexion']}' eliminada.")
+        log_action('ELIMINAR_CONEXION', user_id, 'conexiones', conexion_id,
+                   f"Conexión '{conexion['codigo_conexion']}' eliminada.")
         return True, f"La conexión {conexion['codigo_conexion']} ha sido eliminada."
     except Exception as e:
-        current_app.logger.error(f"Error al eliminar conexión {conexion_id}: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error al eliminar conexión {conexion_id}: {e}", exc_info=True)
         return False, "Ocurrió un error interno al eliminar la conexión."
+
 
 def process_connection_state_transition(conexion_id, new_status_form, user_id, user_full_name, user_roles, details=None):
     """Procesa un cambio de estado de conexión de forma centralizada y segura."""
@@ -299,7 +331,8 @@ def process_connection_state_transition(conexion_id, new_status_form, user_id, u
     elif new_status_form == 'APROBADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
         new_db_state, audit_action, message, success = 'APROBADO', 'APROBAR_CONEXION', "Conexión APROBADA.", True
     elif new_status_form == 'RECHAZADO' and estado_actual == 'REALIZADO' and ('APROBADOR' in user_roles or 'ADMINISTRADOR' in user_roles):
-        if not details: return False, 'Debes proporcionar un motivo para el rechazo.', None
+        if not details:
+            return False, 'Debes proporcionar un motivo para el rechazo.', None
         new_db_state, audit_action, message, success = 'EN_PROCESO', 'RECHAZAR_CONEXION', f"Conexión rechazada. Motivo: {details}", True
 
     if not success:
@@ -308,7 +341,8 @@ def process_connection_state_transition(conexion_id, new_status_form, user_id, u
     db = get_db()
     cursor = db.cursor()
     try:
-        sql_update_parts = ["estado = ?", "fecha_modificacion = CURRENT_TIMESTAMP"]
+        sql_update_parts = ["estado = ?",
+                            "fecha_modificacion = CURRENT_TIMESTAMP"]
         params = [new_db_state]
 
         if new_db_state == 'EN_PROCESO' and audit_action == 'TOMAR_CONEXION':
@@ -322,22 +356,26 @@ def process_connection_state_transition(conexion_id, new_status_form, user_id, u
             params.append(details)
 
         # Construye la consulta de forma segura
-        sql_update = "UPDATE conexiones SET " + ", ".join(sql_update_parts) + " WHERE id = ?"
+        sql_update = "UPDATE conexiones SET " + \
+            ", ".join(sql_update_parts) + " WHERE id = ?"
         params.append(conexion_id)
 
         cursor.execute(sql_update, tuple(params))
 
         sql_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado, detalles) VALUES (?, ?, ?, ?)"
-        cursor.execute(sql_historial, (conexion_id, user_id, new_status_form, details))
+        cursor.execute(sql_historial, (conexion_id,
+                       user_id, new_status_form, details))
         db.commit()
     except Exception as e:
         db.rollback()
-        current_app.logger.error(f"Error en transición de estado para conexión {conexion_id}: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error en transición de estado para conexión {conexion_id}: {e}", exc_info=True)
         return False, "Error interno al cambiar de estado.", None
     finally:
         cursor.close()
 
-    log_action(audit_action, user_id, 'conexiones', conexion_id, f"Estado: {estado_actual} -> {new_db_state}. Detalles: {details or 'N/A'}")
+    log_action(audit_action, user_id, 'conexiones', conexion_id,
+               f"Estado: {estado_actual} -> {new_db_state}. Detalles: {details or 'N/A'}")
 
     # Notificar a los usuarios relevantes
     roles_map = {
@@ -346,7 +384,8 @@ def process_connection_state_transition(conexion_id, new_status_form, user_id, u
         'APROBADO': ['SOLICITANTE', 'REALIZADOR', 'ADMINISTRADOR'],
     }
     if audit_action == 'RECHAZAR_CONEXION':
-        _notify_users(conexion_id, message, "", ['REALIZADOR', 'ADMINISTRADOR'])
+        _notify_users(conexion_id, message, "", [
+                      'REALIZADOR', 'ADMINISTRADOR'])
     elif new_db_state in roles_map:
         _notify_users(conexion_id, message, "", roles_map[new_db_state])
 

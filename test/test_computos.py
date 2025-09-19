@@ -1,8 +1,9 @@
 # test/test_computos.py
-import pytest
 from utils.computos import calcular_peso_perfil
 
 # La fixture 'app' es necesaria porque calcular_peso_perfil utiliza 'current_app' indirectamente.
+
+
 def test_calculo_perfil_existente(app):
     """
     Prueba un cálculo de peso simple con un perfil que existe en perfiles_propiedades.json.
@@ -13,12 +14,14 @@ def test_calculo_perfil_existente(app):
         # Peso total esperado en kg = 42.2 kg/m * 1 m = 42.2 kg.
         assert calcular_peso_perfil("IPE 300", 1000) == 42.2
 
+
 def test_calculo_perfil_inexistente(app):
     """
     Prueba que un perfil que no existe (y no es un perfil calculable como PL) devuelve 0.
     """
     with app.app_context():
         assert calcular_peso_perfil("PERFIL-INEXISTENTE", 1000) == 0.0
+
 
 def test_calculo_platina_fraccion_simple(app):
     """
@@ -40,6 +43,7 @@ def test_calculo_platina_fraccion_simple(app):
         # El valor esperado es 7.71
         assert calcular_peso_perfil("PL1/2X10", 304.8) == 7.71
 
+
 def test_calculo_platina_fraccion_mixta(app):
     """
     Prueba el cálculo de peso para un perfil de platina (PL)
@@ -55,6 +59,7 @@ def test_calculo_platina_fraccion_mixta(app):
         # El valor esperado es 23.13
         assert calcular_peso_perfil("PL1 1/2X10", 304.8) == 23.13
 
+
 def test_calculo_platina_con_espacios_en_fraccion(app):
     """
     Prueba el cálculo de peso para un perfil de platina (PL) con espacios
@@ -66,6 +71,7 @@ def test_calculo_platina_con_espacios_en_fraccion(app):
         # El peso esperado es el mismo que en test_calculo_platina_fraccion_simple
         # 7.71 kg para una longitud de 304.8 mm (1 ft).
         assert calcular_peso_perfil("PL 1 / 2 X 10", 304.8) == 7.71
+
 
 def test_calculo_platina_decimal_thickness(app):
     """
@@ -80,6 +86,7 @@ def test_calculo_platina_decimal_thickness(app):
         # Peso esperado (kg) = 17 lb * 0.453592 kg/lb = 7.711... kg
         # El valor esperado es 7.71
         assert calcular_peso_perfil("PL0.5X10", 304.8) == 7.71
+
 
 def test_plate_profile_with_hyphen(app):
     """

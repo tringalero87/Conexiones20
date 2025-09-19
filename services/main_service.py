@@ -3,6 +3,7 @@ import json
 from flask import current_app, g, session
 from dal.sqlite_dal import SQLiteDAL
 
+
 def get_catalogo_data(preselect_project_id):
     """
     Prepara los datos necesarios para la página del catálogo.
@@ -17,8 +18,10 @@ def get_catalogo_data(preselect_project_id):
         with open(json_path, 'r', encoding='utf-8') as f:
             estructura = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        current_app.logger.error(f"Error crítico al cargar 'conexiones.json': {e}", exc_info=True)
-        raise ValueError("Error crítico: No se pudo cargar la configuración de conexiones.")
+        current_app.logger.error(
+            f"Error crítico al cargar 'conexiones.json': {e}", exc_info=True)
+        raise ValueError(
+            "Error crítico: No se pudo cargar la configuración de conexiones.")
 
     proyectos = dal.get_proyectos_for_user(user_id, is_admin)
 
@@ -27,6 +30,7 @@ def get_catalogo_data(preselect_project_id):
         'proyectos': proyectos,
         'preselect_project_id': preselect_project_id
     }
+
 
 def search_conexiones(query):
     """

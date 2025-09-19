@@ -1,8 +1,9 @@
 import pandas as pd
 import json
 from db import get_db, log_action
-from flask import current_app, g
+from flask import current_app
 from services.connection_service import get_tipologia_config
+
 
 def importar_conexiones_from_file(file, proyecto_id, user_id):
     """
@@ -24,9 +25,11 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
         if not all(col in df.columns for col in required_cols):
             return 0, [], 'El archivo Excel no contiene todas las columnas requeridas (TIPO, SUBTIPO, TIPOLOGIA, PERFIL1).'
 
-        cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
+        cursor.execute(
+            "SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
         aliases = cursor.fetchall()
-        alias_map_by_fullname = {row['nombre_perfil']: row['alias'] for row in aliases}
+        alias_map_by_fullname = {
+            row['nombre_perfil']: row['alias'] for row in aliases}
 
         cursor.execute("SELECT codigo_conexion FROM conexiones")
         existing_codes = {row['codigo_conexion'] for row in cursor.fetchall()}
@@ -46,12 +49,15 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
                     descripcion_input = None
 
                 if not all([tipo, subtipo, tipologia_nombre, perfil1_input]):
-                    error_rows.append(f"Fila {index+2}: Faltan datos obligatorios (Tipo, Subtipo, Tipología, Perfil1).")
+                    error_rows.append(
+                        f"Fila {index+2}: Faltan datos obligatorios (Tipo, Subtipo, Tipología, Perfil1).")
                     continue
 
-                tipologia_config = get_tipologia_config(tipo, subtipo, tipologia_nombre)
+                tipologia_config = get_tipologia_config(
+                    tipo, subtipo, tipologia_nombre)
                 if not tipologia_config:
-                    error_rows.append(f"Fila {index+2}: Tipología '{tipologia_nombre}' no encontrada para Tipo '{tipo}' y Subtipo '{subtipo}'.")
+                    error_rows.append(
+                        f"Fila {index+2}: Tipología '{tipologia_nombre}' no encontrada para Tipo '{tipo}' y Subtipo '{subtipo}'.")
                     continue
 
                 num_perfiles_requeridos = tipologia_config.get('perfiles', 0)
@@ -61,24 +67,30 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
                 perfiles_para_detalles = {}
 
                 perfiles_para_detalles['Perfil 1'] = perfil1_input
-                perfiles_para_plantilla['p1'] = alias_map_by_fullname.get(perfil1_input, perfil1_input)
+                perfiles_para_plantilla['p1'] = alias_map_by_fullname.get(
+                    perfil1_input, perfil1_input)
 
                 if num_perfiles_requeridos >= 2:
                     if not perfil2_input:
-                        error_rows.append(f"Fila {index+2}: Se requiere Perfil 2 para esta tipología, pero no se proporcionó.")
+                        error_rows.append(
+                            f"Fila {index+2}: Se requiere Perfil 2 para esta tipología, pero no se proporcionó.")
                         continue
                     perfiles_para_detalles['Perfil 2'] = perfil2_input
-                    perfiles_para_plantilla['p2'] = alias_map_by_fullname.get(perfil2_input, perfil2_input)
+                    perfiles_para_plantilla['p2'] = alias_map_by_fullname.get(
+                        perfil2_input, perfil2_input)
 
                 if num_perfiles_requeridos >= 3:
                     perfil3_input = str(row.get('PERFIL3', '')).strip()
                     if not perfil3_input:
-                        error_rows.append(f"Fila {index+2}: Se requiere Perfil 3 para esta tipología, pero no se proporcionó.")
+                        error_rows.append(
+                            f"Fila {index+2}: Se requiere Perfil 3 para esta tipología, pero no se proporcionó.")
                         continue
                     perfiles_para_detalles['Perfil 3'] = perfil3_input
-                    perfiles_para_plantilla['p3'] = alias_map_by_fullname.get(perfil3_input, perfil3_input)
+                    perfiles_para_plantilla['p3'] = alias_map_by_fullname.get(
+                        perfil3_input, perfil3_input)
 
-                codigo_conexion_base = plantilla_codigo.format(**perfiles_para_plantilla)
+                codigo_conexion_base = plantilla_codigo.format(
+                    **perfiles_para_plantilla)
 
                 contador = 1
                 codigo_conexion_final = codigo_conexion_base
@@ -89,21 +101,26 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
                 detalles_json = json.dumps(perfiles_para_detalles)
 
                 sql_insert_conexion = "INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, descripcion, detalles_json, solicitante_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
-                params_conexion = (codigo_conexion_final, proyecto_id, tipo, subtipo, tipologia_nombre, descripcion_input, detalles_json, user_id)
+                params_conexion = (codigo_conexion_final, proyecto_id, tipo, subtipo,
+                                   tipologia_nombre, descripcion_input, detalles_json, user_id)
 
                 cursor.execute(sql_insert_conexion, params_conexion)
                 new_conexion_id = cursor.fetchone()['id']
 
                 sql_insert_historial = "INSERT INTO historial_estados (conexion_id, usuario_id, estado) VALUES (?, ?, ?)"
-                cursor.execute(sql_insert_historial, (new_conexion_id, user_id, 'SOLICITADO'))
+                cursor.execute(sql_insert_historial,
+                               (new_conexion_id, user_id, 'SOLICITADO'))
 
                 existing_codes.add(codigo_conexion_final)
-                log_action('IMPORTAR_CONEXION', user_id, 'conexiones', new_conexion_id, f"Conexión '{codigo_conexion_final}' importada en proyecto '{proyecto['nombre']}'.")
+                log_action('IMPORTAR_CONEXION', user_id, 'conexiones', new_conexion_id,
+                           f"Conexión '{codigo_conexion_final}' importada en proyecto '{proyecto['nombre']}'.")
                 imported_count += 1
 
             except Exception as row_e:
-                error_rows.append(f"Fila {index+2}: Error al procesar - {row_e}")
-                current_app.logger.error(f"Error al importar fila {index+2}: {row_e}", exc_info=True)
+                error_rows.append(
+                    f"Fila {index+2}: Error al procesar - {row_e}")
+                current_app.logger.error(
+                    f"Error al importar fila {index+2}: {row_e}", exc_info=True)
 
         db.commit()
         return imported_count, error_rows, None
@@ -116,7 +133,8 @@ def importar_conexiones_from_file(file, proyecto_id, user_id):
         return 0, [], f'Error al analizar el archivo Excel. Asegúrate de que el formato sea correcto. Detalle: {pe}'
     except Exception as e:
         db.rollback()
-        current_app.logger.error(f"Ocurrió un error inesperado durante la importación: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Ocurrió un error inesperado durante la importación: {e}", exc_info=True)
         return 0, [], f"Ocurrió un error inesperado durante la importación: {e}"
     finally:
         if cursor:

@@ -4,19 +4,22 @@ import json
 from datetime import datetime
 import pandas as pd
 from weasyprint import HTML
-from flask import render_template, current_app
+from flask import render_template, current_app, g
 from flask_mail import Message
 from extensions import mail
 from dal.sqlite_dal import SQLiteDAL
 from db import log_action
 
+
 def get_all_reports():
     dal = SQLiteDAL()
     return dal.get_all_reports()
 
+
 def get_report_for_edit(reporte_id):
     dal = SQLiteDAL()
     return dal.get_report(reporte_id)
+
 
 def create_report(form, user_id):
     dal = SQLiteDAL()
@@ -42,13 +45,16 @@ def create_report(form, user_id):
         )
 
         if form.programado.data:
-            schedule_report_job(report_id, form.nombre.data, form.frecuencia.data)
+            schedule_report_job(report_id, form.nombre.data,
+                                form.frecuencia.data)
 
-        log_action('CREAR_REPORTE', user_id, 'reportes', report_id, f"Reporte '{form.nombre.data}' creado.")
+        log_action('CREAR_REPORTE', user_id, 'reportes', report_id,
+                   f"Reporte '{form.nombre.data}' creado.")
         return True, 'Reporte guardado con éxito.'
-    except Exception as e:
+    except Exception:
         # log error e
         return False, 'Ocurrió un error al crear el reporte.'
+
 
 def update_report(reporte_id, form):
     dal = SQLiteDAL()
@@ -75,16 +81,19 @@ def update_report(reporte_id, form):
 
         job_id = f"report_{reporte_id}"
         if form.programado.data:
-            schedule_report_job(reporte_id, form.nombre.data, form.frecuencia.data)
+            schedule_report_job(
+                reporte_id, form.nombre.data, form.frecuencia.data)
         else:
             if current_app.scheduler.get_job(job_id):
                 current_app.scheduler.remove_job(job_id)
 
-        log_action('EDITAR_REPORTE', g.user['id'], 'reportes', reporte_id, f"Reporte '{form.nombre.data}' editado.")
+        log_action('EDITAR_REPORTE', g.user['id'], 'reportes',
+                   reporte_id, f"Reporte '{form.nombre.data}' editado.")
         return True, 'Reporte actualizado con éxito.'
-    except Exception as e:
+    except Exception:
         # log error e
         return False, 'Ocurrió un error al actualizar el reporte.'
+
 
 def delete_report(reporte_id, user_id):
     dal = SQLiteDAL()
@@ -97,24 +106,28 @@ def delete_report(reporte_id, user_id):
         try:
             current_app.scheduler.remove_job(job_id)
         except Exception as e:
-            current_app.logger.error(f"Error al desprogramar el job '{job_id}': {e}", exc_info=True)
+            current_app.logger.error(
+                f"Error al desprogramar el job '{job_id}': {e}", exc_info=True)
 
     try:
         dal.delete_report(reporte_id)
-        log_action('ELIMINAR_REPORTE', user_id, 'reportes', reporte_id, f"El reporte '{reporte['nombre']}' ha sido eliminado.")
+        log_action('ELIMINAR_REPORTE', user_id, 'reportes', reporte_id,
+                   f"El reporte '{reporte['nombre']}' ha sido eliminado.")
         return True, f"El reporte '{reporte['nombre']}' ha sido eliminado."
-    except Exception as e:
+    except Exception:
         return False, "Ocurrió un error al eliminar el reporte."
 
 
 def run_report(reporte_id, user_id):
-    filename, mimetype, file_content, _ = _generate_report_data_and_file(reporte_id, current_app.app_context())
+    filename, mimetype, file_content, _ = _generate_report_data_and_file(
+        reporte_id, current_app.app_context())
     if not file_content:
         return None, None, None, "No se pudo generar el reporte. Verifique la configuración o los datos."
 
     dal = SQLiteDAL()
     reporte = dal.get_report(reporte_id)
-    log_action('EJECUTAR_REPORTE', user_id, 'reportes', reporte_id, f"Reporte '{reporte['nombre']}' ejecutado y descargado.")
+    log_action('EJECUTAR_REPORTE', user_id, 'reportes', reporte_id,
+               f"Reporte '{reporte['nombre']}' ejecutado y descargado.")
     return filename, mimetype, file_content, f"Reporte '{reporte['nombre']}' ejecutado y descargado."
 
 
@@ -135,33 +148,42 @@ def schedule_report_job(reporte_id, nombre_reporte, frecuencia):
                 args=[reporte_id],
                 replace_existing=True
             )
-            current_app.logger.info(f"Reporte '{nombre_reporte}' (ID: {reporte_id}) programado con éxito.")
+            current_app.logger.info(
+                f"Reporte '{nombre_reporte}' (ID: {reporte_id}) programado con éxito.")
         except Exception as e:
-            current_app.logger.error(f"Error al programar el reporte '{nombre_reporte}': {e}", exc_info=True)
+            current_app.logger.error(
+                f"Error al programar el reporte '{nombre_reporte}': {e}", exc_info=True)
             raise e
+
 
 def scheduled_report_job(reporte_id):
     with current_app.app_context():
         dal = SQLiteDAL()
         reporte = dal.get_report(reporte_id)
         if not reporte or not reporte['programado'] or not reporte['destinatarios']:
-            current_app.logger.warning(f"Tarea programada para reporte ID {reporte_id} no ejecutada.")
+            current_app.logger.warning(
+                f"Tarea programada para reporte ID {reporte_id} no ejecutada.")
             return
 
-        recipients = [email.strip() for email in reporte['destinatarios'].split(',') if email.strip()]
+        recipients = [email.strip() for email in reporte['destinatarios'].split(
+            ',') if email.strip()]
         if not recipients:
             return
 
-        filename, mimetype, file_content, preview_results = _generate_report_data_and_file(reporte_id, current_app.app_context())
+        filename, mimetype, file_content, preview_results = _generate_report_data_and_file(
+            reporte_id, current_app.app_context())
         if file_content:
             try:
                 subject = f"Reporte Programado: {reporte['nombre']} ({datetime.now().strftime('%Y-%m-%d')})"
                 msg = Message(subject, recipients=recipients)
-                msg.html = render_template('email/reporte_programado.html', reporte={'nombre': reporte['nombre']}, resultados=preview_results, now=datetime.now)
+                msg.html = render_template('email/reporte_programado.html', reporte={
+                                           'nombre': reporte['nombre']}, resultados=preview_results, now=datetime.now)
                 msg.attach(filename, mimetype, file_content)
                 mail.send(msg)
             except Exception as e:
-                current_app.logger.error(f"Error al enviar reporte programado '{reporte['nombre']}': {e}", exc_info=True)
+                current_app.logger.error(
+                    f"Error al enviar reporte programado '{reporte['nombre']}': {e}", exc_info=True)
+
 
 def _generate_report_data_and_file(reporte_id, app_context):
     with app_context:
@@ -185,7 +207,8 @@ def _generate_report_data_and_file(reporte_id, app_context):
             'aprobador_id', 'aprobador_nombre', 'fecha_creacion', 'fecha_modificacion',
             'detalles_rechazo'
         ]
-        columnas_seleccionadas = [col for col in columnas_seleccionadas_input if col in allowed_columns]
+        columnas_seleccionadas = [
+            col for col in columnas_seleccionadas_input if col in allowed_columns]
         if not columnas_seleccionadas:
             return None, None, None, None
 
@@ -215,7 +238,8 @@ def _generate_report_data_and_file(reporte_id, app_context):
             mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             filename = f"{filename_base}.xlsx"
         elif output_format == 'pdf':
-            html = render_template('email/reporte_programado.html', reporte=reporte, resultados=resultados_dicts, now=datetime.now)
+            html = render_template('email/reporte_programado.html',
+                                   reporte=reporte, resultados=resultados_dicts, now=datetime.now)
             pdf_bytes = HTML(string=html).write_pdf()
             file_content = pdf_bytes
             mimetype = "application/pdf"

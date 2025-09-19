@@ -1,6 +1,6 @@
-import pytest
 from db import get_db
 from werkzeug.security import generate_password_hash
+
 
 def test_profile_update_rejects_duplicate_email(client, app, auth):
     """
@@ -26,7 +26,7 @@ def test_profile_update_rejects_duplicate_email(client, app, auth):
     # Attempt to change email to user2's email
     response = client.post('/auth/perfil', data={
         'nombre_completo': 'Admin User Updated',
-        'email': 'user2@example.com', # This email is already taken
+        'email': 'user2@example.com',  # This email is already taken
         'current_password': '',
         'new_password': '',
         'confirm_password': ''
@@ -49,6 +49,7 @@ def test_profile_update_rejects_duplicate_email(client, app, auth):
         user1 = cursor.fetchone()
         assert user1['email'] == 'admin@test.com'
 
+
 def test_profile_password_change_wrong_current_password(client, auth):
     """
     Tests that changing a password with an incorrect current password
@@ -63,7 +64,7 @@ def test_profile_password_change_wrong_current_password(client, auth):
         'new_password': 'newpassword',
         'confirm_password': 'newpassword',
         'email_notif_estado': 'y'
-    }) # No longer following redirects to inspect the form response
+    })  # No longer following redirects to inspect the form response
 
     assert response.status_code == 200
     # Check for the form-level validation error message
@@ -71,4 +72,5 @@ def test_profile_password_change_wrong_current_password(client, auth):
     # Ensure it's not a flashed message by checking for the absence of the alert div
     with client.session_transaction() as session:
         flashes = session.get('_flashes', [])
-        assert not any('La contraseña actual no es correcta.' in msg for cat, msg in flashes)
+        assert not any(
+            'La contraseña actual no es correcta.' in msg for cat, msg in flashes)

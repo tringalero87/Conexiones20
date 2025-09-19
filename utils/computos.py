@@ -18,6 +18,7 @@ from flask import current_app
 # repetidamente en la misma solicitud. Es una optimización de rendimiento.
 _perfiles_data = None
 
+
 def _convert_fraction_to_float(frac_str):
     """
     Convierte una cadena que representa una fracción o un número mixto a un float.
@@ -43,7 +44,7 @@ def _convert_fraction_to_float(frac_str):
             parts = [p for p in parts if p]
             whole_part = float(parts[0])
             frac_part_str = parts[1]
-        else: # Si es una fracción simple (ej. "1/2")
+        else:  # Si es una fracción simple (ej. "1/2")
             whole_part = 0
             frac_part_str = normalized_str
 
@@ -51,13 +52,14 @@ def _convert_fraction_to_float(frac_str):
         if '/' in frac_part_str:
             num, den = frac_part_str.split('/')
             frac_part = float(num) / float(den)
-        else: # No debería ocurrir si hay espacios, pero por si acaso.
+        else:  # No debería ocurrir si hay espacios, pero por si acaso.
             frac_part = float(frac_part_str)
 
         return whole_part + frac_part
     except (ValueError, ZeroDivisionError):
         # Si la conversión falla, devuelve 0.0 y deja que el logger principal lo maneje.
-        raise ValueError(f"No se pudo convertir la fracción '{frac_str}' a un número.")
+        raise ValueError(
+            f"No se pudo convertir la fracción '{frac_str}' a un número.")
 
 
 def _calculate_plate_weight(profile_name, longitud_mm):
@@ -69,9 +71,10 @@ def _calculate_plate_weight(profile_name, longitud_mm):
     # Regex mejorada para capturar espesor y ancho, permitiendo espacios y fracciones.
     # Grupo 1: Espesor (puede ser número, fracción, o mixto)
     # Grupo 2: Ancho (puede ser número, fracción, o mixto)
-    match_PL = re.match(r'^PL[\s-]*([0-9\s/.]+)\s*[X*]\s*([0-9\s/.]+)', profile_name, re.IGNORECASE)
+    match_PL = re.match(
+        r'^PL[\s-]*([0-9\s/.]+)\s*[X*]\s*([0-9\s/.]+)', profile_name, re.IGNORECASE)
     if not match_PL:
-        return None # No es un perfil de platina válido
+        return None  # No es un perfil de platina válido
 
     try:
         thickness_str = match_PL.group(1).strip()
@@ -95,7 +98,8 @@ def _calculate_plate_weight(profile_name, longitud_mm):
         return round(peso_total_kg, 2)
 
     except (ValueError, TypeError, IndexError) as e:
-        current_app.logger.warning(f"No se pudo parsear o calcular el peso para el perfil de platina '{profile_name}': {e}")
+        current_app.logger.warning(
+            f"No se pudo parsear o calcular el peso para el perfil de platina '{profile_name}': {e}")
         return None
 
 
@@ -108,7 +112,8 @@ def _cargar_propiedades_perfiles():
     if _perfiles_data is not None:
         return _perfiles_data
 
-    json_path = os.path.join(current_app.root_path, 'perfiles_propiedades.json')
+    json_path = os.path.join(current_app.root_path,
+                             'perfiles_propiedades.json')
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             _perfiles_data = json.load(f)
@@ -119,11 +124,13 @@ def _cargar_propiedades_perfiles():
             _perfiles_data = normalized_data
             return _perfiles_data
     except FileNotFoundError:
-        current_app.logger.error(f"Error crítico: No se encontró el archivo de propiedades de perfiles en '{json_path}'.")
+        current_app.logger.error(
+            f"Error crítico: No se encontró el archivo de propiedades de perfiles en '{json_path}'.")
         _perfiles_data = {}
         return {}
     except json.JSONDecodeError:
-        current_app.logger.error(f"Error crítico: El archivo 'perfiles_propiedades.json' está corrupto o mal formado.")
+        current_app.logger.error(
+            "Error crítico: El archivo 'perfiles_propiedades.json' está corrupto o mal formado.")
         _perfiles_data = {}
         return {}
 
@@ -148,7 +155,8 @@ def calcular_peso_perfil(nombre_perfil, longitud_mm):
             peso_total_kg = peso_por_metro * longitud_metros
             return round(peso_total_kg, 2)
         except (ValueError, TypeError) as e:
-            current_app.logger.error(f"Error al calcular el peso para el perfil JSON '{nombre_perfil}': {e}.")
+            current_app.logger.error(
+                f"Error al calcular el peso para el perfil JSON '{nombre_perfil}': {e}.")
             return 0.0
 
     # 2. Si no se encuentra, intentar calcular como perfil de platina (PL)
@@ -158,5 +166,6 @@ def calcular_peso_perfil(nombre_perfil, longitud_mm):
             return peso_calculado
 
     # Si no es un perfil del JSON ni un perfil PL calculable, devolver 0.0
-    current_app.logger.warning(f"No se encontraron propiedades para el perfil '{nombre_perfil}' y no es un tipo calculable (ej. PL).")
+    current_app.logger.warning(
+        f"No se encontraron propiedades para el perfil '{nombre_perfil}' y no es un tipo calculable (ej. PL).")
     return 0.0

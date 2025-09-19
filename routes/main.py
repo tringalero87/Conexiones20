@@ -1,9 +1,3 @@
-import json
-import os
-import re
-from datetime import datetime, timedelta
-from flask import (Blueprint, render_template, g, current_app, redirect,
-                   url_for, request, session, flash)
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, g, redirect,
                    url_for, request, session, flash)

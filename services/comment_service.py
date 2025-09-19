@@ -4,6 +4,7 @@ from db import log_action
 from services.connection_service import _notify_users
 from db import get_db
 
+
 def add_comment(conexion_id, user_id, user_name, content):
     """
     Añade un comentario a una conexión, lo sanitiza y notifica a los usuarios.
@@ -14,17 +15,20 @@ def add_comment(conexion_id, user_id, user_name, content):
 
     dal = SQLiteDAL()
     try:
-        sanitized_content = bleach.clean(content, tags=bleach.sanitizer.ALLOWED_TAGS + ['p', 'br'], strip=True)
+        sanitized_content = bleach.clean(
+            content, tags=bleach.sanitizer.ALLOWED_TAGS + ['p', 'br'], strip=True)
         dal.create_comentario(conexion_id, user_id, sanitized_content)
 
-        log_action('AGREGAR_COMENTARIO', user_id, 'conexiones', conexion_id, "Comentario añadido.")
+        log_action('AGREGAR_COMENTARIO', user_id, 'conexiones',
+                   conexion_id, "Comentario añadido.")
 
         # Usamos get_db() para pasar el objeto de conexión a _notify_users
         db = get_db()
-        _notify_users(db, conexion_id, f"{user_name} ha comentado.", "#comentarios", ['SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
+        _notify_users(db, conexion_id, f"{user_name} ha comentado.", "#comentarios", [
+                      'SOLICITANTE', 'REALIZADOR', 'APROBADOR', 'ADMINISTRADOR'])
 
         return True, 'Comentario añadido.'
-    except Exception as e:
+    except Exception:
         # En un sistema real, aquí se registraría el error 'e'
         return False, 'Ocurrió un error interno al añadir el comentario.'
 
@@ -42,8 +46,9 @@ def delete_comment(conexion_id, comentario_id, user_id):
 
     try:
         dal.delete_comentario(comentario_id)
-        log_action('ELIMINAR_COMENTARIO', user_id, 'comentarios', comentario_id, f"Comentario (ID: {comentario_id}) eliminado.")
+        log_action('ELIMINAR_COMENTARIO', user_id, 'comentarios',
+                   comentario_id, f"Comentario (ID: {comentario_id}) eliminado.")
         return True, 'Comentario eliminado.'
-    except Exception as e:
+    except Exception:
         # En un sistema real, aquí se registraría el error 'e'
         return False, 'Ocurrió un error interno al eliminar el comentario.'

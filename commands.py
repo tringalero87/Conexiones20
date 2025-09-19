@@ -2,7 +2,7 @@ import click
 from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
 from db import get_db
-from flask import current_app
+
 
 @click.command('crear-admin')
 @with_appcontext
@@ -19,7 +19,8 @@ def crear_admin_command(username, password, email, nombre_completo):
         sql_check_user = "SELECT id FROM usuarios WHERE username = ? OR email = ?"
         cursor.execute(sql_check_user, (username, email))
         if cursor.fetchone():
-            click.echo(f"Error: El usuario '{username}' o el email '{email}' ya existen.")
+            click.echo(
+                f"Error: El usuario '{username}' o el email '{email}' ya existen.")
             return
 
         # Obtener el ID del rol de administrador
@@ -27,7 +28,8 @@ def crear_admin_command(username, password, email, nombre_completo):
         cursor.execute(sql_get_role)
         rol = cursor.fetchone()
         if not rol:
-            click.echo("Error: El rol 'ADMINISTRADOR' no se encuentra. Asegúrate de que la base de datos esté inicializada.")
+            click.echo(
+                "Error: El rol 'ADMINISTRADOR' no se encuentra. Asegúrate de que la base de datos esté inicializada.")
             return
         admin_rol_id = rol['id']
 
@@ -37,7 +39,8 @@ def crear_admin_command(username, password, email, nombre_completo):
             INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo)
             VALUES (?, ?, ?, ?, ?)
         """
-        params_insert_user = (username, nombre_completo, email, password_hash, True)
+        params_insert_user = (username, nombre_completo,
+                              email, password_hash, True)
         cursor.execute(sql_insert_user, params_insert_user)
 
         # Obtener el ID del usuario recién creado

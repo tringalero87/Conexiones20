@@ -2,6 +2,7 @@ from db import get_db
 from .base_dal import BaseDAL
 import json
 
+
 class SQLiteDAL(BaseDAL):
 
     def get_conexion(self, conexion_id):
@@ -142,7 +143,8 @@ class SQLiteDAL(BaseDAL):
     def get_all_aliases(self):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
+        cursor.execute(
+            "SELECT alias, nombre_perfil FROM alias_perfiles ORDER BY nombre_perfil")
         return cursor.fetchall()
 
     def get_all_conexiones_codes(self):
@@ -297,7 +299,8 @@ class SQLiteDAL(BaseDAL):
         db = get_db()
         sql = 'INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)'
         cursor = db.cursor()
-        cursor.execute(sql, (username, nombre_completo, email, password_hash, activo))
+        cursor.execute(sql, (username, nombre_completo,
+                       email, password_hash, activo))
         return cursor.lastrowid
 
     def get_role_id_by_name(self, name):
@@ -324,7 +327,8 @@ class SQLiteDAL(BaseDAL):
         db = get_db()
         sql = "UPDATE usuarios SET username = ?, nombre_completo = ?, email = ?, activo = ? WHERE id = ?"
         cursor = db.cursor()
-        cursor.execute(sql, (username, nombre_completo, email, activo, user_id))
+        cursor.execute(
+            sql, (username, nombre_completo, email, activo, user_id))
 
     def get_user_roles(self, user_id):
         db = get_db()
@@ -427,7 +431,8 @@ class SQLiteDAL(BaseDAL):
     def get_all_reports(self):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT r.*, u.nombre_completo as creador_nombre FROM reportes r JOIN usuarios u ON r.creador_id = u.id ORDER BY r.nombre")
+        cursor.execute(
+            "SELECT r.*, u.nombre_completo as creador_nombre FROM reportes r JOIN usuarios u ON r.creador_id = u.id ORDER BY r.nombre")
         return cursor.fetchall()
 
     def get_report(self, reporte_id):
@@ -441,7 +446,8 @@ class SQLiteDAL(BaseDAL):
         cursor = db.cursor()
         cursor.execute(
             "INSERT INTO reportes (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (nombre, descripcion, creador_id, filtros, programado, frecuencia, destinatarios)
+            (nombre, descripcion, creador_id, filtros,
+             programado, frecuencia, destinatarios)
         )
         new_id = cursor.lastrowid
         db.commit()
@@ -452,7 +458,8 @@ class SQLiteDAL(BaseDAL):
         cursor = db.cursor()
         cursor.execute(
             "UPDATE reportes SET nombre = ?, descripcion = ?, filtros = ?, programado = ?, frecuencia = ?, destinatarios = ? WHERE id = ?",
-            (nombre, descripcion, filtros, programado, frecuencia, destinatarios, reporte_id)
+            (nombre, descripcion, filtros, programado,
+             frecuencia, destinatarios, reporte_id)
         )
         db.commit()
 
@@ -491,19 +498,22 @@ class SQLiteDAL(BaseDAL):
     def update_report_last_execution(self, reporte_id):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = ?', (reporte_id,))
+        cursor.execute(
+            'UPDATE reportes SET ultima_ejecucion = CURRENT_TIMESTAMP WHERE id = ?', (reporte_id,))
         db.commit()
 
     def get_alias_by_name_or_alias(self, nombre_perfil, alias):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('SELECT id FROM alias_perfiles WHERE nombre_perfil = ? OR alias = ?', (nombre_perfil, alias))
+        cursor.execute(
+            'SELECT id FROM alias_perfiles WHERE nombre_perfil = ? OR alias = ?', (nombre_perfil, alias))
         return cursor.fetchone()
 
     def create_alias(self, nombre_perfil, alias, norma):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)', (nombre_perfil, alias, norma))
+        cursor.execute('INSERT INTO alias_perfiles (nombre_perfil, alias, norma) VALUES (?, ?, ?)',
+                       (nombre_perfil, alias, norma))
         new_id = cursor.lastrowid
         db.commit()
         return new_id
@@ -511,7 +521,8 @@ class SQLiteDAL(BaseDAL):
     def update_alias(self, alias_id, nombre_perfil, alias, norma):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('UPDATE alias_perfiles SET nombre_perfil = ?, alias = ?, norma = ? WHERE id = ?', (nombre_perfil, alias, norma, alias_id))
+        cursor.execute('UPDATE alias_perfiles SET nombre_perfil = ?, alias = ?, norma = ? WHERE id = ?',
+                       (nombre_perfil, alias, norma, alias_id))
         db.commit()
 
     def delete_alias(self, alias_id):
@@ -523,13 +534,15 @@ class SQLiteDAL(BaseDAL):
     def get_alias_by_id(self, alias_id):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('SELECT * FROM alias_perfiles WHERE id = ?', (alias_id,))
+        cursor.execute(
+            'SELECT * FROM alias_perfiles WHERE id = ?', (alias_id,))
         return cursor.fetchone()
 
     def get_alias_by_name(self, nombre_perfil):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('SELECT * FROM alias_perfiles WHERE nombre_perfil = ?', (nombre_perfil,))
+        cursor.execute(
+            'SELECT * FROM alias_perfiles WHERE nombre_perfil = ?', (nombre_perfil,))
         return cursor.fetchone()
 
     def get_efficiency_kpis(self):
@@ -545,19 +558,24 @@ class SQLiteDAL(BaseDAL):
         avg_time_query = cursor.fetchone()
         avg_approval_time = avg_time_query['avg_days'] if avg_time_query and avg_time_query['avg_days'] is not None else 0
 
-        cursor.execute("SELECT COUNT(id) as total FROM conexiones WHERE fecha_modificacion >= date('now', '-30 days') AND estado = 'APROBADO'")
+        cursor.execute(
+            "SELECT COUNT(id) as total FROM conexiones WHERE fecha_modificacion >= date('now', '-30 days') AND estado = 'APROBADO'")
         processed_last_30d_row = cursor.fetchone()
         processed_last_30d = processed_last_30d_row['total'] if processed_last_30d_row else 0
 
-        cursor.execute("SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO'")
+        cursor.execute(
+            "SELECT COUNT(id) as total FROM conexiones WHERE estado = 'APROBADO'")
         total_approved_row = cursor.fetchone()
         total_approved = total_approved_row['total'] if total_approved_row else 0
 
-        cursor.execute("SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO'")
+        cursor.execute(
+            "SELECT COUNT(DISTINCT conexion_id) as total FROM historial_estados WHERE estado = 'RECHAZADO'")
         total_rejected_history_row = cursor.fetchone()
-        total_rejected_history = total_rejected_history_row['total'] if total_rejected_history_row else 0
+        total_rejected_history = total_rejected_history_row[
+            'total'] if total_rejected_history_row else 0
 
-        rejection_rate = (total_rejected_history / (total_approved + total_rejected_history) * 100) if (total_approved + total_rejected_history) > 0 else 0
+        rejection_rate = (total_rejected_history / (total_approved + total_rejected_history)
+                          * 100) if (total_approved + total_rejected_history) > 0 else 0
 
         return {
             'avg_approval_time': f"{avg_approval_time:.1f} días" if isinstance(avg_approval_time, (int, float)) else 'N/A',
@@ -630,7 +648,8 @@ class SQLiteDAL(BaseDAL):
     def get_distinct_audit_actions(self):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('SELECT DISTINCT accion FROM auditoria_acciones ORDER BY accion')
+        cursor.execute(
+            'SELECT DISTINCT accion FROM auditoria_acciones ORDER BY accion')
         return cursor.fetchall()
 
     def get_all_config(self):
@@ -642,25 +661,30 @@ class SQLiteDAL(BaseDAL):
     def update_config(self, key, value):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor", (key, value))
+        cursor.execute(
+            "INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor", (key, value))
         db.commit()
 
     def user_has_access_to_project(self, user_id, proyecto_id):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?", (proyecto_id, user_id))
+        cursor.execute(
+            "SELECT 1 FROM proyecto_usuarios WHERE proyecto_id = ? AND usuario_id = ?", (proyecto_id, user_id))
         return cursor.fetchone() is not None
 
     def get_users_for_project(self, proyecto_id):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?", (proyecto_id,))
+        cursor.execute(
+            "SELECT usuario_id FROM proyecto_usuarios WHERE proyecto_id = ?", (proyecto_id,))
         return {row['usuario_id'] for row in cursor.fetchall()}
 
     def assign_users_to_project(self, proyecto_id, user_ids):
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("DELETE FROM proyecto_usuarios WHERE proyecto_id = ?", (proyecto_id,))
+        cursor.execute(
+            "DELETE FROM proyecto_usuarios WHERE proyecto_id = ?", (proyecto_id,))
         for user_id in user_ids:
-            cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, int(user_id)))
+            cursor.execute(
+                "INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, int(user_id)))
         db.commit()

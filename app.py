@@ -1,6 +1,5 @@
 import os
 import logging
-from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from flask import Flask, g, session, render_template, current_app, flash, redirect, url_for
 from dotenv import load_dotenv
@@ -119,9 +118,11 @@ def create_app(test_config=None):
         db_conn = db.get_db()
         cursor = db_conn.cursor()
         try:
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'")
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'")
             if cursor.fetchone() is None:
-                app.logger.info("Base de datos no inicializada. Creando tablas...")
+                app.logger.info(
+                    "Base de datos no inicializada. Creando tablas...")
                 db.init_db()
                 app.logger.info("Base de datos inicializada correctamente.")
         except Exception as e:

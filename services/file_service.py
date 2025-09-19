@@ -96,12 +96,14 @@ ALLOWED_EXTENSIONS = {
     'ideacon', 'dwg', 'dxf', 'ifc'
 }
 
+
 def _allowed_file(filename):
     """Función auxiliar para verificar si la extensión de un archivo es válida."""
     if '.' not in filename or filename.startswith('.'):
         return False
     extension = filename.rsplit('.', 1)[1].lower()
     return extension in ALLOWED_EXTENSIONS
+
 
 def upload_file(conexion_id, user_id, file, tipo_archivo):
     """
@@ -117,15 +119,18 @@ def upload_file(conexion_id, user_id, file, tipo_archivo):
 
     try:
         filename = secure_filename(file.filename)
-        upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
+        upload_path = os.path.join(
+            current_app.config['UPLOAD_FOLDER'], str(conexion_id))
         os.makedirs(upload_path, exist_ok=True)
         file.save(os.path.join(upload_path, filename))
 
         dal.create_archivo(conexion_id, user_id, tipo_archivo, filename)
-        log_action('SUBIR_ARCHIVO', user_id, 'archivos', conexion_id, f"Archivo '{filename}' ({tipo_archivo}) subido.")
+        log_action('SUBIR_ARCHIVO', user_id, 'archivos', conexion_id,
+                   f"Archivo '{filename}' ({tipo_archivo}) subido.")
         return True, f"Archivo '{tipo_archivo}' subido con éxito."
     except Exception as e:
-        current_app.logger.error(f"Error al subir archivo para conexión {conexion_id}: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error al subir archivo para conexión {conexion_id}: {e}", exc_info=True)
         return False, "Ocurrió un error interno al subir el archivo."
 
 
@@ -140,8 +145,10 @@ def get_file_for_download(conexion_id, filename, user_id):
     if not archivo_db:
         abort(404, description="El archivo no existe o no está asociado a esta conexión.")
 
-    log_action('DESCARGAR_ARCHIVO', user_id, 'archivos', conexion_id, f"Archivo '{filename}' descargado.")
-    directory = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id))
+    log_action('DESCARGAR_ARCHIVO', user_id, 'archivos',
+               conexion_id, f"Archivo '{filename}' descargado.")
+    directory = os.path.join(
+        current_app.config['UPLOAD_FOLDER'], str(conexion_id))
     return directory
 
 
@@ -174,14 +181,17 @@ def delete_file(conexion_id, archivo_id, current_user, user_roles):
 
         # Eliminar del sistema de archivos
         safe_filename = secure_filename(archivo['nombre_archivo'])
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(conexion_id), safe_filename)
+        file_path = os.path.join(
+            current_app.config['UPLOAD_FOLDER'], str(conexion_id), safe_filename)
 
         if os.path.exists(file_path):
             os.remove(file_path)
 
-        log_action('ELIMINAR_ARCHIVO', current_user['id'], 'archivos', archivo_id, f"Archivo '{archivo['nombre_archivo']}' eliminado de la conexión {conexion_id}.")
+        log_action('ELIMINAR_ARCHIVO', current_user['id'], 'archivos', archivo_id,
+                   f"Archivo '{archivo['nombre_archivo']}' eliminado de la conexión {conexion_id}.")
         return True, 'Archivo eliminado con éxito.'
     except Exception as e:
-        current_app.logger.error(f"Error al eliminar archivo {archivo_id}: {e}", exc_info=True)
+        current_app.logger.error(
+            f"Error al eliminar archivo {archivo_id}: {e}", exc_info=True)
         # Podríamos considerar revertir la eliminación de la BD aquí si la eliminación del archivo falla.
         return False, 'Ocurrió un error interno al eliminar el archivo.'

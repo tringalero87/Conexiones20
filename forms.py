@@ -3,6 +3,7 @@ from wtforms import StringField, PasswordField, SubmitField, BooleanField, Selec
 from wtforms.fields import DateField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, NumberRange, ValidationError
 import re
+from validators import unique_email, unique_username
 
 
 class LoginForm(FlaskForm):
@@ -53,8 +54,6 @@ class ProjectForm(FlaskForm):
             "placeholder": "Añade una breve descripción del alcance del proyecto..."})
     submit = SubmitField('Guardar Proyecto')
 
-
-from validators import unique_email, unique_username
 
 class UserForm(FlaskForm):
     """
@@ -257,10 +256,12 @@ class ReportForm(FlaskForm):
                                        ('realizador_nombre', 'Realizador'),
                                        ('aprobador_nombre', 'Aprobador'),
                                        ('fecha_creacion', 'Fecha de Creación'),
-                                       ('fecha_modificacion', 'Fecha de Modificación')
+                                       ('fecha_modificacion',
+                                        'Fecha de Modificación')
                                    ],
                                    option_widget=widgets.CheckboxInput(),
-                                   widget=widgets.ListWidget(prefix_label=False),
+                                   widget=widgets.ListWidget(
+                                       prefix_label=False),
                                    validators=[DataRequired(message="Debes seleccionar al menos una columna.")])
 
     output_format = RadioField(

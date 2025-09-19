@@ -1,12 +1,13 @@
 from werkzeug.security import generate_password_hash
 from dal.sqlite_dal import SQLiteDAL
 from db import log_action
-import json
 from flask import g
+
 
 def get_all_users_with_roles():
     dal = SQLiteDAL()
     return dal.get_all_users_with_roles()
+
 
 def create_user(form):
     dal = SQLiteDAL()
@@ -25,11 +26,13 @@ def create_user(form):
             if rol:
                 dal.assign_role_to_user(user_id, rol['id'])
 
-        log_action('CREAR_USUARIO', g.user['id'], 'usuarios', user_id, f"Usuario '{form.username.data}' creado con roles: {', '.join(form.roles.data)}.")
+        log_action('CREAR_USUARIO', g.user['id'], 'usuarios', user_id,
+                   f"Usuario '{form.username.data}' creado con roles: {', '.join(form.roles.data)}.")
         return True, 'Usuario creado con éxito.'
-    except Exception as e:
+    except Exception:
         # log error e
         return False, 'Ocurrió un error al crear el usuario.'
+
 
 def get_user_for_edit(user_id):
     dal = SQLiteDAL()
@@ -38,6 +41,7 @@ def get_user_for_edit(user_id):
         return None, None
     roles = dal.get_user_roles(user_id)
     return user, roles
+
 
 def update_user(user_id, form, current_user_id):
     dal = SQLiteDAL()
@@ -53,7 +57,8 @@ def update_user(user_id, form, current_user_id):
         )
 
         if form.password.data:
-            dal.update_user_password(user_id, generate_password_hash(form.password.data))
+            dal.update_user_password(
+                user_id, generate_password_hash(form.password.data))
 
         new_roles = set(form.roles.data)
         if set(old_roles) != new_roles:
@@ -66,7 +71,7 @@ def update_user(user_id, form, current_user_id):
         # Logging changes
         # ...
         return True, 'Usuario actualizado con éxito.'
-    except Exception as e:
+    except Exception:
         # log error e
         return False, 'Ocurrió un error al actualizar el usuario.'
 
@@ -84,9 +89,10 @@ def toggle_user_active_status(user_id, current_user_id):
     try:
         dal.toggle_user_active_status(user_id, new_status)
         estado_texto = 'activado' if new_status else 'desactivado'
-        log_action('TOGGLE_USUARIO_ACTIVO', current_user_id, 'usuarios', user_id, f"Usuario '{user['username']}' ha sido {estado_texto}.")
+        log_action('TOGGLE_USUARIO_ACTIVO', current_user_id, 'usuarios',
+                   user_id, f"Usuario '{user['username']}' ha sido {estado_texto}.")
         return True, f"El usuario ha sido {estado_texto}."
-    except Exception as e:
+    except Exception:
         return False, "Ocurrió un error al cambiar el estado del usuario."
 
 
@@ -119,7 +125,8 @@ def delete_user(user_id, current_user_id):
 
     try:
         dal.delete_user(user_id)
-        log_action('ELIMINAR_USUARIO', current_user_id, 'usuarios', user_id, f"Usuario '{user['username']}' eliminado.")
+        log_action('ELIMINAR_USUARIO', current_user_id, 'usuarios',
+                   user_id, f"Usuario '{user['username']}' eliminado.")
         return True, f"El usuario '{user['username']}' ha sido eliminado."
-    except Exception as e:
+    except Exception:
         return False, "Ocurrió un error al eliminar el usuario."

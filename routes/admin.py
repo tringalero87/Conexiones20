@@ -8,7 +8,7 @@ from flask import (
     flash,
     abort,
     make_response)
-from forms import UserForm, ConfigurationForm, ReportForm, AliasForm, ComputosReportForm
+from forms import UserForm, ConfigurationForm, ReportForm, AliasForm
 from flask_wtf import FlaskForm
 from dal.sqlite_dal import SQLiteDAL
 import services.user_service as user_s
@@ -16,14 +16,17 @@ import services.report_service as report_s
 import services.alias_service as alias_s
 import services.system_service as system_s
 from . import roles_required
+from db import log_action
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
 
 @admin_bp.route('/usuarios')
 @roles_required('ADMINISTRADOR')
 def listar_usuarios():
     usuarios = user_s.get_all_users_with_roles()
     return render_template('admin/usuarios.html', usuarios=usuarios, titulo="Gestión de Usuarios")
+
 
 @admin_bp.route('/usuarios/nuevo', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
@@ -40,6 +43,7 @@ def nuevo_usuario():
             flash(message, 'danger')
     return render_template('admin/usuario_form.html', form=form, titulo="Nuevo Usuario")
 
+
 @admin_bp.route('/usuarios/<int:usuario_id>/editar', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
 def editar_usuario(usuario_id):
@@ -47,7 +51,8 @@ def editar_usuario(usuario_id):
     if not usuario:
         abort(404)
 
-    form = UserForm(obj=usuario, original_username=usuario['username'], original_email=usuario['email'])
+    form = UserForm(
+        obj=usuario, original_username=usuario['username'], original_email=usuario['email'])
     dal = SQLiteDAL()
     form.roles.choices = [(r['nombre'], r['nombre']) for r in dal.get_roles()]
 
@@ -68,15 +73,18 @@ def editar_usuario(usuario_id):
 
     return render_template('admin/usuario_form.html', form=form, usuario=usuario, titulo="Editar Usuario")
 
+
 @admin_bp.route('/usuarios/<int:usuario_id>/toggle_activo', methods=['POST'])
 @roles_required('ADMINISTRADOR')
 def toggle_activo(usuario_id):
-    success, message = user_s.toggle_user_active_status(usuario_id, g.user['id'])
+    success, message = user_s.toggle_user_active_status(
+        usuario_id, g.user['id'])
     if success:
         flash(message, 'success')
     else:
         flash(message, 'danger')
     return redirect(url_for('admin.listar_usuarios'))
+
 
 @admin_bp.route('/usuarios/<int:usuario_id>/eliminar', methods=['POST'])
 @roles_required('ADMINISTRADOR')
@@ -87,6 +95,7 @@ def eliminar_usuario(usuario_id):
     else:
         flash(message, 'danger')
     return redirect(url_for('admin.listar_usuarios'))
+
 
 @admin_bp.route('/alias', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -103,15 +112,18 @@ def gestionar_alias():
     aliases = alias_s.get_all_aliases()
     return render_template('admin/alias_manager.html', aliases=aliases, form=form, titulo="Gestión de Alias de Perfiles")
 
+
 @admin_bp.route('/alias/<int:alias_id>/editar', methods=['POST'])
 @roles_required('ADMINISTRADOR')
 def editar_alias(alias_id):
-    success, message = alias_s.update_alias(alias_id, request.form, g.user['id'])
+    success, message = alias_s.update_alias(
+        alias_id, request.form, g.user['id'])
     if success:
         flash(message, 'success')
     else:
         flash(message, 'danger')
     return redirect(url_for('admin.gestionar_alias'))
+
 
 @admin_bp.route('/alias/<int:alias_id>/eliminar', methods=['POST'])
 @roles_required('ADMINISTRADOR')
@@ -122,6 +134,7 @@ def eliminar_alias(alias_id):
     else:
         flash(message, 'danger')
     return redirect(url_for('admin.gestionar_alias'))
+
 
 @admin_bp.route('/alias/importar', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
@@ -140,14 +153,18 @@ def importar_alias():
             if imported > 0:
                 msg_parts.append(f"Se crearon {imported} nuevos alias.")
             if updated > 0:
-                msg_parts.append(f"Se actualizaron {updated} alias existentes.")
+                msg_parts.append(
+                    f"Se actualizaron {updated} alias existentes.")
             if msg_parts:
-                flash("Importación completada: " + " ".join(msg_parts), 'success')
+                flash("Importación completada: " +
+                      " ".join(msg_parts), 'success')
             if errors:
-                flash(f"Errores en {len(errors)} fila(s): " + "; ".join(errors[:5]), 'danger')
+                flash(f"Errores en {len(errors)} fila(s): " +
+                      "; ".join(errors[:5]), 'danger')
         return redirect(url_for('admin.gestionar_alias'))
 
     return render_template('admin/importar_alias.html', titulo="Importar Alias de Perfiles")
+
 
 @admin_bp.route('/eficiencia')
 @roles_required('ADMINISTRADOR')
@@ -158,6 +175,7 @@ def eficiencia():
         return render_template('admin/eficiencia.html', titulo="Análisis de Eficiencia", kpis={}, charts_data={}, slow_connections=[], filters={})
     return render_template('admin/eficiencia.html', titulo="Análisis de Eficiencia", **data)
 
+
 @admin_bp.route('/logs')
 @roles_required('ADMINISTRADOR')
 def logs():
@@ -165,6 +183,7 @@ def logs():
     if error:
         flash(error, 'info')
     return render_template('admin/logs.html', logs=logs, titulo="Logs del Sistema")
+
 
 @admin_bp.route('/logs/clear', methods=['POST'])
 @roles_required('ADMINISTRADOR')
@@ -176,6 +195,7 @@ def clear_logs():
         flash(message, 'danger')
     return redirect(url_for('admin.logs'))
 
+
 @admin_bp.route('/storage')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def storage_management():
@@ -185,17 +205,20 @@ def storage_management():
         return render_template('admin/storage.html', titulo="Gestión de Almacenamiento", total_size='N/A', num_files=0, files_by_ext={})
     return render_template('admin/storage.html', titulo="Gestión de Almacenamiento", **stats)
 
+
 @admin_bp.route('/auditoria')
 @roles_required('ADMINISTRADOR')
 def ver_auditoria():
     page = request.args.get('page', 1, type=int)
-    per_page = 20 # Or from config
+    per_page = 20  # Or from config
     filtro_usuario_id = request.args.get('usuario_id', type=int)
     filtro_accion = request.args.get('accion')
 
-    data = system_s.get_audit_data(page, per_page, filtro_usuario_id, filtro_accion)
+    data = system_s.get_audit_data(
+        page, per_page, filtro_usuario_id, filtro_accion)
 
-    log_action('VER_AUDITORIA', g.user['id'], 'sistema', None, "Visualizó el historial de auditoría.")
+    log_action('VER_AUDITORIA', g.user['id'], 'sistema',
+               None, "Visualizó el historial de auditoría.")
     return render_template('admin/auditoria.html',
                            **data,
                            filtro_usuario_id=filtro_usuario_id,
@@ -204,19 +227,23 @@ def ver_auditoria():
                            per_page=per_page,
                            titulo="Historial de Auditoría")
 
+
 @admin_bp.route('/reportes')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def listar_reportes():
     reportes = report_s.get_all_reports()
     return render_template('admin/reportes.html', reportes=reportes, titulo="Gestión de Reportes")
 
+
 @admin_bp.route('/reportes/nuevo', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
 def nuevo_reporte():
     form = ReportForm()
     dal = SQLiteDAL()
-    form.proyecto_id.choices = [(0, 'Todos los Proyectos')] + [(p['id'], p['nombre']) for p in dal.get_proyectos_for_user(g.user['id'], True)]
-    form.realizador_id.choices = [(0, 'Todos los Realizadores')] + [(r['id'], r['nombre_completo']) for r in dal.get_all_users_with_roles() if 'REALIZADOR' in r['roles']]
+    form.proyecto_id.choices = [(0, 'Todos los Proyectos')] + [(p['id'], p['nombre'])
+                                                               for p in dal.get_proyectos_for_user(g.user['id'], True)]
+    form.realizador_id.choices = [(0, 'Todos los Realizadores')] + [(r['id'], r['nombre_completo'])
+                                                                    for r in dal.get_all_users_with_roles() if 'REALIZADOR' in r['roles']]
 
     if form.validate_on_submit():
         success, message = report_s.create_report(form, g.user['id'])
@@ -227,6 +254,7 @@ def nuevo_reporte():
             flash(message, 'danger')
     return render_template('admin/reporte_form.html', form=form, titulo="Nuevo Reporte")
 
+
 @admin_bp.route('/reportes/<int:reporte_id>/editar', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
 def editar_reporte(reporte_id):
@@ -236,8 +264,10 @@ def editar_reporte(reporte_id):
 
     form = ReportForm()
     dal = SQLiteDAL()
-    form.proyecto_id.choices = [(0, 'Todos los Proyectos')] + [(p['id'], p['nombre']) for p in dal.get_proyectos_for_user(g.user['id'], True)]
-    form.realizador_id.choices = [(0, 'Todos los Realizadores')] + [(r['id'], r['nombre_completo']) for r in dal.get_all_users_with_roles() if 'REALIZADOR' in r['roles']]
+    form.proyecto_id.choices = [(0, 'Todos los Proyectos')] + [(p['id'], p['nombre'])
+                                                               for p in dal.get_proyectos_for_user(g.user['id'], True)]
+    form.realizador_id.choices = [(0, 'Todos los Realizadores')] + [(r['id'], r['nombre_completo'])
+                                                                    for r in dal.get_all_users_with_roles() if 'REALIZADOR' in r['roles']]
 
     if form.validate_on_submit():
         success, message = report_s.update_report(reporte_id, form)
@@ -253,6 +283,7 @@ def editar_reporte(reporte_id):
 
     return render_template('admin/reporte_form.html', form=form, titulo=f"Editar Reporte: {reporte['nombre']}")
 
+
 @admin_bp.route('/reportes/<int:reporte_id>/eliminar', methods=['POST'])
 @roles_required('ADMINISTRADOR')
 def eliminar_reporte(reporte_id):
@@ -262,6 +293,7 @@ def eliminar_reporte(reporte_id):
     else:
         flash(message, 'danger')
     return redirect(url_for('admin.listar_reportes'))
+
 
 @admin_bp.route('/proyectos/<int:proyecto_id>/permisos', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')
@@ -289,10 +321,12 @@ def gestionar_permisos_proyecto(proyecto_id):
                            titulo=f"Permisos para {proyecto['nombre']}",
                            form=form)
 
+
 @admin_bp.route('/reportes/<int:reporte_id>/ejecutar')
 @roles_required('ADMINISTRADOR')
 def ejecutar_reporte(reporte_id):
-    filename, mimetype, content, message = report_s.run_report(reporte_id, g.user['id'])
+    filename, mimetype, content, message = report_s.run_report(
+        reporte_id, g.user['id'])
     if not content:
         flash(message, 'danger')
         return redirect(url_for('admin.listar_reportes'))
@@ -301,6 +335,7 @@ def ejecutar_reporte(reporte_id):
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     response.headers["Content-type"] = mimetype
     return response
+
 
 @admin_bp.route('/configuracion', methods=['GET', 'POST'])
 @roles_required('ADMINISTRADOR')

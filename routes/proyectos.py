@@ -6,9 +6,9 @@ from werkzeug.exceptions import abort
 from db import get_db, log_action
 from . import roles_required
 from forms import ProjectForm
-import json
 
 proyectos_bp = Blueprint('proyectos', __name__, url_prefix='/proyectos')
+
 
 @proyectos_bp.route('/')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
@@ -39,15 +39,17 @@ def listar_proyectos():
     finally:
         cursor.close()
 
-    log_action('VER_PROYECTOS', g.user['id'], 'proyectos', None, "Visualizó la lista de proyectos.")
+    log_action('VER_PROYECTOS', g.user['id'], 'proyectos',
+               None, "Visualizó la lista de proyectos.")
     return render_template('proyectos.html', proyectos=proyectos, titulo="Proyectos")
+
 
 @proyectos_bp.route('/<int:proyecto_id>')
 @roles_required('ADMINISTRADOR', 'APROBADOR', 'REALIZADOR', 'SOLICITANTE')
 def detalle_proyecto(proyecto_id):
     db = get_db()
     cursor = db.cursor()
-    
+
     try:
         query_proyecto = """
             SELECT p.*, u.nombre_completo as creador,
@@ -74,8 +76,10 @@ def detalle_proyecto(proyecto_id):
     finally:
         cursor.close()
 
-    log_action('VER_DETALLE_PROYECTO', g.user['id'], 'proyectos', proyecto_id, f"Visualizó el detalle del proyecto '{proyecto['nombre']}'.")
+    log_action('VER_DETALLE_PROYECTO', g.user['id'], 'proyectos', proyecto_id,
+               f"Visualizó el detalle del proyecto '{proyecto['nombre']}'.")
     return render_template('proyecto_detalle.html', proyecto=proyecto, conexiones=conexiones, page=page, per_page=per_page, total=total_conexiones, titulo=f"Detalle de {proyecto['nombre']}")
+
 
 @proyectos_bp.route('/nuevo', methods=('GET', 'POST'))
 @roles_required('ADMINISTRADOR')
@@ -91,16 +95,19 @@ def nuevo_proyecto():
                 flash(f"El proyecto '{form.nombre.data}' ya existe.", 'danger')
             else:
                 sql = 'INSERT INTO proyectos (nombre, descripcion, creador_id) VALUES (?, ?, ?)'
-                cursor.execute(sql, (form.nombre.data, form.descripcion.data, g.user['id']))
+                cursor.execute(
+                    sql, (form.nombre.data, form.descripcion.data, g.user['id']))
                 new_project_id = cursor.lastrowid
                 db.commit()
-                log_action('CREAR_PROYECTO', g.user['id'], 'proyectos', new_project_id, f"Proyecto '{form.nombre.data}' creado.")
+                log_action('CREAR_PROYECTO', g.user['id'], 'proyectos',
+                           new_project_id, f"Proyecto '{form.nombre.data}' creado.")
                 flash('Proyecto creado con éxito.', 'success')
                 return redirect(url_for('proyectos.listar_proyectos'))
         finally:
             cursor.close()
 
     return render_template('proyecto_form.html', form=form, titulo="Nuevo Proyecto")
+
 
 @proyectos_bp.route('/<int:proyecto_id>/editar', methods=('GET', 'POST'))
 @roles_required('ADMINISTRADOR')
@@ -119,12 +126,15 @@ def editar_proyecto(proyecto_id):
             check_sql = 'SELECT id FROM proyectos WHERE LOWER(nombre) = ? AND id != ?'
             cursor.execute(check_sql, (form.nombre.data.lower(), proyecto_id))
             if cursor.fetchone():
-                flash(f"Ya existe otro proyecto con el nombre '{form.nombre.data}'.", 'danger')
+                flash(
+                    f"Ya existe otro proyecto con el nombre '{form.nombre.data}'.", 'danger')
             else:
                 update_sql = 'UPDATE proyectos SET nombre = ?, descripcion = ? WHERE id = ?'
-                cursor.execute(update_sql, (form.nombre.data, form.descripcion.data, proyecto_id))
+                cursor.execute(update_sql, (form.nombre.data,
+                               form.descripcion.data, proyecto_id))
                 db.commit()
-                log_action('EDITAR_PROYECTO', g.user['id'], 'proyectos', proyecto_id, f"Proyecto '{form.nombre.data}' actualizado.")
+                log_action('EDITAR_PROYECTO', g.user['id'], 'proyectos',
+                           proyecto_id, f"Proyecto '{form.nombre.data}' actualizado.")
                 flash('Proyecto actualizado con éxito.', 'success')
                 return redirect(url_for('proyectos.listar_proyectos'))
 
@@ -136,6 +146,7 @@ def editar_proyecto(proyecto_id):
 
     return render_template('proyecto_form.html', form=form, proyecto=proyecto, titulo="Editar Proyecto")
 
+
 @proyectos_bp.route('/<int:proyecto_id>/eliminar', methods=['POST'])
 @roles_required('ADMINISTRADOR')
 def eliminar_proyecto(proyecto_id):
@@ -143,16 +154,20 @@ def eliminar_proyecto(proyecto_id):
     cursor = db.cursor()
 
     try:
-        cursor.execute('SELECT nombre FROM proyectos WHERE id = ?', (proyecto_id,))
+        cursor.execute(
+            'SELECT nombre FROM proyectos WHERE id = ?', (proyecto_id,))
         proyecto = cursor.fetchone()
         if proyecto:
-            cursor.execute('DELETE FROM proyectos WHERE id = ?', (proyecto_id,))
+            cursor.execute(
+                'DELETE FROM proyectos WHERE id = ?', (proyecto_id,))
             db.commit()
-            log_action('ELIMINAR_PROYECTO', g.user['id'], 'proyectos', proyecto_id, f"Proyecto '{proyecto['nombre']}' eliminado.")
-            flash(f"El proyecto '{proyecto['nombre']}' y todas sus conexiones han sido eliminados.", 'success')
+            log_action('ELIMINAR_PROYECTO', g.user['id'], 'proyectos',
+                       proyecto_id, f"Proyecto '{proyecto['nombre']}' eliminado.")
+            flash(
+                f"El proyecto '{proyecto['nombre']}' y todas sus conexiones han sido eliminados.", 'success')
         else:
             flash("El proyecto no fue encontrado.", "danger")
     finally:
         cursor.close()
-        
+
     return redirect(url_for('proyectos.listar_proyectos'))

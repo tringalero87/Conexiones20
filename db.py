@@ -4,6 +4,23 @@ from flask import current_app, g
 from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
 import os
+import datetime
+
+
+def adapt_datetime_iso(val):
+    """Adapter for datetime objects to store them in ISO 8601 format."""
+    return val.isoformat()
+
+
+def convert_timestamp(val):
+    """Converter for ISO 8601 timestamps to datetime objects."""
+    return datetime.datetime.fromisoformat(val.decode())
+
+
+# Register the adapter and converter
+sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
+sqlite3.register_converter("timestamp", convert_timestamp)
+
 
 def get_db():
     """
@@ -25,6 +42,7 @@ def get_db():
 
     return g.db
 
+
 def close_db(e=None):
     """
     Cierra la conexión de la base de datos.
@@ -33,6 +51,7 @@ def close_db(e=None):
 
     if db is not None:
         db.close()
+
 
 def init_db():
     """
@@ -61,7 +80,8 @@ def init_db():
         user_id = cursor.lastrowid
 
         # 3. Obtener el ID del rol 'ADMINISTRADOR'
-        cursor.execute("SELECT id FROM roles WHERE nombre = ?", ('ADMINISTRADOR',))
+        cursor.execute("SELECT id FROM roles WHERE nombre = ?",
+                       ('ADMINISTRADOR',))
         role = cursor.fetchone()
 
         if role:
@@ -73,7 +93,8 @@ def init_db():
             )
             click.echo("Usuario administrador por defecto 'Admin' creado.")
         else:
-            click.echo("Advertencia: No se pudo encontrar el rol 'ADMINISTRADOR'. El usuario 'Admin' fue creado pero no tiene rol de administrador.")
+            click.echo(
+                "Advertencia: No se pudo encontrar el rol 'ADMINISTRADOR'. El usuario 'Admin' fue creado pero no tiene rol de administrador.")
 
         # 5. Guardar los cambios
         db.commit()
@@ -86,12 +107,14 @@ def init_db_command():
     init_db()
     click.echo('Base de datos SQLite inicializada.')
 
+
 def init_app(app):
     """
     Registra las funciones de la base de datos con la instancia de la aplicación Flask.
     """
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
+
 
 def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
     """
@@ -109,5 +132,6 @@ def log_action(accion, usuario_id, tipo_objeto, objeto_id, detalles=None):
         cursor.execute(sql, params)
         db.commit()
     except Exception as e:
-        current_app.logger.error(f"Error al registrar acción de auditoría: {accion} por {usuario_id} - {e}")
+        current_app.logger.error(
+            f"Error al registrar acción de auditoría: {accion} por {usuario_id} - {e}")
         db.rollback()

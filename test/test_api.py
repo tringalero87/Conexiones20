@@ -1,7 +1,7 @@
-import pytest
 from db import get_db
 from werkzeug.security import generate_password_hash
 import json
+
 
 def test_approver_can_access_profile_search_api(client, app, auth):
     """
@@ -21,7 +21,8 @@ def test_approver_can_access_profile_search_api(client, app, auth):
 
         cursor.execute("SELECT id FROM roles WHERE nombre = 'APROBADOR'")
         approver_role_id = cursor.fetchone()['id']
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (approver_id, approver_role_id))
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)",
+                       (approver_id, approver_role_id))
         db.commit()
 
     # Log in as the approver
@@ -34,6 +35,7 @@ def test_approver_can_access_profile_search_api(client, app, auth):
     assert response.status_code == 200
     # Also check that the response is valid JSON
     assert response.is_json
+
 
 def test_profile_search_is_space_insensitive(client, app, auth):
     """
@@ -59,13 +61,16 @@ def test_profile_search_is_space_insensitive(client, app, auth):
     response = client.get('/api/perfiles/buscar?q=IPE300')
     assert response.status_code == 200
     json_data = response.get_json()
-    assert any(d['value'] == 'IPE 300' for d in json_data), "Search should find 'IPE 300' when searching for 'IPE300'"
+    assert any(
+        d['value'] == 'IPE 300' for d in json_data), "Search should find 'IPE 300' when searching for 'IPE300'"
 
     # Search for "W-12x26" by typing "W12x26"
     response = client.get('/api/perfiles/buscar?q=W12x26')
     assert response.status_code == 200
     json_data = response.get_json()
-    assert any(d['value'] == 'W-12x26' for d in json_data), "Search should find 'W-12x26' when searching for 'W12x26'"
+    assert any(
+        d['value'] == 'W-12x26' for d in json_data), "Search should find 'W-12x26' when searching for 'W12x26'"
+
 
 def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
     """
@@ -80,27 +85,33 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
 
         # 1. Create User A and Project A
         cursor.execute("INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-                            ('realizador_a', 'Realizador A', 'ra@test.com', generate_password_hash('a'), 1))
+                       ('realizador_a', 'Realizador A', 'ra@test.com', generate_password_hash('a'), 1))
         user_a_id = cursor.lastrowid
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (user_a_id, realizador_role_id))
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)",
+                       (user_a_id, realizador_role_id))
 
-        cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Proyecto A', 1))
+        cursor.execute(
+            "INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Proyecto A', 1))
         project_a_id = cursor.lastrowid
-        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_a_id, user_a_id))
+        cursor.execute(
+            "INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_a_id, user_a_id))
 
         # 2. Create User B and Project B
         cursor.execute("INSERT INTO usuarios (username, nombre_completo, email, password_hash, activo) VALUES (?, ?, ?, ?, ?)",
-                            ('realizador_b', 'Realizador B', 'rb@test.com', generate_password_hash('b'), 1))
+                       ('realizador_b', 'Realizador B', 'rb@test.com', generate_password_hash('b'), 1))
         user_b_id = cursor.lastrowid
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)", (user_b_id, realizador_role_id))
+        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, ?)",
+                       (user_b_id, realizador_role_id))
 
-        cursor.execute("INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Proyecto B', 1))
+        cursor.execute(
+            "INSERT INTO proyectos (nombre, creador_id) VALUES (?, ?)", ('Proyecto B', 1))
         project_b_id = cursor.lastrowid
-        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_b_id, user_b_id))
+        cursor.execute(
+            "INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (project_b_id, user_b_id))
 
         # 3. Create a connection in Project A
         cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id) VALUES (?, ?, ?, ?, ?, ?)",
-                            ('CONN-A-01', project_a_id, 'T', 'S', 'T1', 1))
+                       ('CONN-A-01', project_a_id, 'T', 'S', 'T1', 1))
         connection_id = cursor.lastrowid
         db.commit()
 
@@ -112,13 +123,14 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
 
     # This should fail with a 403 Forbidden error after the fix
     assert response.status_code == 403
-    assert b'No tienes permiso para acceder a esta conexi' in response.data # conexión
+    assert b'No tienes permiso para acceder a esta conexi' in response.data  # conexión
 
     # 5. Verify the connection state did NOT change
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT estado, realizador_id FROM conexiones WHERE id = ?", (connection_id,))
+        cursor.execute(
+            "SELECT estado, realizador_id FROM conexiones WHERE id = ?", (connection_id,))
         conn = cursor.fetchone()
         assert conn['estado'] == 'SOLICITADO'
         assert conn['realizador_id'] is None
@@ -139,7 +151,8 @@ def test_user_cannot_act_on_connection_in_unassigned_project(client, app, auth):
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT estado, realizador_id FROM conexiones WHERE id = ?", (connection_id,))
+        cursor.execute(
+            "SELECT estado, realizador_id FROM conexiones WHERE id = ?", (connection_id,))
         conn = cursor.fetchone()
         assert conn['estado'] == 'EN_PROCESO'
         assert conn['realizador_id'] == user_a_id

@@ -9,6 +9,7 @@ la autenticación y la autorización.
 from functools import wraps
 from flask import g, request, redirect, url_for, flash, session, abort
 
+
 def roles_required(*roles):
     """
     Decorador personalizado para restringir el acceso a rutas basadas en los roles del usuario.
@@ -49,7 +50,7 @@ def roles_required(*roles):
             # 3. Comprobar si el usuario tiene al menos uno de los roles requeridos.
             # Se convierte la lista de roles requeridos a un conjunto para una comparación eficiente.
             required_roles = set(roles)
-            
+
             # .isdisjoint() devuelve True si los dos conjuntos no tienen elementos en común.
             # Si no tienen elementos en común, significa que el usuario no tiene ninguno de los roles requeridos.
             if required_roles.isdisjoint(user_roles):

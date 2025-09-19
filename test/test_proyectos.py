@@ -1,5 +1,5 @@
-import pytest
 from db import get_db
+
 
 def test_project_name_is_case_insensitive_unique(client, app, auth):
     """
@@ -28,6 +28,7 @@ def test_project_name_is_case_insensitive_unique(client, app, auth):
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT COUNT(id) FROM proyectos WHERE LOWER(nombre) = 'proyecto de prueba'")
+        cursor.execute(
+            "SELECT COUNT(id) FROM proyectos WHERE LOWER(nombre) = 'proyecto de prueba'")
         count = cursor.fetchone()[0]
         assert count == 1

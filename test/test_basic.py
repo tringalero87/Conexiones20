@@ -6,28 +6,33 @@ from werkzeug.security import generate_password_hash
 
 # --- Casos de Prueba ---
 
+
 def test_config(app):
     assert app.config['TESTING']
+
 
 def test_login_logout(client, auth):
     rv = auth.login('admin', 'password')
     assert rv.status_code == 200
-    assert b'Bienvenido de nuevo' in rv.data 
+    assert b'Bienvenido de nuevo' in rv.data
 
     rv = auth.logout()
     assert rv.status_code == 200
     assert b'Has cerrado la sesi\xc3\xb3n.' in rv.data
+
 
 def test_unauthorized_access(client):
     response = client.get('/dashboard', follow_redirects=False)
     assert response.status_code == 302
     assert '/auth/login' in response.location
 
+
 def test_admin_permissions(client, auth):
     auth.login('admin', 'password')
     response = client.get('/admin/usuarios')
     assert response.status_code == 200
     assert b'Gesti\xc3\xb3n de Usuarios' in response.data
+
 
 def test_non_admin_permissions(client, auth):
     auth.login('solicitante', 'password')
@@ -38,6 +43,7 @@ def test_non_admin_permissions(client, auth):
     assert b'Gesti\xc3\xb3n de Usuarios' not in response.data
 
 # --- Pruebas de Esqueleto para Futura Implementación ---
+
 
 @pytest.mark.skip(reason="Prueba no implementada")
 def test_connection_creation_and_code_generation(client, auth):
@@ -52,6 +58,7 @@ def test_connection_creation_and_code_generation(client, auth):
     # 4. Verificar que el código_conexion sigue el formato esperado
     pass
 
+
 def test_full_connection_workflow(client, app, auth):
     """
     Prueba el ciclo de vida completo de una conexión:
@@ -64,23 +71,30 @@ def test_full_connection_workflow(client, app, auth):
         cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
                        ('solicitante_full', generate_password_hash('password'), 'Solicitante Full', 'solicitante_full@test.com', 1))
         solicitante_id = cursor.lastrowid
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'SOLICITANTE'))", (solicitante_id,))
+        cursor.execute(
+            "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'SOLICITANTE'))", (solicitante_id,))
 
         cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
                        ('realizador_full', generate_password_hash('password'), 'Realizador Full', 'realizador_full@test.com', 1))
         realizador_id = cursor.lastrowid
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'REALIZADOR'))", (realizador_id,))
+        cursor.execute(
+            "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'REALIZADOR'))", (realizador_id,))
 
         cursor.execute("INSERT INTO usuarios (username, password_hash, nombre_completo, email, activo) VALUES (?, ?, ?, ?, ?)",
                        ('aprobador_full', generate_password_hash('password'), 'Aprobador Full', 'aprobador_full@test.com', 1))
         aprobador_id = cursor.lastrowid
-        cursor.execute("INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (aprobador_id,))
+        cursor.execute(
+            "INSERT INTO usuario_roles (usuario_id, rol_id) VALUES (?, (SELECT id FROM roles WHERE nombre = 'APROBADOR'))", (aprobador_id,))
 
-        cursor.execute("INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto Full Workflow', 'Desc')")
+        cursor.execute(
+            "INSERT INTO proyectos (nombre, descripcion) VALUES ('Proyecto Full Workflow', 'Desc')")
         proyecto_id = cursor.lastrowid
-        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, solicitante_id))
-        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, realizador_id))
-        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, aprobador_id))
+        cursor.execute("INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)",
+                       (proyecto_id, solicitante_id))
+        cursor.execute(
+            "INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, realizador_id))
+        cursor.execute(
+            "INSERT INTO proyecto_usuarios (proyecto_id, usuario_id) VALUES (?, ?)", (proyecto_id, aprobador_id))
 
         cursor.execute("INSERT INTO conexiones (codigo_conexion, proyecto_id, tipo, subtipo, tipologia, solicitante_id) VALUES (?, ?, ?, ?, ?, ?)",
                        ('WORKFLOW-001', proyecto_id, 'Test', 'Test', 'T1', solicitante_id))
@@ -89,34 +103,42 @@ def test_full_connection_workflow(client, app, auth):
 
     # 2. Login como Realizador, tomar tarea. Verificar estado 'EN_PROCESO'.
     auth.login('realizador_full', 'password')
-    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'EN_PROCESO'})
-    assert response.status_code == 302 # Should redirect
+    response = client.post(
+        f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'EN_PROCESO'})
+    assert response.status_code == 302  # Should redirect
     with app.app_context():
         cursor = get_db().cursor()
-        cursor.execute('SELECT estado FROM conexiones WHERE id = ?', (conexion_id,))
+        cursor.execute(
+            'SELECT estado FROM conexiones WHERE id = ?', (conexion_id,))
         assert cursor.fetchone()['estado'] == 'EN_PROCESO'
-        cursor.execute('SELECT realizador_id FROM conexiones WHERE id = ?', (conexion_id,))
+        cursor.execute(
+            'SELECT realizador_id FROM conexiones WHERE id = ?', (conexion_id,))
         assert cursor.fetchone()['realizador_id'] == realizador_id
 
     # 3. Marcar como realizada. Verificar estado 'REALIZADO'.
-    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'REALIZADO'})
-    assert response.status_code == 302 # Should redirect
+    response = client.post(
+        f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'REALIZADO'})
+    assert response.status_code == 302  # Should redirect
     with app.app_context():
         cursor = get_db().cursor()
-        cursor.execute('SELECT estado FROM conexiones WHERE id = ?', (conexion_id,))
+        cursor.execute(
+            'SELECT estado FROM conexiones WHERE id = ?', (conexion_id,))
         assert cursor.fetchone()['estado'] == 'REALIZADO'
     auth.logout()
 
     # 4. Login como Aprobador, aprobar. Verificar estado 'APROBADO'.
     auth.login('aprobador_full', 'password')
-    response = client.post(f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'APROBADO'})
-    assert response.status_code == 302 # Should redirect
+    response = client.post(
+        f'/conexiones/{conexion_id}/cambiar_estado', data={'estado': 'APROBADO'})
+    assert response.status_code == 302  # Should redirect
     with app.app_context():
         cursor = get_db().cursor()
-        cursor.execute('SELECT estado, aprobador_id FROM conexiones WHERE id = ?', (conexion_id,))
+        cursor.execute(
+            'SELECT estado, aprobador_id FROM conexiones WHERE id = ?', (conexion_id,))
         conexion = cursor.fetchone()
         assert conexion['estado'] == 'APROBADO'
         assert conexion['aprobador_id'] == aprobador_id
+
 
 @pytest.mark.skip(reason="Prueba no implementada")
 def test_file_upload_api(client, auth):
@@ -129,6 +151,7 @@ def test_file_upload_api(client, auth):
     # 6. Intentar subir un archivo con un usuario sin permisos. Verificar error 403.
     pass
 
+
 @pytest.mark.skip(reason="Prueba no implementada")
 def test_connection_rejection_workflow(client, auth):
     """Prueba el flujo de rechazo y corrección de una conexión."""
@@ -137,6 +160,7 @@ def test_connection_rejection_workflow(client, auth):
     # 3. Verificar que el estado vuelve a 'EN_PROCESO' y que 'detalles_rechazo' está poblado.
     # 4. Verificar que el realizador recibe una notificación.
     pass
+
 
 def test_audit_log(app):
     """

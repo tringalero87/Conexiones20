@@ -1,14 +1,16 @@
 import json
-from flask import g
 from db import get_db, log_action
 from utils.computos import calcular_peso_perfil
+
 
 def get_computos_results(conexion):
     """
     Calculates and returns the metric computations for a connection based on saved data.
     """
-    detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] else {}
-    perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
+    detalles = json.loads(
+        conexion['detalles_json']) if conexion['detalles_json'] else {}
+    perfiles = [(key, value)
+                for key, value in detalles.items() if key.startswith('Perfil')]
 
     resultados = []
 
@@ -16,7 +18,8 @@ def get_computos_results(conexion):
         longitud_guardada_mm = detalles.get(f'Longitud {key} (mm)')
         if longitud_guardada_mm is not None:
             try:
-                peso = calcular_peso_perfil(full_profile_name, float(longitud_guardada_mm))
+                peso = calcular_peso_perfil(
+                    full_profile_name, float(longitud_guardada_mm))
                 resultados.append({
                     'perfil': full_profile_name,
                     'longitud': float(longitud_guardada_mm),
@@ -31,10 +34,11 @@ def get_computos_results(conexion):
         else:
             resultados.append({
                 'perfil': full_profile_name,
-                'longitud': '', # Empty string for placeholder
+                'longitud': '',  # Empty string for placeholder
                 'peso': 'N/A'
             })
     return resultados, detalles
+
 
 def calculate_and_save_computos(conexion_id, form_data, user_id):
     """
@@ -50,8 +54,10 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
         if not conexion:
             return None, "La conexión no existe.", None, None
 
-        detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] and isinstance(conexion['detalles_json'], str) else conexion['detalles_json'] or {}
-        perfiles = [(key, value) for key, value in detalles.items() if key.startswith('Perfil')]
+        detalles = json.loads(conexion['detalles_json']) if conexion['detalles_json'] and isinstance(
+            conexion['detalles_json'], str) else conexion['detalles_json'] or {}
+        perfiles = [(key, value)
+                    for key, value in detalles.items() if key.startswith('Perfil')]
 
         resultados = []
         updated_detalles = detalles.copy()
@@ -62,32 +68,40 @@ def calculate_and_save_computos(conexion_id, form_data, user_id):
             longitud_mm_str = form_data.get(f'longitud_{i+1}')
             if not longitud_mm_str:
                 has_error = True
-                error_messages.append(f"La longitud para {full_profile_name} ({key}) no puede estar vacía.")
+                error_messages.append(
+                    f"La longitud para {full_profile_name} ({key}) no puede estar vacía.")
                 continue
             try:
                 longitud_mm = float(longitud_mm_str)
                 peso = calcular_peso_perfil(full_profile_name, longitud_mm)
-                resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm, 'peso': peso})
+                resultados.append(
+                    {'perfil': full_profile_name, 'longitud': longitud_mm, 'peso': peso})
                 updated_detalles[f'Longitud {key} (mm)'] = longitud_mm
             except ValueError:
                 has_error = True
-                error_messages.append(f"La longitud para {full_profile_name} ({key}) no es un número válido.")
-                resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
+                error_messages.append(
+                    f"La longitud para {full_profile_name} ({key}) no es un número válido.")
+                resultados.append(
+                    {'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
             except Exception as e:
                 has_error = True
-                error_messages.append(f"Error al calcular peso para {full_profile_name} ({key}): {e}")
-                resultados.append({'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
+                error_messages.append(
+                    f"Error al calcular peso para {full_profile_name} ({key}): {e}")
+                resultados.append(
+                    {'perfil': full_profile_name, 'longitud': longitud_mm_str, 'peso': 'Error'})
 
         if not has_error:
             sql = 'UPDATE conexiones SET detalles_json = ?, fecha_modificacion = CURRENT_TIMESTAMP WHERE id = ?'
             params = (json.dumps(updated_detalles), conexion_id)
             cursor.execute(sql, params)
             db.commit()
-            log_action('CALCULAR_COMPUTOS', user_id, 'conexiones', conexion_id, f"Cómputos métricos calculados para '{conexion['codigo_conexion']}'.")
+            log_action('CALCULAR_COMPUTOS', user_id, 'conexiones', conexion_id,
+                       f"Cómputos métricos calculados para '{conexion['codigo_conexion']}'.")
             return resultados, "Cómputos calculados y guardados con éxito.", None, perfiles
         else:
             for i, (key, _) in enumerate(perfiles):
-                updated_detalles[f'Longitud {key} (mm)'] = form_data.get(f'longitud_{i+1}')
+                updated_detalles[f'Longitud {key} (mm)'] = form_data.get(
+                    f'longitud_{i+1}')
             return resultados, None, error_messages, perfiles
     finally:
         cursor.close()

@@ -5,6 +5,8 @@ from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
 import os
 import datetime
+import secrets
+import string
 
 
 def adapt_datetime_iso(val):
@@ -69,8 +71,28 @@ def init_db():
     # Verificar si el usuario 'Admin' ya existe para evitar duplicados
     cursor.execute("SELECT id FROM usuarios WHERE username = ?", ('Admin',))
     if cursor.fetchone() is None:
-        # 1. Hashear la contraseña
-        password_hash = generate_password_hash('624BGHwsj*')
+        # 1. Obtener la contraseña para el usuario administrador.
+        # Prioridad: Variable de entorno -> Generación aleatoria.
+        admin_password = os.environ.get('DEFAULT_ADMIN_PASSWORD')
+        if admin_password:
+            click.echo(
+                "Usando contraseña para 'Admin' desde la variable de entorno DEFAULT_ADMIN_PASSWORD.")
+        else:
+            # Generar una contraseña aleatoria y segura
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*()_+-=[]{}|;:,.<>?"
+            admin_password = ''.join(secrets.choice(alphabet)
+                                     for _ in range(16))
+            click.secho(
+                "ADVERTENCIA: La variable de entorno DEFAULT_ADMIN_PASSWORD no está configurada.",
+                fg='yellow'
+            )
+            click.echo(
+                "Se ha generado una contraseña temporal segura para el usuario 'Admin'.")
+            click.secho(f"Contraseña generada: {admin_password}", fg='green')
+            click.echo(
+                "Por favor, guárdela en un lugar seguro y cámbiela lo antes posible.")
+
+        password_hash = generate_password_hash(admin_password)
 
         # 2. Insertar el nuevo usuario administrador
         cursor.execute(
